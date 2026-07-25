@@ -6,13 +6,24 @@ import {
 
 // Env is loaded by the db-preflight import (project files win over ambient stubs).
 
-export const EXPECTED_PLATFORM_TABLE_COUNT = 43;
+export const EXPECTED_PLATFORM_TABLE_COUNT = 49;
 
 export const INVITATION_MIGRATION_NAME = "0003_user_invitations";
+
+export const PHASE7_MIGRATION_NAME = "0004_phase7_operations";
 
 export const INVITATION_TABLES = [
   "user_invitation_statuses",
   "user_invitations",
+] as const;
+
+export const PHASE7_TABLES = [
+  "permissions",
+  "organization_role_permissions",
+  "entitlement_statuses",
+  "entitlements",
+  "organization_onboarding_statuses",
+  "organization_onboardings",
 ] as const;
 
 export const EXPECTED_INVITATION_STATUS_CODES = [
@@ -49,6 +60,8 @@ export const MASTER_TABLES = [
   "feature_value_types",
   "audit_action_types",
   "user_invitation_statuses",
+  "entitlement_statuses",
+  "organization_onboarding_statuses",
 ] as const;
 
 const SAFE_IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -84,7 +97,10 @@ async function countPlatformTables(query: SqlQuery): Promise<number> {
   return Number(result.rows[0]?.count ?? 0);
 }
 
-async function countInvitationTables(query: SqlQuery): Promise<number> {
+async function countNamedPlatformTables(
+  query: SqlQuery,
+  tableNames: readonly string[],
+): Promise<number> {
   const result = await query(
     `
     SELECT COUNT(*)::int AS count
@@ -93,9 +109,17 @@ async function countInvitationTables(query: SqlQuery): Promise<number> {
       AND table_type = 'BASE TABLE'
       AND table_name = ANY($1::text[])
     `,
-    [INVITATION_TABLES as unknown as string[]],
+    [tableNames as unknown as string[]],
   );
   return Number(result.rows[0]?.count ?? 0);
+}
+
+async function countInvitationTables(query: SqlQuery): Promise<number> {
+  return countNamedPlatformTables(query, INVITATION_TABLES);
+}
+
+async function countPhase7Tables(query: SqlQuery): Promise<number> {
+  return countNamedPlatformTables(query, PHASE7_TABLES);
 }
 
 async function countInvitationStatuses(query: SqlQuery): Promise<number> {
@@ -175,6 +199,26 @@ export async function verifyPlatformDatabase(
     detail: migration0003Detail,
   });
 
+  const migration0004 = await checkPlatformMigrationApplied(
+    query,
+    PHASE7_MIGRATION_NAME,
+  );
+  const phase7TableCount = await countPhase7Tables(query);
+  const migration0004SchemaOk =
+    !migration0004.applied || phase7TableCount === PHASE7_TABLES.length;
+  const migration0004Ok = migration0004.applied && migration0004SchemaOk;
+  const migration0004Detail = migration0004Ok
+    ? `successful=${migration0004.appliedCount};rolled_back=${migration0004.rolledBackCount};unresolved=${migration0004.unresolvedCount}`
+    : !migration0004SchemaOk
+      ? "schema_inconsistent"
+      : migration0004.reason;
+  checks.push({
+    name: `migration_${PHASE7_MIGRATION_NAME}`,
+    ok: migration0004Ok,
+    count: migration0004.appliedCount,
+    detail: migration0004Detail,
+  });
+
   const tableCount = await countPlatformTables(query);
   checks.push({
     name: "platform_tables",
@@ -186,6 +230,12 @@ export async function verifyPlatformDatabase(
     name: "invitation_tables",
     ok: invitationTableCount === INVITATION_TABLES.length,
     count: invitationTableCount,
+  });
+
+  checks.push({
+    name: "phase7_tables",
+    ok: phase7TableCount === PHASE7_TABLES.length,
+    count: phase7TableCount,
   });
 
   const invitationStatusCount = await countInvitationStatuses(query);

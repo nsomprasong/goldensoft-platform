@@ -126,21 +126,69 @@ model MembershipStatus {
 }
 
 model OrganizationRole {
-  id          String   @id @default(uuid()) @db.Uuid
-  code        String   @unique
-  nameTh      String   @map("name_th")
-  nameEn      String   @map("name_en")
-  description String?
-  sortOrder   Int      @default(0) @map("sort_order")
-  isActive    Boolean  @default(true) @map("is_active")
-  isSystem    Boolean  @default(true) @map("is_system")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id             String   @id @default(uuid()) @db.Uuid
+  code           String
+  nameTh         String   @map("name_th")
+  nameEn         String   @map("name_en")
+  description    String?
+  organizationId String?  @map("organization_id") @db.Uuid
+  sortOrder      Int      @default(0) @map("sort_order")
+  isActive       Boolean  @default(true) @map("is_active")
+  isSystem       Boolean  @default(true) @map("is_system")
+  codeLocked     Boolean  @default(false) @map("code_locked")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  assignments OrganizationMembershipRole[]
-  invitations UserInvitation[]
+  organization Organization?                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignments  OrganizationMembershipRole[]
+  invitations  UserInvitation[]
+  permissions  OrganizationRolePermission[]
 
+  @@index([organizationId])
   @@map("organization_roles")
+  @@schema("platform")
+}
+
+model Permission {
+  id            String   @id @default(uuid()) @db.Uuid
+  code          String   @unique
+  nameTh        String   @map("name_th")
+  nameEn        String   @map("name_en")
+  descriptionTh String?  @map("description_th")
+  descriptionEn String?  @map("description_en")
+  productCode   String   @default("PLATFORM") @map("product_code")
+  resource      String
+  action        String
+  sortOrder     Int      @default(0) @map("sort_order")
+  isActive      Boolean  @default(true) @map("is_active")
+  isSystem      Boolean  @default(true) @map("is_system")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  rolePermissions OrganizationRolePermission[]
+
+  @@index([productCode, resource])
+  @@index([isActive])
+  @@map("permissions")
+  @@schema("platform")
+}
+
+model OrganizationRolePermission {
+  id                 String    @id @default(uuid()) @db.Uuid
+  organizationRoleId String    @map("organization_role_id") @db.Uuid
+  permissionId       String    @map("permission_id") @db.Uuid
+  grantedAt          DateTime  @default(now()) @map("granted_at") @db.Timestamptz(6)
+  revokedAt          DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organizationRole OrganizationRole @relation(fields: [organizationRoleId], references: [id], onDelete: Cascade)
+  permission       Permission       @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationRoleId, permissionId])
+  @@index([organizationRoleId])
+  @@index([permissionId])
+  @@map("organization_role_permissions")
   @@schema("platform")
 }
 
@@ -501,6 +549,9 @@ model Organization {
   auditLogs              AuditLog[]
   legacyIdentityMappings LegacyIdentityMapping[]
   userInvitations        UserInvitation[]
+  organizationRoles      OrganizationRole[]
+  entitlements           Entitlement[]
+  onboardings            OrganizationOnboarding[]
 
   @@index([statusId])
   @@map("organizations")
@@ -635,18 +686,24 @@ model UserInvitation {
 }
 
 model Product {
-  id        String   @id @default(uuid()) @db.Uuid
-  code      String   @unique
-  name      String
-  statusId  String   @map("status_id") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  name        String
+  nameTh      String?  @map("name_th")
+  nameEn      String?  @map("name_en")
+  description String?
+  productType String   @default("APPLICATION") @map("product_type")
+  sortOrder   Int      @default(0) @map("sort_order")
+  statusId    String   @map("status_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   status             ProductStatus                   @relation(fields: [statusId], references: [id])
   features           Feature[]
   plans              Plan[]
   subscriptions      Subscription[]
   productMemberships OrganizationProductMembership[]
+  entitlements       Entitlement[]
 
   @@index([statusId])
   @@map("products")
@@ -675,13 +732,15 @@ model Feature {
 }
 
 model Plan {
-  id        String   @id @default(uuid()) @db.Uuid
-  productId String   @map("product_id") @db.Uuid
-  code      String
-  name      String
-  statusId  String   @map("status_id") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String   @id @default(uuid()) @db.Uuid
+  productId   String   @map("product_id") @db.Uuid
+  code        String
+  name        String
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  statusId    String   @map("status_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   product       Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
   status        PlanStatus     @relation(fields: [statusId], references: [id])
@@ -763,10 +822,97 @@ model Subscription {
   status       SubscriptionStatus            @relation(fields: [statusId], references: [id])
   billingCycle BillingCycle                  @relation("SubscriptionBillingCycle", fields: [billingCycleId], references: [id])
   overrides    SubscriptionFeatureOverride[]
+  entitlements Entitlement[]
 
   @@index([organizationId, productId, statusId])
   @@index([statusId, endsAt])
   @@map("subscriptions")
+  @@schema("platform")
+}
+
+model EntitlementStatus {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  nameTh      String   @map("name_th")
+  nameEn      String   @map("name_en")
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  isSystem    Boolean  @default(true) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  entitlements Entitlement[]
+
+  @@map("entitlement_statuses")
+  @@schema("platform")
+}
+
+model Entitlement {
+  id                 String    @id @default(uuid()) @db.Uuid
+  organizationId     String    @map("organization_id") @db.Uuid
+  subscriptionId     String    @map("subscription_id") @db.Uuid
+  productId          String    @map("product_id") @db.Uuid
+  code               String
+  nameTh             String    @map("name_th")
+  nameEn             String    @map("name_en")
+  limitValue         String?   @map("limit_value")
+  statusId           String    @map("status_id") @db.Uuid
+  startsAt           DateTime  @map("starts_at") @db.Timestamptz(6)
+  endsAt             DateTime? @map("ends_at") @db.Timestamptz(6)
+  sourceSnapshotJson Json      @default("{}") @map("source_snapshot_json") @db.JsonB
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription Subscription      @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  product      Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  status       EntitlementStatus @relation(fields: [statusId], references: [id])
+
+  @@unique([organizationId, subscriptionId, code])
+  @@index([organizationId, statusId])
+  @@index([subscriptionId])
+  @@index([productId])
+  @@map("entitlements")
+  @@schema("platform")
+}
+
+model OrganizationOnboardingStatus {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  nameTh      String   @map("name_th")
+  nameEn      String   @map("name_en")
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  isSystem    Boolean  @default(true) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  onboardings OrganizationOnboarding[]
+
+  @@map("organization_onboarding_statuses")
+  @@schema("platform")
+}
+
+model OrganizationOnboarding {
+  id                  String   @id @default(uuid()) @db.Uuid
+  idempotencyKey      String   @unique @map("idempotency_key")
+  organizationId      String?  @map("organization_id") @db.Uuid
+  statusId            String   @map("status_id") @db.Uuid
+  createdByAuthUserId String   @map("created_by_auth_user_id") @db.Uuid
+  payloadJson         Json     @default("{}") @map("payload_json") @db.JsonB
+  resultJson          Json?    @map("result_json") @db.JsonB
+  lastErrorCode       String?  @map("last_error_code")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization?                 @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  status       OrganizationOnboardingStatus  @relation(fields: [statusId], references: [id])
+
+  @@index([statusId])
+  @@index([organizationId])
+  @@map("organization_onboardings")
   @@schema("platform")
 }
 

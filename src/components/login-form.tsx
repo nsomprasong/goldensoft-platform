@@ -6,6 +6,7 @@ import {
   signInWithPassword,
   type LoginActionState,
 } from "@/lib/auth/actions";
+import { FormField } from "@/components/ui/admin-ui";
 import { TH } from "@/lib/i18n/th";
 
 const initial: LoginActionState = { error: null };
@@ -14,37 +15,37 @@ export function LoginForm({ nextPath = "/" }: { nextPath?: string }) {
   const [state, action, pending] = useActionState(signInWithPassword, initial);
 
   return (
-    <form action={action} className="mt-6 grid gap-3">
+    <form action={action} className="mt-6 grid gap-4">
       <input type="hidden" name="next" value={nextPath} />
-      <label className="grid gap-1 text-sm">
-        {TH.login.email}
+      <FormField label={TH.login.email} htmlFor="email" required>
         <input
-          className="rounded-lg border border-[var(--border)] bg-white px-3 py-2"
+          id="email"
+          className="input"
           type="email"
           name="email"
           autoComplete="username"
           required
         />
-      </label>
-      <label className="grid gap-1 text-sm">
-        {TH.login.password}
+      </FormField>
+      <FormField label={TH.login.password} htmlFor="password" required>
         <input
-          className="rounded-lg border border-[var(--border)] bg-white px-3 py-2"
+          id="password"
+          className="input"
           type="password"
           name="password"
           autoComplete="current-password"
           required
         />
-      </label>
+      </FormField>
       {state.error ? (
-        <p className="text-sm text-red-700" role="alert">
+        <p className="text-[length:var(--text-helper)] text-[var(--danger)]" role="alert">
           {state.error}
         </p>
       ) : null}
-      <button className="btn mt-2" type="submit" disabled={pending}>
+      <button className="btn btn-block-mobile" type="submit" disabled={pending}>
         {pending ? TH.login.submitting : TH.login.submit}
       </button>
-      <p className="text-xs text-slate-500">
+      <p className="text-[length:var(--text-caption)] text-[var(--text-muted)]">
         {TH.login.forgot} — {TH.login.contactAdmin}
       </p>
     </form>

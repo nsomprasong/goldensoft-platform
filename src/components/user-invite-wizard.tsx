@@ -3,16 +3,25 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { FormField } from "@/components/ui/admin-ui";
+import { FormField, StatusBadge } from "@/components/ui/admin-ui";
 import { pushToast } from "@/components/ui/toast";
 import { TH, labelRole } from "@/lib/i18n/th";
 
 type OrgOption = { id: string; name: string };
 type BranchOption = { id: string; name: string; code: string };
 
+const STEPS = [
+  TH.users.stepAccount,
+  TH.users.stepOrganization,
+  TH.users.stepRole,
+  TH.users.stepBranchScope,
+  TH.users.stepConfirm,
+] as const;
+
 export function UserInviteWizard(props: {
   organizations: OrgOption[];
   branchesByOrg: Record<string, BranchOption[]>;
+  showTestModeBadge?: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -68,29 +77,61 @@ export function UserInviteWizard(props: {
   }
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-600">
-        ขั้นตอน {step} / 5 —{" "}
-        {step === 1
-          ? TH.users.stepAccount
-          : step === 2
-            ? TH.users.stepOrganization
-            : step === 3
-              ? TH.users.stepRole
-              : step === 4
-                ? TH.users.stepBranchScope
-                : TH.users.stepConfirm}
-      </p>
+    <div className="space-y-5">
+      {props.showTestModeBadge ? (
+        <div className="flex items-center gap-2">
+          <StatusBadge label={TH.common.testMode} tone="warning" />
+          <span className="text-[length:var(--text-caption)] text-[var(--text-muted)]">
+            คำเชิญจะไม่ถูกส่งจริงในโหมดนี้
+          </span>
+        </div>
+      ) : null}
+
+      <ol
+        className="flex flex-wrap gap-2"
+        aria-label="ขั้นตอนการเชิญผู้ใช้งาน"
+      >
+        {STEPS.map((label, index) => {
+          const n = index + 1;
+          const current = n === step;
+          const done = n < step;
+          return (
+            <li
+              key={label}
+              className={`flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] border px-2.5 py-2 text-[length:var(--text-caption)] ${
+                current
+                  ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]"
+                  : done
+                    ? "border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-secondary)]"
+                    : "border-[var(--border)] text-[var(--text-muted)]"
+              }`}
+              aria-current={current ? "step" : undefined}
+            >
+              <span
+                className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[length:var(--text-caption)] font-semibold ${
+                  current
+                    ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+                    : "bg-[var(--surface)] text-[var(--text-secondary)]"
+                }`}
+              >
+                {n}
+              </span>
+              <span className="truncate font-medium">{label}</span>
+            </li>
+          );
+        })}
+      </ol>
 
       {step === 1 ? (
-        <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <FormField label={TH.users.email} htmlFor="email" required>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-[var(--border)] px-3 py-2"
+              className="input"
+              autoComplete="email"
             />
           </FormField>
           <FormField label={TH.users.displayName} htmlFor="displayName" required>
@@ -98,7 +139,8 @@ export function UserInviteWizard(props: {
               id="displayName"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full rounded-lg border border-[var(--border)] px-3 py-2"
+              className="input"
+              autoComplete="name"
             />
           </FormField>
         </div>
@@ -113,7 +155,7 @@ export function UserInviteWizard(props: {
               setOrganizationId(e.target.value);
               setBranchIds([]);
             }}
-            className="w-full rounded-lg border border-[var(--border)] px-3 py-2"
+            className="select"
           >
             {props.organizations.map((o) => (
               <option key={o.id} value={o.id}>
@@ -134,7 +176,7 @@ export function UserInviteWizard(props: {
                 e.target.value as "OWNER" | "ADMIN" | "BILLING_CONTACT",
               )
             }
-            className="w-full rounded-lg border border-[var(--border)] px-3 py-2"
+            className="select"
           >
             {(["OWNER", "ADMIN", "BILLING_CONTACT"] as const).map((r) => (
               <option key={r} value={r}>
@@ -156,7 +198,7 @@ export function UserInviteWizard(props: {
                   e.target.value as "ALL_BRANCHES" | "SELECTED" | "NONE",
                 )
               }
-              className="w-full rounded-lg border border-[var(--border)] px-3 py-2"
+              className="select"
             >
               <option value="ALL_BRANCHES">{TH.users.scopeAll}</option>
               <option value="SELECTED">{TH.users.scopeSelected}</option>
@@ -164,84 +206,108 @@ export function UserInviteWizard(props: {
             </select>
           </FormField>
           {branchScope === "SELECTED" ? (
-            <div className="space-y-2">
-              {branches.map((b) => (
-                <label key={b.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={branchIds.includes(b.id)}
-                    onChange={(e) => {
-                      setBranchIds((prev) =>
-                        e.target.checked
-                          ? [...prev, b.id]
-                          : prev.filter((id) => id !== b.id),
-                      );
-                    }}
-                  />
-                  {b.name} ({b.code})
-                </label>
-              ))}
+            <div className="space-y-2 rounded-[var(--radius-md)] border border-[var(--border)] p-3">
+              {branches.length === 0 ? (
+                <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">
+                  ยังไม่มีสาขาในองค์กรนี้
+                </p>
+              ) : (
+                branches.map((b) => (
+                  <label
+                    key={b.id}
+                    className="flex min-h-11 items-center gap-2 text-[length:var(--text-label)]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={branchIds.includes(b.id)}
+                      onChange={(e) => {
+                        setBranchIds((prev) =>
+                          e.target.checked
+                            ? [...prev, b.id]
+                            : prev.filter((id) => id !== b.id),
+                        );
+                      }}
+                    />
+                    {b.name} ({b.code})
+                  </label>
+                ))
+              )}
             </div>
           ) : null}
         </div>
       ) : null}
 
       {step === 5 ? (
-        <ul className="space-y-1 text-sm">
-          <li>
-            {TH.users.email}: <strong>{email}</strong>
-          </li>
-          <li>
-            {TH.users.displayName}: <strong>{displayName}</strong>
-          </li>
-          <li>
-            {TH.nav.organizations}:{" "}
-            <strong>
+        <dl className="grid gap-2 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)]/50 p-4 text-[length:var(--text-label)] sm:grid-cols-2">
+          <div>
+            <dt className="text-[var(--text-muted)]">{TH.users.email}</dt>
+            <dd className="font-medium">{email}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--text-muted)]">{TH.users.displayName}</dt>
+            <dd className="font-medium">{displayName}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--text-muted)]">{TH.nav.organizations}</dt>
+            <dd className="font-medium">
               {props.organizations.find((o) => o.id === organizationId)?.name}
-            </strong>
-          </li>
-          <li>
-            บทบาท: <strong>{labelRole(organizationRole)}</strong>
-          </li>
-          <li>
-            ขอบเขตสาขา:{" "}
-            <strong>
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[var(--text-muted)]">บทบาท</dt>
+            <dd className="font-medium">{labelRole(organizationRole)}</dd>
+          </div>
+          <div className="sm:col-span-2">
+            <dt className="text-[var(--text-muted)]">ขอบเขตสาขา</dt>
+            <dd className="font-medium">
               {branchScope === "ALL_BRANCHES"
                 ? TH.users.scopeAll
                 : branchScope === "NONE"
                   ? TH.users.scopeNone
                   : `${TH.users.scopeSelected} (${branchIds.length})`}
-            </strong>
-          </li>
-        </ul>
+            </dd>
+          </div>
+        </dl>
       ) : null}
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? (
+        <p className="text-[length:var(--text-helper)] text-[var(--danger)]" role="alert">
+          {error}
+        </p>
+      ) : null}
 
-      <div className="flex gap-2">
+      <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-between">
         {step > 1 ? (
           <button
             type="button"
-            className="btn !bg-slate-600"
+            className="btn btn-secondary btn-block-mobile"
             onClick={() => setStep((s) => s - 1)}
           >
             {TH.common.back}
           </button>
-        ) : null}
+        ) : (
+          <span />
+        )}
         {step < 5 ? (
           <button
             type="button"
-            className="btn"
+            className="btn btn-block-mobile"
             onClick={() => setStep((s) => s + 1)}
             disabled={
               (step === 1 && (!email || !displayName)) ||
-              (step === 2 && !organizationId)
+              (step === 2 && !organizationId) ||
+              (step === 4 && branchScope === "SELECTED" && branchIds.length === 0)
             }
           >
             {TH.common.continue}
           </button>
         ) : (
-          <button type="button" className="btn" disabled={pending} onClick={submit}>
+          <button
+            type="button"
+            className="btn btn-block-mobile"
+            disabled={pending}
+            onClick={submit}
+          >
             {pending ? TH.common.loading : TH.users.invite}
           </button>
         )}

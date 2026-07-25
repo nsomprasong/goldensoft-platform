@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 import "./globals.css";
 
@@ -7,13 +7,21 @@ export const metadata: Metadata = {
   description: "แพลตฟอร์มควบคุมกลาง GoldenSoft",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="th">
+    // Chrome/iPad (and similar) may inject attrs like __gcrremoteframetoken
+    // onto the root html element before React hydrates.
+    <html lang="th" suppressHydrationWarning>
       <body>{children}</body>
     </html>
   );

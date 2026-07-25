@@ -181,8 +181,14 @@ export async function inviteOrganizationUser(
       "assignmentStatus",
       MASTER.assignmentStatus.ACTIVE,
     );
-    const orgRole = await tx.organizationRole.findUnique({
-      where: { code: parsed.organizationRole },
+    const orgRole = await tx.organizationRole.findFirst({
+      where: {
+        code: parsed.organizationRole,
+        OR: [
+          { organizationId: null, isSystem: true },
+          { organizationId: parsed.organizationId, isActive: true },
+        ],
+      },
     });
     if (!orgRole) throw new InviteError("NOT_FOUND", TH.common.notFound);
     const scopeType = await tx.branchScopeType.findUnique({

@@ -2,7 +2,8 @@
 
 export const TH = {
   brand: "GoldenSoft",
-  appName: "แพลตฟอร์มควบคุมกลาง (Platform Control Plane)",
+  appName: "ศูนย์บริหาร GoldenSoft",
+  shellName: "ศูนย์บริหาร GoldenSoft",
 
   login: {
     title: "เข้าสู่ระบบ GoldenSoft",
@@ -67,7 +68,10 @@ export const TH = {
     cancel: "ยกเลิก",
     confirm: "ยืนยัน",
     search: "ค้นหา",
-    filter: "กรอง",
+    filter: "ตัวกรอง",
+    clearFilter: "ล้างตัวกรอง",
+    foundTotal: "พบทั้งหมด",
+    items: "รายการ",
     create: "เพิ่ม",
     edit: "แก้ไข",
     save: "บันทึก",
@@ -82,6 +86,9 @@ export const TH = {
     of: "จาก",
     user: "ผู้ใช้",
     details: "รายละเอียด",
+    openMenu: "เปิดเมนู",
+    closeMenu: "ปิดเมนู",
+    testMode: "โหมดทดสอบ",
   },
 
   org: {
@@ -199,21 +206,35 @@ export const TH = {
   } as Record<string, string>,
 
   pages: {
-    dashboardTitle: "ภาพรวมแพลตฟอร์ม",
-    dashboardBody:
-      "ศูนย์กลางยืนยันตัวตน (Central Auth) องค์กรหลายแห่ง สาขา ผู้ใช้งาน บทบาท และการสมัครใช้บริการ",
+    dashboardTitle: "ภาพรวม",
+    dashboardBody: "สรุปสถานะองค์กร ผู้ใช้งาน และบริการในขอบเขตที่คุณมีสิทธิ์",
     organizationsTitle: "องค์กร",
+    organizationsBody: "จัดการข้อมูลองค์กร สถานะ และขอบเขตการใช้งาน",
     branchesTitle: "สาขา",
+    branchesBody: "จัดการสาขา ที่ตั้ง และการกำหนดสาขาหลัก",
     usersTitle: "ผู้ใช้งาน",
+    usersBody: "เชิญผู้ใช้ กำหนดบทบาท และควบคุมการเข้าถึง",
     rolesTitle: "บทบาทและสิทธิ์",
+    rolesBody: "ตรวจสอบสิทธิ์ของแต่ละบทบาทในระบบ",
     productsTitle: "ผลิตภัณฑ์",
+    productsBody: "ผลิตภัณฑ์และคุณสมบัติที่เปิดให้บริการบนแพลตฟอร์ม",
     plansTitle: "แพ็กเกจ",
+    plansBody: "แพ็กเกจและเวอร์ชันของผลิตภัณฑ์",
     subscriptionsTitle: "การสมัครใช้บริการ",
+    subscriptionsBody: "การสมัครใช้บริการขององค์กรบนแพลตฟอร์ม",
     auditTitle: "บันทึกกิจกรรม",
+    auditBody: "ติดตามการเปลี่ยนแปลงและเหตุการณ์สำคัญ",
     settingsTitle: "ตั้งค่าระบบ",
-    settingsBody: "การตั้งค่าระบบจะเปิดในเฟสถัดไป — ขณะนี้แสดงเฉพาะภาพรวม",
+    settingsBody: "ตรวจสอบการตั้งค่าพื้นฐานและความปลอดภัย",
     selectOrgTitle: "เลือกองค์กรที่ต้องการใช้งาน",
     selectOrgBody: "บัญชีของคุณมีสิทธิ์หลายองค์กร กรุณาเลือกองค์กรที่ต้องการเข้าใช้งาน",
+    greetingMorning: "สวัสดีตอนเช้า",
+    greetingAfternoon: "สวัสดีตอนบ่าย",
+    greetingEvening: "สวัสดีตอนเย็น",
+    quickActions: "ทางลัด",
+    recentActivity: "กิจกรรมล่าสุด",
+    pendingInvites: "คำเชิญที่รอดำเนินการ",
+    activeSubscriptions: "การสมัครที่ใช้งานอยู่",
   },
 } as const;
 

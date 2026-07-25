@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { FormField, LoadingState } from "@/components/ui/admin-ui";
 import { validateInvitePassword } from "@/lib/auth/accept-invite";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -90,13 +91,15 @@ export function AcceptInviteForm() {
   }
 
   if (state === "checking") {
-    return <p>กำลังตรวจสอบคำเชิญ...</p>;
+    return <LoadingState label="กำลังตรวจสอบคำเชิญ..." />;
   }
   if (state === "invalid") {
     return (
       <div className="space-y-4">
-        <p className="text-red-700">คำเชิญไม่ถูกต้องหรือหมดอายุ</p>
-        <Link href="/login" className="btn inline-block">
+        <p className="text-[length:var(--text-helper)] text-[var(--danger)]" role="alert">
+          คำเชิญไม่ถูกต้องหรือหมดอายุ
+        </p>
+        <Link href="/login" className="btn btn-block-mobile inline-flex">
           เข้าสู่ระบบ
         </Link>
       </div>
@@ -104,7 +107,7 @@ export function AcceptInviteForm() {
   }
   if (state === "setup-incomplete") {
     return (
-      <p className="text-amber-700">
+      <p className="text-[length:var(--text-helper)] text-[var(--warning)]">
         บัญชีอยู่ระหว่างจัดเตรียม กรุณาติดต่อผู้ดูแลระบบ
       </p>
     );
@@ -112,8 +115,10 @@ export function AcceptInviteForm() {
   if (state === "success") {
     return (
       <div className="space-y-4">
-        <p className="text-green-700">ตั้งรหัสผ่านสำเร็จ</p>
-        <Link href="/" className="btn inline-block">
+        <p className="text-[length:var(--text-helper)] text-[var(--success)]">
+          ตั้งรหัสผ่านสำเร็จ
+        </p>
+        <Link href="/" className="btn btn-block-mobile inline-flex">
           เข้าสู่ระบบ
         </Link>
       </div>
@@ -122,30 +127,37 @@ export function AcceptInviteForm() {
 
   return (
     <div className="space-y-4">
-      <label className="block text-sm font-medium" htmlFor="password">
-        ตั้งรหัสผ่าน
-      </label>
-      <input
-        id="password"
-        type="password"
-        autoComplete="new-password"
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-        className="w-full rounded-lg border border-(--border) px-3 py-2"
-      />
-      <label className="block text-sm font-medium" htmlFor="confirmation">
-        ยืนยันรหัสผ่าน
-      </label>
-      <input
-        id="confirmation"
-        type="password"
-        autoComplete="new-password"
-        value={confirmation}
-        onChange={(event) => setConfirmation(event.target.value)}
-        className="w-full rounded-lg border border-(--border) px-3 py-2"
-      />
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
-      <button type="button" className="btn" disabled={pending} onClick={submit}>
+      <FormField label="ตั้งรหัสผ่าน" htmlFor="password" required>
+        <input
+          id="password"
+          type="password"
+          autoComplete="new-password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          className="input"
+        />
+      </FormField>
+      <FormField label="ยืนยันรหัสผ่าน" htmlFor="confirmation" required>
+        <input
+          id="confirmation"
+          type="password"
+          autoComplete="new-password"
+          value={confirmation}
+          onChange={(event) => setConfirmation(event.target.value)}
+          className="input"
+        />
+      </FormField>
+      {error ? (
+        <p className="text-[length:var(--text-helper)] text-[var(--danger)]" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <button
+        type="button"
+        className="btn btn-block-mobile"
+        disabled={pending}
+        onClick={submit}
+      >
         {pending ? "กำลังบันทึก..." : "บันทึกรหัสผ่าน"}
       </button>
     </div>

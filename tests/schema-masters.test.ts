@@ -26,7 +26,6 @@ describe("Master tables replace enums", () => {
     const masters = [
       "UserProfileStatus",
       "PlatformRole",
-      "OrganizationRole",
       "BillingCycle",
       "SubscriptionStatus",
     ];
@@ -37,6 +36,15 @@ describe("Master tables replace enums", () => {
       assert.ok(block, `missing model ${name}`);
       assert.match(block, /code\s+String\s+@unique/);
     }
+
+    // OrganizationRole is org-scoped in Phase 7: uniqueness is enforced with
+    // partial indexes (system code / org+code), not a single @unique on code.
+    const orgRole = schema.match(
+      /model OrganizationRole \{[\s\S]*?\n\}/,
+    )?.[0];
+    assert.ok(orgRole);
+    assert.match(orgRole, /organizationId\s+String\?/);
+    assert.doesNotMatch(orgRole, /code\s+String\s+@unique/);
   });
 
   it("Role assignment models use roleId foreign keys", () => {

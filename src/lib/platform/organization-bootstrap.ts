@@ -218,8 +218,12 @@ export async function revokeOrganizationRole(
     }
 
     if (role.role.code === MASTER.organizationRole.OWNER) {
-      const ownerRole = await tx.organizationRole.findUnique({
-        where: { code: MASTER.organizationRole.OWNER },
+      const ownerRole = await tx.organizationRole.findFirst({
+        where: {
+          code: MASTER.organizationRole.OWNER,
+          organizationId: null,
+          isSystem: true,
+        },
       });
       const activeStatus = await tx.assignmentStatus.findUnique({
         where: { code: MASTER.assignmentStatus.ACTIVE },

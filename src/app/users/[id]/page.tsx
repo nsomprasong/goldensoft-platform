@@ -3,7 +3,12 @@ import { notFound } from "next/navigation";
 
 import { PlatformShell } from "@/components/platform-shell";
 import { ResendInviteButton } from "@/components/resend-invite-button";
-import { AccessDenied, PageHeader, StatusBadge } from "@/components/ui/admin-ui";
+import {
+  AccessDenied,
+  DetailList,
+  PageHeader,
+  StatusBadge,
+} from "@/components/ui/admin-ui";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import {
@@ -19,6 +24,13 @@ import {
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+
+function labelBranchScope(code: string): string {
+  if (code === "ALL_BRANCHES") return TH.users.scopeAll;
+  if (code === "SELECTED") return TH.users.scopeSelected;
+  if (code === "NONE") return TH.users.scopeNone;
+  return code;
+}
 
 export default async function UserInvitationDetailPage({
   params,
@@ -109,29 +121,58 @@ export default async function UserInvitationDetailPage({
       <section className="card max-w-3xl">
         <PageHeader
           title="รายละเอียดคำเชิญผู้ใช้งาน"
+          description={invitation.emailNormalized}
+          meta={
+            <StatusBadge
+              label={labelInvitationStatus(invitation.status.code)}
+              code={invitation.status.code}
+            />
+          }
           actions={
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               {canResend ? (
                 <ResendInviteButton invitationId={invitation.id} />
               ) : null}
-              <Link href="/users" className="btn !bg-slate-600">
+              <Link href="/users" className="btn btn-secondary btn-block-mobile">
                 {TH.common.back}
               </Link>
             </div>
           }
         />
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <div><dt className="text-slate-500">ชื่อ</dt><dd>{invitation.displayName}</dd></div>
-          <div><dt className="text-slate-500">อีเมล</dt><dd>{invitation.emailNormalized}</dd></div>
-          <div><dt className="text-slate-500">องค์กร</dt><dd>{invitation.organization.displayName}</dd></div>
-          <div><dt className="text-slate-500">บทบาท</dt><dd>{labelRole(invitation.organizationRole.code)}</dd></div>
-          <div><dt className="text-slate-500">ขอบเขตสาขา</dt><dd>{invitation.branchScopeType.code}</dd></div>
-          <div><dt className="text-slate-500">สาขา</dt><dd>{branches.map((branch) => `${branch.name} (${branch.code})`).join(", ") || "-"}</dd></div>
-          <div><dt className="text-slate-500">วันที่เชิญ</dt><dd>{invitation.createdAt.toLocaleString("th-TH")}</dd></div>
-          <div><dt className="text-slate-500">ผู้เชิญ</dt><dd>{invitation.invitedByProfile.displayName}</dd></div>
-          <div><dt className="text-slate-500">จำนวนครั้งที่ส่ง</dt><dd>{invitation.attemptCount}</dd></div>
-          <div><dt className="text-slate-500">สถานะ</dt><dd><StatusBadge label={labelInvitationStatus(invitation.status.code)} /></dd></div>
-        </dl>
+        <DetailList
+          items={[
+            { label: "ชื่อ", value: invitation.displayName },
+            { label: "อีเมล", value: invitation.emailNormalized },
+            { label: "องค์กร", value: invitation.organization.displayName },
+            {
+              label: "บทบาท",
+              value: labelRole(invitation.organizationRole.code),
+            },
+            {
+              label: "ขอบเขตสาขา",
+              value: labelBranchScope(invitation.branchScopeType.code),
+            },
+            {
+              label: "สาขา",
+              value:
+                branches
+                  .map((branch) => `${branch.name} (${branch.code})`)
+                  .join(", ") || "-",
+            },
+            {
+              label: "วันที่เชิญ",
+              value: invitation.createdAt.toLocaleString("th-TH"),
+            },
+            {
+              label: "ผู้เชิญ",
+              value: invitation.invitedByProfile.displayName,
+            },
+            {
+              label: "จำนวนครั้งที่ส่ง",
+              value: invitation.attemptCount,
+            },
+          ]}
+        />
       </section>
     </PlatformShell>
   );

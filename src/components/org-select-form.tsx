@@ -11,6 +11,7 @@ export function OrgSelectForm(props: {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   return (
     <ul className="mt-6 grid gap-3">
@@ -18,10 +19,12 @@ export function OrgSelectForm(props: {
         <li key={org.id}>
           <button
             type="button"
-            className="card w-full text-left transition hover:shadow-md"
+            className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5 text-left transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)]/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)] disabled:opacity-60"
             disabled={pending}
+            aria-busy={pending && selectedId === org.id}
             onClick={() => {
               setError(null);
+              setSelectedId(org.id);
               start(async () => {
                 const res = await fetch("/api/platform/context", {
                   method: "POST",
@@ -40,15 +43,24 @@ export function OrgSelectForm(props: {
               });
             }}
           >
-            <span className="font-semibold">{org.name}</span>
-            <span className="mt-1 block text-sm text-slate-600">
-              {TH.common.continue}
+            <span>
+              <span className="block font-semibold text-[var(--text-primary)]">
+                {org.name}
+              </span>
+              <span className="mt-0.5 block text-[length:var(--text-caption)] text-[var(--text-muted)]">
+                {pending && selectedId === org.id
+                  ? TH.common.loading
+                  : TH.common.continue}
+              </span>
+            </span>
+            <span aria-hidden="true" className="text-[var(--primary)]">
+              →
             </span>
           </button>
         </li>
       ))}
       {error ? (
-        <li className="text-sm text-red-700" role="alert">
+        <li className="text-[length:var(--text-helper)] text-[var(--danger)]" role="alert">
           {error}
         </li>
       ) : null}

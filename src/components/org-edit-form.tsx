@@ -56,40 +56,94 @@ export function OrgEditForm(props: {
   }
 
   return (
-    <form action={onSubmit} className="space-y-3">
+    <form action={onSubmit} className="space-y-4">
       <FormField label={TH.org.code} htmlFor="customerCode" hint={TH.org.codeImmutable}>
         <input
           id="customerCode"
           value={props.initial.customerCode}
           disabled
-          className="w-full rounded-lg border border-[var(--border)] bg-slate-50 px-3 py-2"
+          className="input disabled:bg-[var(--surface-muted)]"
         />
       </FormField>
-      <FormField label={TH.org.nameTh} htmlFor="displayName" required>
-        <input id="displayName" name="displayName" required defaultValue={props.initial.displayName} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" />
-      </FormField>
-      <FormField label={TH.org.legalName} htmlFor="legalName" required>
-        <input id="legalName" name="legalName" required defaultValue={props.initial.legalName} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" />
-      </FormField>
-      <FormField label={TH.org.nameEn} htmlFor="nameEn">
-        <input id="nameEn" name="nameEn" defaultValue={props.initial.nameEn ?? ""} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" />
-      </FormField>
-      <FormField label={TH.org.taxId} htmlFor="taxId">
-        <input id="taxId" name="taxId" defaultValue={props.initial.taxId ?? ""} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" />
-      </FormField>
-      <FormField label={TH.org.email} htmlFor="email">
-        <input id="email" name="email" type="email" defaultValue={props.initial.email ?? ""} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" />
-      </FormField>
-      <FormField label={TH.org.phone} htmlFor="phone">
-        <input id="phone" name="phone" defaultValue={props.initial.phone ?? ""} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" />
-      </FormField>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FormField label={TH.org.nameTh} htmlFor="displayName" required>
+          <input
+            id="displayName"
+            name="displayName"
+            required
+            defaultValue={props.initial.displayName}
+            className="input"
+          />
+        </FormField>
+        <FormField label={TH.org.legalName} htmlFor="legalName" required>
+          <input
+            id="legalName"
+            name="legalName"
+            required
+            defaultValue={props.initial.legalName}
+            className="input"
+          />
+        </FormField>
+        <FormField label={TH.org.nameEn} htmlFor="nameEn">
+          <input
+            id="nameEn"
+            name="nameEn"
+            defaultValue={props.initial.nameEn ?? ""}
+            className="input"
+          />
+        </FormField>
+        <FormField label={TH.org.taxId} htmlFor="taxId">
+          <input
+            id="taxId"
+            name="taxId"
+            defaultValue={props.initial.taxId ?? ""}
+            className="input"
+          />
+        </FormField>
+        <FormField label={TH.org.email} htmlFor="email">
+          <input
+            id="email"
+            name="email"
+            type="email"
+            defaultValue={props.initial.email ?? ""}
+            className="input"
+          />
+        </FormField>
+        <FormField label={TH.org.phone} htmlFor="phone">
+          <input
+            id="phone"
+            name="phone"
+            defaultValue={props.initial.phone ?? ""}
+            className="input"
+          />
+        </FormField>
+      </div>
       <FormField label={TH.org.address} htmlFor="address">
-        <textarea id="address" name="address" defaultValue={props.initial.address ?? ""} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" rows={3} />
+        <textarea
+          id="address"
+          name="address"
+          defaultValue={props.initial.address ?? ""}
+          className="textarea"
+          rows={3}
+        />
       </FormField>
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      <button type="submit" className="btn" disabled={pending}>
-        {pending ? TH.common.loading : TH.common.save}
-      </button>
+      {error ? (
+        <p className="text-[length:var(--text-helper)] text-[var(--danger)]" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
+        <button
+          type="button"
+          className="btn btn-secondary btn-block-mobile"
+          onClick={() => router.back()}
+        >
+          {TH.common.cancel}
+        </button>
+        <button type="submit" className="btn btn-block-mobile" disabled={pending}>
+          {pending ? TH.common.loading : TH.common.save}
+        </button>
+      </div>
     </form>
   );
 }

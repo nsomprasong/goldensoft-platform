@@ -8,18 +8,23 @@ export const PLATFORM_PERMISSIONS = {
   userSuspend: "platform.user.suspend",
   userManage: "platform.user.manage",
   roleRead: "platform.role.read",
+  roleManage: "platform.role.manage",
   roleAssign: "platform.role.assign",
   auditRead: "platform.audit.read",
+  productRead: "platform.product.read",
+  productManage: "platform.product.manage",
+  planRead: "platform.plan.read",
+  planManage: "platform.plan.manage",
   subscriptionRead: "platform.subscription.read",
   subscriptionManage: "platform.subscription.manage",
-  productRead: "platform.product.read",
   settingsRead: "platform.settings.read",
+  settingsManage: "platform.settings.manage",
 } as const;
 
 export type PlatformPermission =
   (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];
 
-/** Thai labels for permission matrix UI. */
+/** Thai labels for permission matrix UI — never show raw codes as primary label. */
 export const PLATFORM_PERMISSION_LABELS: Record<PlatformPermission, string> = {
   [PLATFORM_PERMISSIONS.organizationRead]: "ดูข้อมูลองค์กร",
   [PLATFORM_PERMISSIONS.organizationManage]: "จัดการองค์กร",
@@ -30,17 +35,56 @@ export const PLATFORM_PERMISSION_LABELS: Record<PlatformPermission, string> = {
   [PLATFORM_PERMISSIONS.userSuspend]: "ระงับผู้ใช้งาน",
   [PLATFORM_PERMISSIONS.userManage]: "จัดการผู้ใช้งาน",
   [PLATFORM_PERMISSIONS.roleRead]: "ดูบทบาทและสิทธิ์",
+  [PLATFORM_PERMISSIONS.roleManage]: "จัดการบทบาท",
   [PLATFORM_PERMISSIONS.roleAssign]: "กำหนดบทบาท",
   [PLATFORM_PERMISSIONS.auditRead]: "ดูบันทึกกิจกรรม",
+  [PLATFORM_PERMISSIONS.productRead]: "ดูผลิตภัณฑ์",
+  [PLATFORM_PERMISSIONS.productManage]: "จัดการผลิตภัณฑ์",
+  [PLATFORM_PERMISSIONS.planRead]: "ดูแพ็กเกจ",
+  [PLATFORM_PERMISSIONS.planManage]: "จัดการแพ็กเกจ",
   [PLATFORM_PERMISSIONS.subscriptionRead]: "ดูการสมัครใช้บริการ",
   [PLATFORM_PERMISSIONS.subscriptionManage]: "จัดการการสมัครใช้บริการ",
-  [PLATFORM_PERMISSIONS.productRead]: "ดูผลิตภัณฑ์",
   [PLATFORM_PERMISSIONS.settingsRead]: "ดูการตั้งค่าระบบ",
+  [PLATFORM_PERMISSIONS.settingsManage]: "จัดการการตั้งค่าระบบ",
 };
+
+export const PLATFORM_PERMISSION_DESCRIPTIONS: Record<
+  PlatformPermission,
+  string
+> = {
+  [PLATFORM_PERMISSIONS.organizationRead]: "ดูรายการและรายละเอียดองค์กร",
+  [PLATFORM_PERMISSIONS.organizationManage]: "สร้าง แก้ไข และระงับองค์กร",
+  [PLATFORM_PERMISSIONS.branchRead]: "ดูรายการและรายละเอียดสาขา",
+  [PLATFORM_PERMISSIONS.branchManage]: "สร้าง แก้ไข และระงับสาขา",
+  [PLATFORM_PERMISSIONS.userRead]: "ดูสมาชิกและคำเชิญ",
+  [PLATFORM_PERMISSIONS.userInvite]: "ส่งคำเชิญเข้าองค์กร",
+  [PLATFORM_PERMISSIONS.userSuspend]: "ระงับการเข้าถึงของผู้ใช้",
+  [PLATFORM_PERMISSIONS.userManage]: "แก้ไขสถานะและข้อมูลสมาชิก",
+  [PLATFORM_PERMISSIONS.roleRead]: "ดูบทบาทและเมทริกซ์สิทธิ์",
+  [PLATFORM_PERMISSIONS.roleManage]: "สร้างและแก้ไขบทบาทกำหนดเอง",
+  [PLATFORM_PERMISSIONS.roleAssign]: "กำหนดหรือถอดบทบาทจากผู้ใช้",
+  [PLATFORM_PERMISSIONS.auditRead]: "ดูประวัติการเปลี่ยนแปลง",
+  [PLATFORM_PERMISSIONS.productRead]: "ดูรายการผลิตภัณฑ์",
+  [PLATFORM_PERMISSIONS.productManage]: "สร้างและแก้ไขผลิตภัณฑ์",
+  [PLATFORM_PERMISSIONS.planRead]: "ดูแพ็กเกจและเวอร์ชัน",
+  [PLATFORM_PERMISSIONS.planManage]: "สร้างและแก้ไขแพ็กเกจ",
+  [PLATFORM_PERMISSIONS.subscriptionRead]: "ดูรายการการสมัคร",
+  [PLATFORM_PERMISSIONS.subscriptionManage]:
+    "สร้าง เปลี่ยนสถานะ และเปลี่ยนแพ็กเกจ",
+  [PLATFORM_PERMISSIONS.settingsRead]: "ดูการตั้งค่าแพลตฟอร์ม",
+  [PLATFORM_PERMISSIONS.settingsManage]: "แก้ไขค่าเริ่มต้นของแพลตฟอร์ม",
+};
+
+export function permissionResourceGroup(code: string): string {
+  const parts = code.split(".");
+  return parts.length >= 2 ? parts[1]! : "other";
+}
 
 export function permissionsForRoles(input: {
   platformRoles: string[];
   organizationRoles: string[];
+  /** Extra permission codes from custom org roles (already resolved). */
+  customPermissionCodes?: string[];
 }): string[] {
   const set = new Set<string>();
 
@@ -52,6 +96,7 @@ export function permissionsForRoles(input: {
     set.add(PLATFORM_PERMISSIONS.subscriptionManage);
     set.add(PLATFORM_PERMISSIONS.organizationRead);
     set.add(PLATFORM_PERMISSIONS.productRead);
+    set.add(PLATFORM_PERMISSIONS.planRead);
     set.add(PLATFORM_PERMISSIONS.auditRead);
   }
   if (input.platformRoles.includes("SUPPORT")) {
@@ -59,6 +104,7 @@ export function permissionsForRoles(input: {
     set.add(PLATFORM_PERMISSIONS.branchRead);
     set.add(PLATFORM_PERMISSIONS.userRead);
     set.add(PLATFORM_PERMISSIONS.productRead);
+    set.add(PLATFORM_PERMISSIONS.planRead);
     set.add(PLATFORM_PERMISSIONS.subscriptionRead);
     set.add(PLATFORM_PERMISSIONS.auditRead);
   }
@@ -73,8 +119,10 @@ export function permissionsForRoles(input: {
     set.add(PLATFORM_PERMISSIONS.userSuspend);
     set.add(PLATFORM_PERMISSIONS.userManage);
     set.add(PLATFORM_PERMISSIONS.roleRead);
+    set.add(PLATFORM_PERMISSIONS.roleManage);
     set.add(PLATFORM_PERMISSIONS.roleAssign);
     set.add(PLATFORM_PERMISSIONS.productRead);
+    set.add(PLATFORM_PERMISSIONS.planRead);
     set.add(PLATFORM_PERMISSIONS.subscriptionRead);
     set.add(PLATFORM_PERMISSIONS.auditRead);
   }
@@ -89,6 +137,7 @@ export function permissionsForRoles(input: {
     set.add(PLATFORM_PERMISSIONS.userManage);
     set.add(PLATFORM_PERMISSIONS.roleRead);
     set.add(PLATFORM_PERMISSIONS.productRead);
+    set.add(PLATFORM_PERMISSIONS.planRead);
     set.add(PLATFORM_PERMISSIONS.subscriptionRead);
     set.add(PLATFORM_PERMISSIONS.auditRead);
   }
@@ -98,6 +147,11 @@ export function permissionsForRoles(input: {
     set.add(PLATFORM_PERMISSIONS.subscriptionRead);
     set.add(PLATFORM_PERMISSIONS.subscriptionManage);
     set.add(PLATFORM_PERMISSIONS.productRead);
+    set.add(PLATFORM_PERMISSIONS.planRead);
+  }
+
+  for (const code of input.customPermissionCodes ?? []) {
+    set.add(code);
   }
 
   return [...set].sort();

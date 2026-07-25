@@ -1,4 +1,7 @@
+import { cache } from "react";
+
 import type { MembershipSummary } from "@/lib/auth/access";
+import { measure } from "@/lib/perf/server-timing";
 import { MASTER } from "@/lib/platform/master-codes";
 import { prisma } from "@/lib/prisma";
 
@@ -18,21 +21,27 @@ export type PlatformUserBundle = {
  * Load auth context without selecting Phase 5 columns that exist in Prisma
  * schema / client but are not applied in DB until migration 0002 is approved.
  */
-export async function loadPlatformUserBundle(
+export const loadPlatformUserBundle = cache(async function loadPlatformUserBundle(
   authUserId: string,
 ): Promise<PlatformUserBundle> {
-  const assignmentActive = await prisma.assignmentStatus.findUnique({
-    where: { code: MASTER.assignmentStatus.ACTIVE },
-    select: { id: true },
-  });
-  const membershipActive = await prisma.membershipStatus.findUnique({
-    where: { code: MASTER.membershipStatus.ACTIVE },
-    select: { id: true },
-  });
-  const branchActive = await prisma.branchStatus.findUnique({
-    where: { code: MASTER.branchStatus.ACTIVE },
-    select: { id: true },
-  });
+  const [assignmentActive, membershipActive, branchActive] = await measure(
+    "context",
+    () =>
+      Promise.all([
+        prisma.assignmentStatus.findUnique({
+          where: { code: MASTER.assignmentStatus.ACTIVE },
+          select: { id: true },
+        }),
+        prisma.membershipStatus.findUnique({
+          where: { code: MASTER.membershipStatus.ACTIVE },
+          select: { id: true },
+        }),
+        prisma.branchStatus.findUnique({
+          where: { code: MASTER.branchStatus.ACTIVE },
+          select: { id: true },
+        }),
+      ]),
+  );
 
   if (!assignmentActive || !membershipActive) {
     return {
@@ -43,7 +52,8 @@ export async function loadPlatformUserBundle(
     };
   }
 
-  const profile = await prisma.userProfile.findUnique({
+  const profile = await measure("profile", () =>
+    prisma.userProfile.findUnique({
     where: { authUserId },
     select: {
       id: true,
@@ -85,7 +95,8 @@ export async function loadPlatformUserBundle(
         },
       },
     },
-  });
+    }),
+  );
 
   if (!profile) {
     return {
@@ -96,53 +107,67 @@ export async function loadPlatformUserBundle(
     };
   }
 
-  const memberships: MembershipSummary[] = [];
-  for (const m of profile.memberships) {
-    const roles = m.roles.map((r) => r.role.code);
-    let branches: MembershipSummary["branches"] = [];
+  const allBranchOrganizationIds = profile.memberships
+    .filter((m) =>
+      m.branchScopes.some(
+        (s) => s.scopeType.code === MASTER.branchScopeType.ALL_BRANCHES,
+      ),
+    )
+    .map((m) => m.organizationId);
 
+  // Single query for every ALL_BRANCHES membership instead of one per membership.
+  const branchesByOrganization = new Map<
+    string,
+    MembershipSummary["branches"]
+  >();
+  if (allBranchOrganizationIds.length > 0 && branchActive) {
+    const orgBranches = await measure("memberships", () =>
+      prisma.branch.findMany({
+        where: {
+          organizationId: { in: allBranchOrganizationIds },
+          deletedAt: null,
+          statusId: branchActive.id,
+        },
+        select: { id: true, name: true, code: true, organizationId: true },
+        orderBy: { code: "asc" },
+      }),
+    );
+    for (const branch of orgBranches) {
+      const list = branchesByOrganization.get(branch.organizationId) ?? [];
+      list.push({ id: branch.id, name: branch.name, code: branch.code });
+      branchesByOrganization.set(branch.organizationId, list);
+    }
+  }
+
+  const memberships: MembershipSummary[] = profile.memberships.map((m) => {
     const hasAllBranches = m.branchScopes.some(
       (s) => s.scopeType.code === MASTER.branchScopeType.ALL_BRANCHES,
     );
 
-    if (hasAllBranches && branchActive) {
-      const orgBranches = await prisma.branch.findMany({
-        where: {
-          organizationId: m.organizationId,
-          deletedAt: null,
-          statusId: branchActive.id,
-        },
-        select: { id: true, name: true, code: true },
-        orderBy: { code: "asc" },
-      });
-      branches = orgBranches.map((b) => ({
-        id: b.id,
-        name: b.name,
-        code: b.code,
-      }));
-    } else {
-      branches = m.branchScopes
-        .filter(
-          (s) =>
-            s.scopeType.code === MASTER.branchScopeType.SELECTED &&
-            s.branch &&
-            s.branch.status.code === MASTER.branchStatus.ACTIVE,
-        )
-        .map((s) => ({
-          id: s.branch!.id,
-          name: s.branch!.name,
-          code: s.branch!.code,
-        }));
-    }
+    const branches: MembershipSummary["branches"] =
+      hasAllBranches && branchActive
+        ? (branchesByOrganization.get(m.organizationId) ?? [])
+        : m.branchScopes
+            .filter(
+              (s) =>
+                s.scopeType.code === MASTER.branchScopeType.SELECTED &&
+                s.branch &&
+                s.branch.status.code === MASTER.branchStatus.ACTIVE,
+            )
+            .map((s) => ({
+              id: s.branch!.id,
+              name: s.branch!.name,
+              code: s.branch!.code,
+            }));
 
-    memberships.push({
+    return {
       organizationId: m.organizationId,
       organizationName: m.organization.displayName,
       organizationStatus: m.organization.status.code,
-      roles,
+      roles: m.roles.map((r) => r.role.code),
       branches,
-    });
-  }
+    };
+  });
 
   return {
     authUserId,
@@ -155,4 +180,4 @@ export async function loadPlatformUserBundle(
     platformRoles: profile.platformRoles.map((r) => r.role.code),
     memberships,
   };
-}
+});

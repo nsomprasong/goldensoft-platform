@@ -62,18 +62,37 @@ export async function GET(request: NextRequest) {
   }
 
   const cookie = decodeContextCookie(request.cookies.get(COOKIE_NAME)?.value);
+  const isSuper = bundle.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN);
   const activeMembership = cookie
     ? bundle.memberships.find((m) => m.organizationId === cookie.organizationId)
     : null;
 
+  let platformAdminOrganization: { id: string; name: string } | null = null;
   if (cookie && !activeMembership) {
-    return NextResponse.json(
-      {
-        code: "ORG_FORBIDDEN",
-        message: TH.access.forbidden,
+    if (!(isSuper && cookie.mode === "platform_admin")) {
+      return NextResponse.json(
+        {
+          code: "ORG_FORBIDDEN",
+          message: TH.access.forbidden,
+        },
+        { status: 403 },
+      );
+    }
+    const org = await prisma.organization.findFirst({
+      where: {
+        id: cookie.organizationId,
+        deletedAt: null,
+        status: { code: MASTER.organizationStatus.ACTIVE },
       },
-      { status: 403 },
-    );
+      select: { id: true, displayName: true },
+    });
+    if (!org) {
+      return NextResponse.json(
+        { code: "ORG_FORBIDDEN", message: TH.access.forbidden },
+        { status: 403 },
+      );
+    }
+    platformAdminOrganization = { id: org.id, name: org.displayName };
   }
 
   const activeBranch =
@@ -95,6 +114,18 @@ export async function GET(request: NextRequest) {
     organizationRoles,
   });
 
+  const adminOrganizations = isSuper
+    ? await prisma.organization.findMany({
+        where: {
+          deletedAt: null,
+          status: { code: MASTER.organizationStatus.ACTIVE },
+        },
+        select: { id: true, displayName: true },
+        orderBy: { displayName: "asc" },
+        take: 200,
+      })
+    : [];
+
   return NextResponse.json({
     user: { id: user.id, email: user.email },
     profile: {
@@ -110,12 +141,17 @@ export async function GET(request: NextRequest) {
       roles: m.roles,
       branchCount: m.branches.length,
     })),
+    platformAdminOrganizations: adminOrganizations.map((o) => ({
+      id: o.id,
+      name: o.displayName,
+    })),
+    contextMode: cookie?.mode ?? "membership",
     activeOrganization: activeMembership
       ? {
           id: activeMembership.organizationId,
           name: activeMembership.organizationName,
         }
-      : null,
+      : platformAdminOrganization,
     activeBranch: activeBranch
       ? {
           id: activeBranch.id,
@@ -163,15 +199,67 @@ export async function POST(request: NextRequest) {
   }
 
   const { organizationId, branchId = null } = parsed.data;
+  const isSuper = bundle.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN);
+  const membership = bundle.memberships.find(
+    (m) => m.organizationId === organizationId,
+  );
+  const memberAccess = canAccessOrganization(bundle.memberships, organizationId);
+  const platformAdminAccess =
+    !memberAccess &&
+    isSuper &&
+    canAccessOrganization(bundle.memberships, organizationId, {
+      platformRoles: bundle.platformRoles,
+      allowPlatformAdmin: true,
+    });
 
-  if (!canAccessOrganization(bundle.memberships, organizationId)) {
+  if (!memberAccess && !platformAdminAccess) {
     return NextResponse.json(
       { code: "ORG_FORBIDDEN", message: TH.access.forbidden },
       { status: 403 },
     );
   }
 
-  if (!canAccessBranch(bundle.memberships, organizationId, branchId)) {
+  let activeOrganizationName = membership?.organizationName ?? null;
+  let resolvedBranch =
+    membership && branchId
+      ? (membership.branches.find((b) => b.id === branchId) ?? null)
+      : null;
+
+  if (platformAdminAccess) {
+    const org = await prisma.organization.findFirst({
+      where: {
+        id: organizationId,
+        deletedAt: null,
+        status: { code: MASTER.organizationStatus.ACTIVE },
+      },
+      select: {
+        id: true,
+        displayName: true,
+        branches: {
+          where: { deletedAt: null, status: { code: MASTER.branchStatus.ACTIVE } },
+          select: { id: true, name: true, code: true },
+          orderBy: { code: "asc" },
+          take: 200,
+        },
+      },
+    });
+    if (!org) {
+      return NextResponse.json(
+        { code: "ORG_FORBIDDEN", message: TH.access.forbidden },
+        { status: 403 },
+      );
+    }
+    activeOrganizationName = org.displayName;
+    if (branchId) {
+      resolvedBranch = org.branches.find((b) => b.id === branchId) ?? null;
+      if (!resolvedBranch) {
+        return NextResponse.json(
+          { code: "BRANCH_FORBIDDEN", message: TH.access.forbidden },
+          { status: 403 },
+        );
+      }
+    }
+  } else if (!canAccessBranch(bundle.memberships, organizationId, branchId)) {
     return NextResponse.json(
       { code: "BRANCH_FORBIDDEN", message: TH.access.forbidden },
       { status: 403 },
@@ -182,9 +270,11 @@ export async function POST(request: NextRequest) {
     request.cookies.get(COOKIE_NAME)?.value,
   );
 
+  const mode = platformAdminAccess ? "platform_admin" : "membership";
   const encoded = encodeContextCookie({
     organizationId,
     branchId,
+    mode,
   });
 
   await prisma.userPreference.upsert({
@@ -201,9 +291,15 @@ export async function POST(request: NextRequest) {
   });
 
   const action = await ensureAuditAction(
-    "context.switch",
-    "เปลี่ยนบริบทองค์กรหรือสาขา",
-    "Switch organization or branch context",
+    platformAdminAccess
+      ? MASTER.auditActionType.CONTEXT_PLATFORM_ADMIN
+      : MASTER.auditActionType.CONTEXT_SWITCH,
+    platformAdminAccess
+      ? "สลับโหมดผู้ดูแลแพลตฟอร์ม"
+      : "เปลี่ยนบริบทองค์กรหรือสาขา",
+    platformAdminAccess
+      ? "Switch platform admin context"
+      : "Switch organization or branch context",
   );
 
   await prisma.auditLog.create({
@@ -217,30 +313,28 @@ export async function POST(request: NextRequest) {
         ? {
             organizationId: previous.organizationId,
             branchId: previous.branchId,
+            mode: previous.mode ?? "membership",
           }
         : undefined,
-      afterJson: { organizationId, branchId },
+      afterJson: { organizationId, branchId, mode },
       userAgent: request.headers.get("user-agent"),
     },
   });
 
-  const membership = bundle.memberships.find(
-    (m) => m.organizationId === organizationId,
-  )!;
-  const branch =
-    branchId === null
-      ? null
-      : (membership.branches.find((b) => b.id === branchId) ?? null);
-
   const response = NextResponse.json({
     ok: true,
     message: TH.common.saved,
+    contextMode: mode,
     activeOrganization: {
-      id: membership.organizationId,
-      name: membership.organizationName,
+      id: organizationId,
+      name: activeOrganizationName,
     },
-    activeBranch: branch
-      ? { id: branch.id, name: branch.name, code: branch.code }
+    activeBranch: resolvedBranch
+      ? {
+          id: resolvedBranch.id,
+          name: resolvedBranch.name,
+          code: resolvedBranch.code,
+        }
       : null,
     statusHint: MASTER.organizationStatus.ACTIVE,
   });

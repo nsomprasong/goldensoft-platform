@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { BrandLockup } from "@/components/platform-shell";
 import { LogoutButton } from "@/components/logout-button";
 import { OrgSelectForm } from "@/components/org-select-form";
 import { decideAccess } from "@/lib/auth/access";
@@ -39,13 +40,18 @@ export default async function SelectOrganizationPage() {
     decision.kind === "select_organization" ? decision.organizations : [];
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-10">
-      <section className="card">
-        <h1 className="text-xl font-bold">{TH.pages.selectOrgTitle}</h1>
-        <p className="mt-2 text-sm text-slate-600">{TH.pages.selectOrgBody}</p>
+    <div className="auth-shell">
+      <section className="auth-card !max-w-xl">
+        <BrandLockup subtitle={TH.shellName} />
+        <h1 className="mt-5 text-[length:var(--text-page)] font-semibold">
+          {TH.pages.selectOrgTitle}
+        </h1>
+        <p className="mt-2 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+          {TH.pages.selectOrgBody}
+        </p>
         <OrgSelectForm organizations={organizations} />
         <div className="mt-6">
-          <LogoutButton className="btn !bg-slate-700" />
+          <LogoutButton className="btn btn-secondary btn-block-mobile" />
         </div>
       </section>
     </div>

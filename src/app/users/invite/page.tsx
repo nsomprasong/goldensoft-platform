@@ -2,6 +2,7 @@ import { PlatformShell } from "@/components/platform-shell";
 import { UserInviteWizard } from "@/components/user-invite-wizard";
 import { AccessDenied, PageHeader } from "@/components/ui/admin-ui";
 import { loadActorAccess } from "@/lib/auth/actor-access";
+import { resolveInviteEnvironment } from "@/lib/auth/invite-env";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
 import { MASTER } from "@/lib/platform/master-codes";
@@ -75,11 +76,26 @@ export default async function InviteUserPage() {
     });
   }
 
+  const isSuper = actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN);
+  let inviteMode: "mock" | "real" = "mock";
+  try {
+    inviteMode = resolveInviteEnvironment(process.env).mode;
+  } catch {
+    inviteMode = "mock";
+  }
+
   return (
     <PlatformShell {...shellProps}>
-      <section className="card max-w-xl">
-        <PageHeader title={TH.users.add} description={TH.users.invite} />
-        <UserInviteWizard organizations={orgIds} branchesByOrg={branchesByOrg} />
+      <section className="card max-w-2xl">
+        <PageHeader
+          title={TH.users.add}
+          description="กรอกข้อมูลและกำหนดสิทธิ์ก่อนส่งคำเชิญเข้าใช้งาน"
+        />
+        <UserInviteWizard
+          organizations={orgIds}
+          branchesByOrg={branchesByOrg}
+          showTestModeBadge={isSuper && inviteMode === "mock"}
+        />
       </section>
     </PlatformShell>
   );

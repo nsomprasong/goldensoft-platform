@@ -55,8 +55,12 @@ export async function countActiveOwners(
   const membershipActive = await db.membershipStatus.findUnique({
     where: { code: MASTER.membershipStatus.ACTIVE },
   });
-  const ownerRole = await db.organizationRole.findUnique({
-    where: { code: MASTER.organizationRole.OWNER },
+  const ownerRole = await db.organizationRole.findFirst({
+    where: {
+      code: MASTER.organizationRole.OWNER,
+      organizationId: null,
+      isSystem: true,
+    },
   });
   if (!assignmentActive || !membershipActive || !ownerRole) return 0;
 
@@ -119,8 +123,12 @@ export async function assertCanRemoveOwner(
   const assignmentActive = await db.assignmentStatus.findUnique({
     where: { code: MASTER.assignmentStatus.ACTIVE },
   });
-  const ownerRole = await db.organizationRole.findUnique({
-    where: { code: MASTER.organizationRole.OWNER },
+  const ownerRole = await db.organizationRole.findFirst({
+    where: {
+      code: MASTER.organizationRole.OWNER,
+      organizationId: null,
+      isSystem: true,
+    },
   });
   if (!assignmentActive || !ownerRole) {
     throw new AdminGuardError("NOT_FOUND", TH.common.notFound);

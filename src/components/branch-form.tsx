@@ -61,41 +61,75 @@ export function BranchForm(props: {
   }
 
   return (
-    <form action={onSubmit} className="space-y-3">
-      <FormField
-        label={TH.branch.code}
-        htmlFor="code"
-        required={!isEdit}
-        hint={isEdit ? TH.branch.codeImmutable : undefined}
-      >
-        <input
-          id="code"
-          name="code"
+    <form action={onSubmit} className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FormField
+          label={TH.branch.code}
+          htmlFor="code"
           required={!isEdit}
-          disabled={isEdit}
-          defaultValue={props.initial?.code ?? ""}
-          className="w-full rounded-lg border border-[var(--border)] px-3 py-2 disabled:bg-slate-50"
+          hint={isEdit ? TH.branch.codeImmutable : undefined}
+        >
+          <input
+            id="code"
+            name="code"
+            required={!isEdit}
+            disabled={isEdit}
+            defaultValue={props.initial?.code ?? ""}
+            className="input disabled:bg-[var(--surface-muted)]"
+          />
+        </FormField>
+        <FormField label={TH.branch.nameTh} htmlFor="name" required>
+          <input
+            id="name"
+            name="name"
+            required
+            defaultValue={props.initial?.name ?? ""}
+            className="input"
+          />
+        </FormField>
+        <FormField label={TH.branch.nameEn} htmlFor="nameEn">
+          <input
+            id="nameEn"
+            name="nameEn"
+            defaultValue={props.initial?.nameEn ?? ""}
+            className="input"
+          />
+        </FormField>
+        <FormField label={TH.branch.timezone} htmlFor="timezone">
+          <input
+            id="timezone"
+            name="timezone"
+            defaultValue={props.initial?.timezone ?? "Asia/Bangkok"}
+            className="input"
+          />
+        </FormField>
+        <FormField label={TH.branch.email} htmlFor="email">
+          <input
+            id="email"
+            name="email"
+            type="email"
+            defaultValue={props.initial?.email ?? ""}
+            className="input"
+          />
+        </FormField>
+        <FormField label={TH.branch.phone} htmlFor="phone">
+          <input
+            id="phone"
+            name="phone"
+            defaultValue={props.initial?.phone ?? ""}
+            className="input"
+          />
+        </FormField>
+      </div>
+      <FormField label={TH.branch.address} htmlFor="address">
+        <input
+          id="address"
+          name="address"
+          defaultValue={props.initial?.address ?? ""}
+          className="input"
         />
       </FormField>
-      <FormField label={TH.branch.nameTh} htmlFor="name" required>
-        <input id="name" name="name" required defaultValue={props.initial?.name ?? ""} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" />
-      </FormField>
-      <FormField label={TH.branch.nameEn} htmlFor="nameEn">
-        <input id="nameEn" name="nameEn" defaultValue={props.initial?.nameEn ?? ""} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" />
-      </FormField>
-      <FormField label={TH.branch.address} htmlFor="address">
-        <input id="address" name="address" defaultValue={props.initial?.address ?? ""} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" />
-      </FormField>
-      <FormField label={TH.branch.email} htmlFor="email">
-        <input id="email" name="email" type="email" defaultValue={props.initial?.email ?? ""} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" />
-      </FormField>
-      <FormField label={TH.branch.phone} htmlFor="phone">
-        <input id="phone" name="phone" defaultValue={props.initial?.phone ?? ""} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" />
-      </FormField>
-      <FormField label={TH.branch.timezone} htmlFor="timezone">
-        <input id="timezone" name="timezone" defaultValue={props.initial?.timezone ?? "Asia/Bangkok"} className="w-full rounded-lg border border-[var(--border)] px-3 py-2" />
-      </FormField>
-      <label className="flex items-center gap-2 text-sm">
+      <label className="flex min-h-11 items-center gap-2 text-[length:var(--text-label)]">
         <input
           type="checkbox"
           name="isPrimary"
@@ -103,10 +137,23 @@ export function BranchForm(props: {
         />
         {TH.branch.isPrimary}
       </label>
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      <button type="submit" className="btn" disabled={pending}>
-        {pending ? TH.common.loading : isEdit ? TH.common.save : TH.branch.add}
-      </button>
+      {error ? (
+        <p className="text-[length:var(--text-helper)] text-[var(--danger)]" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
+        <button
+          type="button"
+          className="btn btn-secondary btn-block-mobile"
+          onClick={() => router.back()}
+        >
+          {TH.common.cancel}
+        </button>
+        <button type="submit" className="btn btn-block-mobile" disabled={pending}>
+          {pending ? TH.common.loading : isEdit ? TH.common.save : TH.branch.add}
+        </button>
+      </div>
     </form>
   );
 }

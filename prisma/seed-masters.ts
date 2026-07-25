@@ -36,6 +36,47 @@ async function upsertMaster(
 }
 
 export async function seedAllMasters(prisma: PrismaClient) {
+  // Organization roles lost the global unique(code) in Phase 7 — upsert by
+  // system scope (organizationId null) instead of the generic helper.
+  for (const row of [
+    { code: "OWNER", nameTh: "เจ้าของ", nameEn: "Owner", sortOrder: 1 },
+    { code: "ADMIN", nameTh: "ผู้ดูแล", nameEn: "Admin", sortOrder: 2 },
+    {
+      code: "BILLING_CONTACT",
+      nameTh: "ผู้ติดต่อการเงิน",
+      nameEn: "Billing Contact",
+      sortOrder: 3,
+    },
+  ]) {
+    const existing = await prisma.organizationRole.findFirst({
+      where: { code: row.code, organizationId: null },
+    });
+    if (existing) {
+      await prisma.organizationRole.update({
+        where: { id: existing.id },
+        data: {
+          nameTh: row.nameTh,
+          nameEn: row.nameEn,
+          sortOrder: row.sortOrder,
+          isActive: true,
+          isSystem: true,
+        },
+      });
+    } else {
+      await prisma.organizationRole.create({
+        data: {
+          code: row.code,
+          nameTh: row.nameTh,
+          nameEn: row.nameEn,
+          sortOrder: row.sortOrder,
+          isActive: true,
+          isSystem: true,
+          organizationId: null,
+        },
+      });
+    }
+  }
+
   const pairs: Array<[keyof PrismaClient, MasterSeed[]]> = [
     [
       "userProfileStatus",
@@ -82,14 +123,6 @@ export async function seedAllMasters(prisma: PrismaClient) {
         { code: "ACTIVE", nameTh: "ใช้งาน", nameEn: "Active", sortOrder: 2 },
         { code: "SUSPENDED", nameTh: "ระงับ", nameEn: "Suspended", sortOrder: 3 },
         { code: "REMOVED", nameTh: "ถอดออก", nameEn: "Removed", sortOrder: 4 },
-      ],
-    ],
-    [
-      "organizationRole",
-      [
-        { code: "OWNER", nameTh: "เจ้าของ", nameEn: "Owner", sortOrder: 1 },
-        { code: "ADMIN", nameTh: "ผู้ดูแล", nameEn: "Admin", sortOrder: 2 },
-        { code: "BILLING_CONTACT", nameTh: "ผู้ติดต่อการเงิน", nameEn: "Billing Contact", sortOrder: 3 },
       ],
     ],
     [

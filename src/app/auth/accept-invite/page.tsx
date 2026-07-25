@@ -1,15 +1,22 @@
+import { BrandLockup } from "@/components/platform-shell";
 import { AcceptInviteForm } from "@/components/accept-invite-form";
+import { TH } from "@/lib/i18n/th";
 
 export default function AcceptInvitePage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-10">
-      <section className="card">
-        <p className="text-sm font-semibold text-[var(--accent)]">GoldenSoft</p>
-        <h1 className="mb-5 mt-1 text-2xl font-bold">
+    <div className="auth-shell">
+      <section className="auth-card">
+        <BrandLockup subtitle={TH.shellName} />
+        <h1 className="mt-5 text-[length:var(--text-page)] font-semibold leading-[var(--leading-tight)]">
           ยอมรับคำเชิญเข้าใช้งาน GoldenSoft
         </h1>
-        <AcceptInviteForm />
+        <p className="mt-2 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+          ตั้งรหัสผ่านเพื่อเปิดใช้งานบัญชีของคุณ
+        </p>
+        <div className="mt-6">
+          <AcceptInviteForm />
+        </div>
       </section>
-    </main>
+    </div>
   );
 }

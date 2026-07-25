@@ -1,15 +1,20 @@
+import Link from "next/link";
+
 import { PlatformShell } from "@/components/platform-shell";
 import {
   AccessDenied,
+  ActivityList,
   DataTable,
   EmptyState,
   PageHeader,
   Pagination,
   SearchFilterBar,
 } from "@/components/ui/admin-ui";
+import { IconAudit } from "@/components/ui/icons";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
+import { logServerTiming, measure } from "@/lib/perf/server-timing";
 import { MASTER } from "@/lib/platform/master-codes";
 import {
   PLATFORM_PERMISSIONS,
@@ -81,23 +86,26 @@ export default async function AuditLogsPage({
     if (params.to) where.createdAt.lte = new Date(params.to);
   }
 
-  const [total, rows, actions] = await Promise.all([
-    prisma.auditLog.count({ where }),
-    prisma.auditLog.findMany({
-      where,
-      include: {
-        actionType: true,
-        organization: { select: { displayName: true, customerCode: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * take,
-      take,
-    }),
-    prisma.auditActionType.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: "asc" },
-    }),
-  ]);
+  const [total, rows, actions] = await measure("data", () =>
+    Promise.all([
+      prisma.auditLog.count({ where }),
+      prisma.auditLog.findMany({
+        where,
+        include: {
+          actionType: true,
+          organization: { select: { displayName: true, customerCode: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * take,
+        take,
+      }),
+      prisma.auditActionType.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: "asc" },
+      }),
+    ]),
+  );
+  logServerTiming();
 
   const qs = new URLSearchParams();
   if (params.action) qs.set("action", params.action);
@@ -105,79 +113,104 @@ export default async function AuditLogsPage({
   if (params.from) qs.set("from", params.from);
   if (params.to) qs.set("to", params.to);
 
+  const hasFilter = Boolean(
+    params.action || params.organizationId || params.from || params.to,
+  );
+
   return (
     <PlatformShell {...shellProps}>
+      <PageHeader
+        title={TH.pages.auditTitle}
+        description={TH.pages.auditBody}
+        icon={<IconAudit size={24} />}
+      />
       <section className="card">
-        <PageHeader title={TH.pages.auditTitle} />
-        <SearchFilterBar>
-          <form method="get" className="flex flex-wrap gap-2">
-            <select
-              name="action"
-              defaultValue={params.action ?? ""}
-              className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
-            >
-              <option value="">ทุกประเภท</option>
-              {actions.map((a) => (
-                <option key={a.id} value={a.code}>
-                  {a.nameTh}
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              name="from"
-              defaultValue={params.from ?? ""}
-              className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
-            />
-            <input
-              type="date"
-              name="to"
-              defaultValue={params.to ?? ""}
-              className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
-            />
+        <SearchFilterBar
+          resultLabel={`${TH.common.foundTotal} ${total} ${TH.common.items}`}
+        >
+          <form method="get" className="flex w-full flex-wrap items-end gap-2">
+            <label className="text-[length:var(--text-label)]">
+              <span className="mb-1 block font-medium">{TH.audit.action}</span>
+              <select
+                name="action"
+                defaultValue={params.action ?? ""}
+                className="select !w-auto min-w-[10rem]"
+              >
+                <option value="">ทุกประเภท</option>
+                {actions.map((a) => (
+                  <option key={a.id} value={a.code}>
+                    {a.nameTh}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-[length:var(--text-label)]">
+              <span className="mb-1 block font-medium">{TH.audit.dateFrom}</span>
+              <input
+                type="date"
+                name="from"
+                defaultValue={params.from ?? ""}
+                className="input !w-auto"
+              />
+            </label>
+            <label className="text-[length:var(--text-label)]">
+              <span className="mb-1 block font-medium">{TH.audit.dateTo}</span>
+              <input
+                type="date"
+                name="to"
+                defaultValue={params.to ?? ""}
+                className="input !w-auto"
+              />
+            </label>
             <button className="btn" type="submit">
               {TH.common.filter}
             </button>
+            {hasFilter ? (
+              <Link href="/audit-logs" className="btn btn-secondary">
+                {TH.common.clearFilter}
+              </Link>
+            ) : null}
           </form>
         </SearchFilterBar>
 
         {rows.length === 0 ? (
-          <EmptyState title={TH.common.empty} />
+          <EmptyState title={TH.common.empty} body={TH.common.notFound} />
         ) : (
           <>
-            <ul className="space-y-3 md:hidden">
-              {rows.map((row) => (
-                <li key={row.id} className="rounded-xl border border-[var(--border)] p-3 text-sm">
-                  <p className="font-medium">{row.actionType.nameTh}</p>
-                  <p className="text-xs text-slate-500">
-                    {row.organization?.displayName ?? "-"} ·{" "}
-                    {row.createdAt.toISOString().slice(0, 19)}
-                  </p>
-                  <p className="text-xs">
-                    {row.entityType}/{row.entityId.slice(0, 8)}…
-                  </p>
-                </li>
-              ))}
-            </ul>
+            <div className="md:hidden">
+              <ActivityList
+                items={rows.map((row) => ({
+                  id: row.id,
+                  title: row.actionType.nameTh,
+                  meta: `${row.organization?.displayName ?? "-"} · ${row.entityType}`,
+                  when: row.createdAt.toLocaleString("th-TH"),
+                }))}
+              />
+            </div>
             <DataTable
               headers={[
                 TH.audit.action,
                 TH.audit.organization,
                 TH.audit.entity,
-                "เวลา",
+                "วันเวลา",
               ]}
             >
               {rows.map((row) => (
-                <tr key={row.id} className="border-b border-[var(--border)]">
-                  <td className="px-2 py-2">{row.actionType.nameTh}</td>
-                  <td className="px-2 py-2">
+                <tr
+                  key={row.id}
+                  className="border-b border-[var(--border)] hover:bg-[var(--surface-muted)]/60"
+                >
+                  <td className="px-3 py-2.5 font-medium">
+                    {row.actionType.nameTh}
+                  </td>
+                  <td className="px-3 py-2.5">
                     {row.organization?.displayName ?? "-"}
                   </td>
-                  <td className="px-2 py-2 text-xs">
-                    {row.entityType} · {row.entityId.slice(0, 8)}…
+                  <td className="px-3 py-2.5 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+                    {row.entityType}
                   </td>
-                  <td className="px-2 py-2 text-xs">
-                    {row.createdAt.toISOString().slice(0, 19)}
+                  <td className="px-3 py-2.5 tabular-nums text-[length:var(--text-helper)]">
+                    {row.createdAt.toLocaleString("th-TH")}
                   </td>
                 </tr>
               ))}

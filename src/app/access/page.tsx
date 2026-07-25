@@ -1,3 +1,4 @@
+import { BrandLockup } from "@/components/platform-shell";
 import { LogoutButton } from "@/components/logout-button";
 import { TH } from "@/lib/i18n/th";
 
@@ -23,13 +24,15 @@ export default async function AccessPage({
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-10">
-      <section className="card">
-        <p className="text-sm font-semibold text-[var(--accent)]">{TH.brand}</p>
-        <h1 className="mt-2 text-xl font-bold">{title}</h1>
-        <p className="mt-3 text-sm text-slate-600">{body}</p>
+    <div className="auth-shell">
+      <section className="auth-card">
+        <BrandLockup subtitle={TH.shellName} />
+        <h1 className="mt-5 text-[length:var(--text-page)] font-semibold">{title}</h1>
+        <p className="mt-3 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+          {body}
+        </p>
         <div className="mt-6">
-          <LogoutButton />
+          <LogoutButton className="btn btn-secondary btn-block-mobile" />
         </div>
       </section>
     </div>

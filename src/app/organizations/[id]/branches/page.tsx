@@ -5,9 +5,11 @@ import {
   AccessDenied,
   DataTable,
   EmptyState,
+  MobileRecordCard,
   PageHeader,
   StatusBadge,
 } from "@/components/ui/admin-ui";
+import { IconBranch } from "@/components/ui/icons";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH, labelStatus } from "@/lib/i18n/th";
@@ -71,31 +73,49 @@ export default async function OrganizationBranchesPage({
 
   return (
     <PlatformShell {...shellProps}>
+      <PageHeader
+        title={TH.pages.branchesTitle}
+        description={TH.pages.branchesBody}
+        icon={<IconBranch size={24} />}
+        actions={
+          canManage ? (
+            <Link
+              href={`/organizations/${id}/branches/new`}
+              className="btn btn-block-mobile"
+            >
+              {TH.branch.add}
+            </Link>
+          ) : null
+        }
+      />
       <section className="card">
-        <PageHeader
-          title={TH.pages.branchesTitle}
-          actions={
-            canManage ? (
-              <Link href={`/organizations/${id}/branches/new`} className="btn">
-                {TH.branch.add}
-              </Link>
-            ) : null
-          }
-        />
         {branches.length === 0 ? (
           <EmptyState title={TH.common.empty} />
         ) : (
           <>
             <ul className="space-y-3 md:hidden">
               {branches.map((b) => (
-                <li key={b.id} className="rounded-xl border border-[var(--border)] p-3">
-                  <p className="font-medium">
-                    {b.name}{" "}
-                    {/* isPrimary requires migration 0002 */}
-                  </p>
-                  <p className="text-xs text-slate-500">{b.code}</p>
-                  <StatusBadge label={labelStatus(b.status.code)} />
-                </li>
+                <MobileRecordCard
+                  key={b.id}
+                  title={b.name}
+                  subtitle={b.code}
+                  status={
+                    <StatusBadge
+                      label={labelStatus(b.status.code)}
+                      code={b.status.code}
+                    />
+                  }
+                  actions={
+                    canManage ? (
+                      <Link
+                        href={`/organizations/${id}/branches/${b.id}/edit`}
+                        className="text-[length:var(--text-helper)] font-medium text-[var(--primary)]"
+                      >
+                        {TH.common.edit}
+                      </Link>
+                    ) : null
+                  }
+                />
               ))}
             </ul>
             <DataTable
@@ -107,17 +127,23 @@ export default async function OrganizationBranchesPage({
               ]}
             >
               {branches.map((b) => (
-                <tr key={b.id} className="border-b border-[var(--border)]">
-                  <td className="px-2 py-2">{b.name}</td>
-                  <td className="px-2 py-2">{b.code}</td>
-                  <td className="px-2 py-2">
-                    <StatusBadge label={labelStatus(b.status.code)} />
+                <tr
+                  key={b.id}
+                  className="border-b border-[var(--border)] hover:bg-[var(--surface-muted)]/60"
+                >
+                  <td className="px-3 py-2.5 font-medium">{b.name}</td>
+                  <td className="px-3 py-2.5">{b.code}</td>
+                  <td className="px-3 py-2.5">
+                    <StatusBadge
+                      label={labelStatus(b.status.code)}
+                      code={b.status.code}
+                    />
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-3 py-2.5">
                     {canManage ? (
                       <Link
                         href={`/organizations/${id}/branches/${b.id}/edit`}
-                        className="text-sm text-[var(--accent)]"
+                        className="text-[length:var(--text-helper)] text-[var(--primary)]"
                       >
                         {TH.common.edit}
                       </Link>

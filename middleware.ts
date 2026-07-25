@@ -30,8 +30,17 @@ export async function middleware(request: NextRequest) {
     );
   }
 
-  const { response, user } = await updateSession(request);
+  const { response: sessionResponse, user } = await updateSession(request);
   const { pathname } = request.nextUrl;
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-gs-pathname", pathname);
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
+  for (const cookie of sessionResponse.cookies.getAll()) {
+    response.cookies.set(cookie);
+  }
 
   const testAuth =
     isTestAuthEnabled() &&
@@ -100,7 +109,9 @@ function productionInviteConfigurationError(): string | null {
 }
 
 export const config = {
+  // Session refresh only runs for real navigations/API calls; static assets and
+  // build output never pay for a Supabase round trip.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|_next/webpack-hmr|favicon.ico|robots.txt|sitemap.xml|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|css|js|map|txt|xml|woff|woff2|ttf|otf)$).*)",
   ],
 };

@@ -18,6 +18,9 @@ export type ProfileAccessInput = {
   };
   memberships: MembershipSummary[];
   claimedOrganizationId?: string | null;
+  platformRoles?: string[];
+  /** Cookie mode for SUPER_ADMIN managing without membership. */
+  contextMode?: "membership" | "platform_admin";
 };
 
 export type AccessDecision =
@@ -61,12 +64,49 @@ export function decideAccess(input: ProfileAccessInput): AccessDecision {
   const activeOrgs = input.memberships.filter(
     (m) => m.organizationStatus === "ACTIVE",
   );
+  const isSuper = (input.platformRoles ?? []).includes("SUPER_ADMIN");
 
   if (activeOrgs.length === 0) {
+    if (
+      isSuper &&
+      input.contextMode === "platform_admin" &&
+      input.claimedOrganizationId
+    ) {
+      return {
+        kind: "ready",
+        organizationId: input.claimedOrganizationId,
+        autoSelected: false,
+        branches: [],
+        autoBranchId: null,
+      };
+    }
+    if (isSuper) {
+      // SUPER_ADMIN without memberships can still use the platform shell and
+      // pick an organization in platform-admin mode.
+      return {
+        kind: "select_organization",
+        organizations: [],
+      };
+    }
     return {
       kind: "no_membership",
       title: TH.access.noMembershipTitle,
       body: TH.access.noMembershipBody,
+    };
+  }
+
+  if (
+    isSuper &&
+    input.contextMode === "platform_admin" &&
+    input.claimedOrganizationId &&
+    !activeOrgs.some((o) => o.organizationId === input.claimedOrganizationId)
+  ) {
+    return {
+      kind: "ready",
+      organizationId: input.claimedOrganizationId,
+      autoSelected: false,
+      branches: [],
+      autoBranchId: null,
     };
   }
 
@@ -109,11 +149,20 @@ export function decideAccess(input: ProfileAccessInput): AccessDecision {
 export function canAccessOrganization(
   memberships: MembershipSummary[],
   organizationId: string,
+  options?: { platformRoles?: string[]; allowPlatformAdmin?: boolean },
 ): boolean {
-  return memberships.some(
+  const memberOk = memberships.some(
     (m) =>
       m.organizationId === organizationId && m.organizationStatus === "ACTIVE",
   );
+  if (memberOk) return true;
+  if (
+    options?.allowPlatformAdmin &&
+    options.platformRoles?.includes("SUPER_ADMIN")
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function canAccessBranch(

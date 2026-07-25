@@ -1,0 +1,339 @@
+import type { Prisma, PrismaClient } from "@prisma/client";
+
+import { MASTER } from "@/lib/platform/master-codes";
+
+type SnapshotFeature = {
+  code: string;
+  name?: string;
+  limitValue?: string | null;
+};
+
+function featuresFromSnapshot(snapshotJson: unknown): SnapshotFeature[] {
+  if (!snapshotJson || typeof snapshotJson !== "object") return [];
+  const features = (snapshotJson as { features?: unknown }).features;
+  if (!Array.isArray(features)) {
+    const featureCodes = (snapshotJson as { featureCodes?: unknown })
+      .featureCodes;
+    const limits = (snapshotJson as { limits?: Record<string, unknown> }).limits;
+    if (Array.isArray(featureCodes)) {
+      return featureCodes
+        .filter((c): c is string => typeof c === "string")
+        .map((code) => ({
+          code,
+          name: code,
+          limitValue:
+            limits && limits[code] != null ? String(limits[code]) : null,
+        }));
+    }
+    return [];
+  }
+  const result: SnapshotFeature[] = [];
+  for (const item of features) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    if (typeof row.code !== "string") continue;
+    result.push({
+      code: row.code,
+      name: typeof row.name === "string" ? row.name : row.code,
+      limitValue:
+        typeof row.limitValue === "string" || row.limitValue === null
+          ? (row.limitValue as string | null)
+          : null,
+    });
+  }
+  return result;
+}
+
+function defaultEntitlementsForProduct(productCode: string): SnapshotFeature[] {
+  const code = productCode.toUpperCase();
+  if (code === "RESIDENT_V2" || code === "RESIDENT") {
+    return [
+      { code: "resident_v2.access", name: "เข้าถึง Resident V2" },
+      { code: "resident_v2.branch_limit", name: "จำนวนสาขา", limitValue: "3" },
+      { code: "resident_v2.user_limit", name: "จำนวนผู้ใช้", limitValue: "25" },
+    ];
+  }
+  if (code === "GOLDENSOFT_HR" || code === "HR") {
+    return [
+      { code: "hr.access", name: "เข้าถึง GoldenSoft HR" },
+      { code: "hr.employee_limit", name: "จำนวนพนักงาน", limitValue: "50" },
+    ];
+  }
+  if (code === "QRSTATION") {
+    return [
+      { code: "qrstation.access", name: "เข้าถึง QR Station" },
+      { code: "qrstation.device_limit", name: "จำนวนอุปกรณ์", limitValue: "10" },
+    ];
+  }
+  if (code === "PLATFORM") {
+    return [{ code: "platform.access", name: "เข้าถึงศูนย์บริหาร" }];
+  }
+  return [{ code: `${code.toLowerCase()}.access`, name: `เข้าถึง ${code}` }];
+}
+
+export async function generateEntitlementsForSubscription(
+  db: Prisma.TransactionClient | PrismaClient,
+  subscriptionId: string,
+) {
+  const subscription = await db.subscription.findUnique({
+    where: { id: subscriptionId },
+    select: {
+      id: true,
+      organizationId: true,
+      productId: true,
+      startsAt: true,
+      endsAt: true,
+      snapshotJson: true,
+      product: { select: { code: true, name: true } },
+    },
+  });
+  if (!subscription) {
+    throw new Error("SUBSCRIPTION_NOT_FOUND");
+  }
+
+  const activeStatus = await db.entitlementStatus.findUnique({
+    where: { code: MASTER.entitlementStatus.ACTIVE },
+    select: { id: true },
+  });
+  if (!activeStatus) {
+    throw new Error("ENTITLEMENT_STATUS_MISSING");
+  }
+
+  const fromSnapshot = featuresFromSnapshot(subscription.snapshotJson);
+  const features =
+    fromSnapshot.length > 0
+      ? fromSnapshot
+      : defaultEntitlementsForProduct(subscription.product.code);
+
+  const created = [];
+  for (const feature of features) {
+    const row = await db.entitlement.upsert({
+      where: {
+        organizationId_subscriptionId_code: {
+          organizationId: subscription.organizationId,
+          subscriptionId: subscription.id,
+          code: feature.code,
+        },
+      },
+      create: {
+        organizationId: subscription.organizationId,
+        subscriptionId: subscription.id,
+        productId: subscription.productId,
+        code: feature.code,
+        nameTh: feature.name ?? feature.code,
+        nameEn: feature.name ?? feature.code,
+        limitValue: feature.limitValue ?? null,
+        statusId: activeStatus.id,
+        startsAt: subscription.startsAt,
+        endsAt: subscription.endsAt,
+        sourceSnapshotJson: subscription.snapshotJson as Prisma.InputJsonValue,
+      },
+      update: {
+        statusId: activeStatus.id,
+        limitValue: feature.limitValue ?? null,
+        endsAt: subscription.endsAt,
+        sourceSnapshotJson: subscription.snapshotJson as Prisma.InputJsonValue,
+      },
+    });
+    created.push(row);
+  }
+
+  const action = await db.auditActionType.upsert({
+    where: { code: MASTER.auditActionType.ENTITLEMENT_GENERATE },
+    create: {
+      code: MASTER.auditActionType.ENTITLEMENT_GENERATE,
+      nameTh: "สร้างสิทธิ์การใช้งาน",
+      nameEn: "Generate entitlements",
+      sortOrder: 94,
+      isActive: true,
+      isSystem: true,
+    },
+    update: {},
+  });
+  await db.auditLog.create({
+    data: {
+      organizationId: subscription.organizationId,
+      actionTypeId: action.id,
+      entityType: "subscription",
+      entityId: subscription.id,
+      afterJson: {
+        entitlementCodes: created.map((row) => row.code),
+      },
+    },
+  });
+
+  return created;
+}
+
+export async function listEntitlementsForOrganization(
+  db: PrismaClient,
+  organizationId: string,
+) {
+  return db.entitlement.findMany({
+    where: { organizationId },
+    orderBy: [{ code: "asc" }],
+    select: {
+      id: true,
+      code: true,
+      nameTh: true,
+      nameEn: true,
+      limitValue: true,
+      startsAt: true,
+      endsAt: true,
+      createdAt: true,
+      updatedAt: true,
+      status: { select: { code: true, nameTh: true } },
+      product: { select: { code: true, name: true, nameTh: true } },
+      subscription: {
+        select: {
+          id: true,
+          planCode: true,
+          startsAt: true,
+          endsAt: true,
+          status: { select: { code: true, nameTh: true } },
+        },
+      },
+    },
+  });
+}
+
+export type EntitlementCheckResult = {
+  allowed: boolean;
+  value: string | null;
+  reason: string;
+  subscriptionStatus: string | null;
+  expiresAt: string | null;
+};
+
+export async function assertOrganizationEntitlement(input: {
+  db: PrismaClient;
+  organizationId: string;
+  productCode: string;
+  entitlementCode: string;
+  branchId?: string | null;
+}): Promise<EntitlementCheckResult> {
+  const now = new Date();
+  const row = await input.db.entitlement.findFirst({
+    where: {
+      organizationId: input.organizationId,
+      code: input.entitlementCode,
+      product: { code: input.productCode },
+      startsAt: { lte: now },
+      OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+    },
+    select: {
+      id: true,
+      limitValue: true,
+      endsAt: true,
+      status: { select: { code: true } },
+      subscription: {
+        select: {
+          status: { select: { code: true } },
+          endsAt: true,
+        },
+      },
+    },
+  });
+
+  if (!row) {
+    return {
+      allowed: false,
+      value: null,
+      reason: "ENTITLEMENT_MISSING",
+      subscriptionStatus: null,
+      expiresAt: null,
+    };
+  }
+
+  const subStatus = row.subscription.status.code;
+  if (
+    row.status.code !== MASTER.entitlementStatus.ACTIVE ||
+    subStatus === MASTER.subscriptionStatus.SUSPENDED ||
+    subStatus === MASTER.subscriptionStatus.CANCELLED ||
+    subStatus === MASTER.subscriptionStatus.EXPIRED
+  ) {
+    return {
+      allowed: false,
+      value: row.limitValue,
+      reason:
+        row.status.code !== MASTER.entitlementStatus.ACTIVE
+          ? `ENTITLEMENT_${row.status.code}`
+          : `SUBSCRIPTION_${subStatus}`,
+      subscriptionStatus: subStatus,
+      expiresAt: (row.endsAt ?? row.subscription.endsAt)?.toISOString() ?? null,
+    };
+  }
+
+  return {
+    allowed: true,
+    value: row.limitValue,
+    reason: "OK",
+    subscriptionStatus: subStatus,
+    expiresAt: (row.endsAt ?? row.subscription.endsAt)?.toISOString() ?? null,
+  };
+}
+
+export async function regenerateEntitlementsForSubscription(
+  db: PrismaClient,
+  input: {
+    subscriptionId: string;
+    actorAuthUserId: string;
+  },
+) {
+  const subscription = await db.subscription.findUnique({
+    where: { id: input.subscriptionId },
+    select: { id: true, organizationId: true },
+  });
+  if (!subscription) {
+    throw new Error("SUBSCRIPTION_NOT_FOUND");
+  }
+  const created = await generateEntitlementsForSubscription(
+    db,
+    subscription.id,
+  );
+  const action = await db.auditActionType.upsert({
+    where: { code: "entitlement.regenerate" },
+    create: {
+      code: "entitlement.regenerate",
+      nameTh: "สร้างสิทธิ์การใช้งานใหม่",
+      nameEn: "Regenerate entitlements",
+      sortOrder: 106,
+      isActive: true,
+      isSystem: true,
+    },
+    update: {},
+  });
+  await db.auditLog.create({
+    data: {
+      organizationId: subscription.organizationId,
+      actorAuthUserId: input.actorAuthUserId,
+      actionTypeId: action.id,
+      entityType: "Subscription",
+      entityId: subscription.id,
+      afterJson: {
+        entitlementCodes: created.map((row) => row.code),
+        regenerated: true,
+      },
+    },
+  });
+  return created;
+}
+
+export function detectEntitlementConsistency(input: {
+  snapshotJson: unknown;
+  entitlementCodes: string[];
+}): { stale: boolean; missing: string[]; extra: string[] } {
+  const expected = featuresFromSnapshot(input.snapshotJson).map((f) => f.code);
+  if (expected.length === 0) {
+    return { stale: false, missing: [], extra: [] };
+  }
+  const have = new Set(input.entitlementCodes);
+  const want = new Set(expected);
+  const missing = expected.filter((c) => !have.has(c));
+  const extra = input.entitlementCodes.filter((c) => !want.has(c));
+  return {
+    stale: missing.length > 0 || extra.length > 0,
+    missing,
+    extra,
+  };
+}

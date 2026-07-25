@@ -3,6 +3,8 @@ import { createHmac, timingSafeEqual } from "crypto";
 export type PlatformContextCookie = {
   organizationId: string;
   branchId: string | null;
+  /** SUPER_ADMIN managing an org without membership. */
+  mode?: "membership" | "platform_admin";
 };
 
 const COOKIE_NAME = "gs_platform_ctx";
@@ -50,6 +52,10 @@ export function decodeContextCookie(
         typeof parsed.branchId === "string" || parsed.branchId === null
           ? parsed.branchId
           : null,
+      mode:
+        parsed.mode === "platform_admin" || parsed.mode === "membership"
+          ? parsed.mode
+          : undefined,
     };
   } catch {
     return null;

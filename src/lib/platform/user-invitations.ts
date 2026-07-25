@@ -129,8 +129,14 @@ async function resolveInviteMasters(
       where: { id: input.organizationId, deletedAt: null },
       select: { id: true },
     }),
-    db.organizationRole.findUnique({
-      where: { code: input.organizationRoleCode },
+    db.organizationRole.findFirst({
+      where: {
+        code: input.organizationRoleCode,
+        OR: [
+          { organizationId: null, isSystem: true },
+          { organizationId: input.organizationId, isActive: true },
+        ],
+      },
       select: { id: true },
     }),
     db.branchScopeType.findUnique({
@@ -416,7 +422,15 @@ async function completePlatformSetup(
           tx.assignmentStatus.findUnique({ where: { code: MASTER.assignmentStatus.ACTIVE } }),
           tx.userInvitationStatus.findUnique({ where: { code: MASTER.userInvitationStatus.AUTH_SENT } }),
           tx.userInvitationStatus.findUnique({ where: { code: MASTER.userInvitationStatus.COMPLETED } }),
-          tx.organizationRole.findUnique({ where: { code: input.organizationRoleCode } }),
+          tx.organizationRole.findFirst({
+            where: {
+              code: input.organizationRoleCode,
+              OR: [
+                { organizationId: null, isSystem: true },
+                { organizationId: input.organizationId, isActive: true },
+              ],
+            },
+          }),
           tx.branchScopeType.findUnique({ where: { code: input.branchScope } }),
         ]);
       if (

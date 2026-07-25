@@ -1,12 +1,25 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
 import { decideAccess } from "@/lib/auth/access";
 import { getAuthUser } from "@/lib/auth/session";
 import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
 import { COOKIE_NAME, decodeContextCookie } from "@/lib/context/cookie";
+import { setServerTimingRoute } from "@/lib/perf/server-timing";
 
-export async function requirePlatformPage() {
+function safeNextPath(raw: string | null | undefined): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  // Never bounce bootstrap into itself.
+  if (raw.startsWith("/api/")) return "/";
+  return raw;
+}
+
+/**
+ * Request-scoped so a route that resolves page context more than once (page +
+ * helpers) pays for auth, profile and memberships only once.
+ */
+export const requirePlatformPage = cache(async function requirePlatformPage() {
   const user = await getAuthUser();
   if (!user) {
     redirect("/login");
@@ -15,6 +28,11 @@ export async function requirePlatformPage() {
   const bundle = await loadPlatformUserBundle(user.id);
   const jar = await cookies();
   const cookie = decodeContextCookie(jar.get(COOKIE_NAME)?.value);
+  const headerList = await headers();
+  const requestPath = safeNextPath(
+    headerList.get("x-gs-pathname") ?? headerList.get("next-url"),
+  );
+  setServerTimingRoute(requestPath);
 
   const decision = decideAccess({
     authenticated: true,
@@ -27,6 +45,8 @@ export async function requirePlatformPage() {
       : null,
     memberships: bundle.memberships,
     claimedOrganizationId: cookie?.organizationId ?? null,
+    platformRoles: bundle.platformRoles,
+    contextMode: cookie?.mode,
   });
 
   if (decision.kind === "no_profile") {
@@ -39,19 +59,29 @@ export async function requirePlatformPage() {
     redirect("/access?reason=no_membership");
   }
   if (decision.kind === "select_organization") {
-    redirect("/select-organization");
+    // SUPER_ADMIN with zero memberships lands on org list instead of access wall.
+    if (
+      bundle.platformRoles.includes("SUPER_ADMIN") &&
+      bundle.memberships.length === 0
+    ) {
+      // continue without active org — pages must tolerate null activeOrganization
+    } else {
+      redirect("/select-organization");
+    }
   }
 
   if (decision.kind === "ready") {
-    const needsBootstrap =
-      !cookie ||
-      cookie.organizationId !== decision.organizationId ||
-      (decision.autoBranchId && cookie.branchId !== decision.autoBranchId);
+    const needsOrgBootstrap =
+      !cookie || cookie.organizationId !== decision.organizationId;
 
-    if (needsBootstrap && decision.autoSelected) {
+    if (
+      needsOrgBootstrap &&
+      decision.autoSelected &&
+      cookie?.mode !== "platform_admin"
+    ) {
       const params = new URLSearchParams({
         organizationId: decision.organizationId,
-        next: "/",
+        next: requestPath,
       });
       if (decision.autoBranchId) {
         params.set("branchId", decision.autoBranchId);
@@ -71,9 +101,47 @@ export async function requirePlatformPage() {
     activeBranchId = decision.autoBranchId;
   }
 
-  // Tampered cookie pointing at inaccessible org
+  const isSuper = bundle.platformRoles.includes("SUPER_ADMIN");
+  let platformAdminOrganization: { id: string; name: string } | null = null;
+
   if (cookie && !membership) {
-    redirect("/select-organization");
+    if (!(isSuper && cookie.mode === "platform_admin" && activeOrgId)) {
+      redirect("/select-organization");
+    }
+    const { prisma } = await import("@/lib/prisma");
+    const org = await prisma.organization.findFirst({
+      where: {
+        id: activeOrgId,
+        deletedAt: null,
+        status: { code: "ACTIVE" },
+      },
+      select: {
+        id: true,
+        displayName: true,
+        branches: {
+          where: { deletedAt: null, status: { code: "ACTIVE" } },
+          select: { id: true, name: true, code: true },
+          orderBy: { code: "asc" },
+          take: 200,
+        },
+      },
+    });
+    if (!org) {
+      redirect("/select-organization");
+    }
+    platformAdminOrganization = { id: org.id, name: org.displayName };
+    const adminBranch = activeBranchId
+      ? (org.branches.find((b) => b.id === activeBranchId) ?? null)
+      : null;
+    return {
+      user,
+      bundle,
+      activeOrganization: platformAdminOrganization,
+      activeBranch: adminBranch,
+      organizationRoles: [],
+      branches: org.branches,
+      contextMode: "platform_admin" as const,
+    };
   }
 
   const activeBranch =
@@ -82,9 +150,14 @@ export async function requirePlatformPage() {
       : null;
 
   if (cookie?.branchId && membership && !activeBranch) {
-    redirect(
-      `/api/platform/context/bootstrap?organizationId=${membership.organizationId}&next=/`,
-    );
+    const params = new URLSearchParams({
+      organizationId: membership.organizationId,
+      next: requestPath,
+    });
+    if (decision.kind === "ready" && decision.autoBranchId) {
+      params.set("branchId", decision.autoBranchId);
+    }
+    redirect(`/api/platform/context/bootstrap?${params.toString()}`);
   }
 
   return {
@@ -96,5 +169,8 @@ export async function requirePlatformPage() {
     activeBranch,
     organizationRoles: membership?.roles ?? [],
     branches: membership?.branches ?? [],
+    contextMode: (cookie?.mode ?? "membership") as
+      | "membership"
+      | "platform_admin",
   };
-}
+});

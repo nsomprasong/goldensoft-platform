@@ -1,9 +1,13 @@
+import Link from "next/link";
+
 import { PlatformShell } from "@/components/platform-shell";
 import {
   AccessDenied,
   DataTable,
   PageHeader,
+  SectionHeader,
 } from "@/components/ui/admin-ui";
+import { IconRoles } from "@/components/ui/icons";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH, labelRole } from "@/lib/i18n/th";
 import {
@@ -14,6 +18,14 @@ import {
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+
+function CheckIcon() {
+  return (
+    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--success-soft)] text-[var(--success)]" aria-hidden="true">
+      ✓
+    </span>
+  );
+}
 
 export default async function RolesPage() {
   const ctx = await requirePlatformPage();
@@ -44,71 +56,141 @@ export default async function RolesPage() {
 
   const [platformRoles, organizationRoles] = await Promise.all([
     prisma.platformRole.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.organizationRole.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.organizationRole.findMany({
+      where: {
+        OR: [
+          { organizationId: null, isSystem: true },
+          ...(ctx.activeOrganization
+            ? [{ organizationId: ctx.activeOrganization.id }]
+            : []),
+        ],
+      },
+      orderBy: [{ isSystem: "desc" }, { sortOrder: "asc" }],
+    }),
   ]);
   const isSuper = ctx.bundle.platformRoles.includes("SUPER_ADMIN");
+  const permissionCodes = Object.values(PLATFORM_PERMISSIONS);
+  const canManage = perms.includes(PLATFORM_PERMISSIONS.roleManage);
 
   return (
-    <PlatformShell {...shellProps}>
-      <section className="card mb-4">
-        <PageHeader
-          title={TH.pages.rolesTitle}
-          description={TH.roles.systemImmutable}
-        />
-        <h3 className="mb-2 font-semibold">{TH.roles.platformRoles}</h3>
-        <ul className="mb-4 space-y-1 text-sm">
-          {platformRoles.map((r) => (
-            <li key={r.id}>
-              {labelRole(r.code)}
-              {isSuper ? (
-                <span className="ml-2 text-xs text-slate-500">({r.code})</span>
-              ) : null}
-              <span className="block text-xs text-slate-500">{r.nameTh}</span>
-            </li>
-          ))}
-        </ul>
-        <h3 className="mb-2 font-semibold">{TH.roles.organizationRoles}</h3>
-        <ul className="space-y-1 text-sm">
-          {organizationRoles.map((r) => (
-            <li key={r.id}>
-              {labelRole(r.code)}
-              {isSuper ? (
-                <span className="ml-2 text-xs text-slate-500">({r.code})</span>
-              ) : null}
-              <span className="block text-xs text-slate-500">{r.nameTh}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+    <PlatformShell {...shellProps} contextMode={ctx.contextMode}>
+      <PageHeader
+        title={TH.pages.rolesTitle}
+        description={TH.pages.rolesBody}
+        icon={<IconRoles size={24} />}
+        actions={
+          canManage && ctx.activeOrganization ? (
+            <Link href="/roles/new" className="btn">
+              สร้างบทบาทกำหนดเอง
+            </Link>
+          ) : null
+        }
+      />
 
-      <section className="card">
-        <h3 className="mb-3 font-semibold">{TH.roles.permissionMatrix}</h3>
-        <DataTable headers={["สิทธิ์", "คำอธิบาย", ...(isSuper ? ["รหัส"] : [])]}>
-          {Object.values(PLATFORM_PERMISSIONS).map((code) => (
-            <tr key={code} className="border-b border-[var(--border)]">
-              <td className="px-2 py-2">
-                {PLATFORM_PERMISSION_LABELS[code]}
-              </td>
-              <td className="px-2 py-2 text-sm text-slate-600">
-                {PLATFORM_PERMISSION_LABELS[code]}
-              </td>
-              {isSuper ? (
-                <td className="px-2 py-2 text-xs text-slate-500">{code}</td>
-              ) : null}
-            </tr>
-          ))}
-        </DataTable>
-        <ul className="mt-4 space-y-2 md:hidden">
-          {Object.values(PLATFORM_PERMISSIONS).map((code) => (
-            <li key={code} className="rounded-xl border border-[var(--border)] p-3 text-sm">
-              <p className="font-medium">{PLATFORM_PERMISSION_LABELS[code]}</p>
-              {isSuper ? (
-                <p className="text-xs text-slate-500">{code}</p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </section>
+      <div className="grid gap-4">
+        <section className="card">
+          <SectionHeader title={TH.roles.platformRoles} />
+          <ul className="mb-6 grid gap-3 sm:grid-cols-2">
+            {platformRoles.map((r) => (
+              <li
+                key={r.id}
+                className="rounded-[var(--radius-lg)] border border-[var(--border)] p-3.5"
+              >
+                <p className="font-semibold text-[var(--text-primary)]">
+                  {labelRole(r.code)}
+                </p>
+                <p className="mt-1 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+                  {r.nameTh}
+                </p>
+                {isSuper ? (
+                  <p className="mt-1 text-[length:var(--text-caption)] text-[var(--text-muted)]">
+                    {r.code}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+
+          <SectionHeader title={TH.roles.organizationRoles} />
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {organizationRoles.map((r) => (
+              <li key={r.id}>
+                <Link
+                  href={`/roles/${r.id}`}
+                  className="block rounded-[var(--radius-lg)] border border-[var(--border)] p-3.5 transition hover:border-[var(--border-strong)]"
+                >
+                  <p className="font-semibold text-[var(--text-primary)]">
+                    {r.nameTh || labelRole(r.code)}
+                  </p>
+                  <p className="mt-1 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+                    {r.isSystem ? "บทบาทระบบ" : "บทบาทกำหนดเอง"}
+                    {r.isActive ? "" : " · ปิดใช้งาน"}
+                  </p>
+                  {isSuper ? (
+                    <p className="mt-1 text-[length:var(--text-caption)] text-[var(--text-muted)]">
+                      {r.code}
+                    </p>
+                  ) : null}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="card">
+          <SectionHeader
+            title={TH.roles.permissionMatrix}
+            description="รายการสิทธิ์ที่ระบบรองรับ จัดกลุ่มตามการใช้งาน"
+          />
+          <DataTable
+            headers={[
+              "สิทธิ์",
+              "สถานะ",
+              ...(isSuper ? ["รหัส"] : []),
+            ]}
+          >
+            {permissionCodes.map((code) => (
+              <tr
+                key={code}
+                className="border-b border-[var(--border)] hover:bg-[var(--surface-muted)]/60"
+              >
+                <td className="px-3 py-2.5">
+                  {PLATFORM_PERMISSION_LABELS[code]}
+                </td>
+                <td className="px-3 py-2.5">
+                  <span className="inline-flex items-center gap-2 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+                    <CheckIcon />
+                    มีในระบบ
+                  </span>
+                </td>
+                {isSuper ? (
+                  <td className="px-3 py-2.5 text-[length:var(--text-caption)] text-[var(--text-muted)]">
+                    {code}
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+          </DataTable>
+          <ul className="mt-4 space-y-2 md:hidden">
+            {permissionCodes.map((code) => (
+              <li
+                key={code}
+                className="rounded-[var(--radius-lg)] border border-[var(--border)] p-3 text-[length:var(--text-label)]"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium">{PLATFORM_PERMISSION_LABELS[code]}</p>
+                  <CheckIcon />
+                </div>
+                {isSuper ? (
+                  <p className="mt-1 text-[length:var(--text-caption)] text-[var(--text-muted)]">
+                    {code}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
     </PlatformShell>
   );
 }
