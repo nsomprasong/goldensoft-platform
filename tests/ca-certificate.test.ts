@@ -204,7 +204,9 @@ describe("CA certificate + TLS guard", () => {
     if (!result.ok) assert.equal(result.code, "DIRECT_URL_TLS");
   });
 
-  it("requires DIRECT_URL sslrootcert to an existing CA file", () => {
+  it("validates DIRECT_URL sslrootcert path shape without requiring fs open", () => {
+    // Missing file is OK for Guard — Prisma CLI opens sslrootcert later.
+    // Path must still resolve inside the project (from prisma/).
     const result = assertSafeEnvironment({
       appCode: "PLATFORM",
       supabaseUrl: goodApi,
@@ -215,8 +217,20 @@ describe("CA certificate + TLS guard", () => {
       expectedProjectRef: NEW_REF,
       blockedLegacyProjectRef: LEGACY_REF,
     });
-    assert.equal(result.ok, false);
-    if (!result.ok) assert.equal(result.code, "DIRECT_URL_TLS");
+    assert.equal(result.ok, true);
+
+    const outside = assertSafeEnvironment({
+      appCode: "PLATFORM",
+      supabaseUrl: goodApi,
+      databaseUrl: goodDb,
+      directUrl: `postgresql://postgres.${NEW_REF}:secret@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=verify-full&sslrootcert=../../outside.crt`,
+      caCertPath: CA_REL,
+      projectRoot: PROJECT_ROOT,
+      expectedProjectRef: NEW_REF,
+      blockedLegacyProjectRef: LEGACY_REF,
+    });
+    assert.equal(outside.ok, false);
+    if (!outside.ok) assert.equal(outside.code, "DIRECT_URL_TLS");
   });
 
   it("rejects production without CA path", () => {

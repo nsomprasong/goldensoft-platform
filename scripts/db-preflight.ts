@@ -7,10 +7,12 @@ loadEnvConfig(process.cwd());
 async function main() {
   const {
     assertSafeEnvironment,
+    describeDirectUrlTls,
     redactConnectionString,
     requireSafeEnvironment,
   } = await import("../src/lib/env/guard");
   const {
+    buildDatabasePoolConfig,
     buildTrustedPgSsl,
     loadSupabaseDbCaCertificate,
     resolveProjectRelativePath,
@@ -48,9 +50,15 @@ async function main() {
 
   const dbMeta = redactConnectionString(databaseUrl);
   const directMeta = redactConnectionString(directUrl);
+  const directTls = describeDirectUrlTls(directUrl);
+
+  // Runtime CA from SUPABASE_DB_CA_CERT_PATH only (not from DIRECT_URL query params).
   const { content: caContent, absolutePath: caAbsolutePath } =
     loadSupabaseDbCaCertificate(configuredCaPath, projectRoot);
   const ssl = buildTrustedPgSsl(caContent);
+
+  // Connect with DATABASE_URL only. DIRECT_URL is metadata-only here.
+  const poolConfig = buildDatabasePoolConfig(databaseUrl, ssl, { max: 1 });
 
   console.log("APP_CODE:", process.env.APP_CODE ?? "(missing)");
   console.log("Project root:", path.resolve(projectRoot));
@@ -67,19 +75,18 @@ async function main() {
     dbMeta.database,
   );
   console.log(
-    "DIRECT_URL host/port/db:",
+    "DIRECT_URL host/port/db (metadata only, not connected):",
     directMeta.host,
     directMeta.port,
     directMeta.database,
   );
+  console.log("DIRECT_URL project ref:", directMeta.projectRef);
+  console.log("DIRECT_URL TLS mode:", directTls.sslmode ?? "(missing)");
   console.log("SSL verification enabled:", ssl.rejectUnauthorized === true);
+  console.log("Pool connection source: DATABASE_URL");
   console.log("Write operations: NONE");
 
-  const pool = new Pool({
-    connectionString: directUrl,
-    ssl,
-    max: 1,
-  });
+  const pool = new Pool(poolConfig);
 
   try {
     const ping = await pool.query(

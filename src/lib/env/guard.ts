@@ -217,6 +217,11 @@ function validateCaCertificateFile(
   return null;
 }
 
+/**
+ * Validate DIRECT_URL TLS query params for Prisma CLI.
+ * Does not open/read sslrootcert — Prisma resolves that from the prisma/ folder later.
+ * Preflight must never connect with DIRECT_URL.
+ */
 function validateDirectUrlTls(
   directUrl: string,
   projectRoot: string,
@@ -239,7 +244,7 @@ function validateDirectUrlTls(
   }
 
   const sslrootcert = url.searchParams.get("sslrootcert");
-  if (!sslrootcert) {
+  if (!sslrootcert?.trim()) {
     return {
       ok: false,
       code: "DIRECT_URL_TLS",
@@ -247,41 +252,32 @@ function validateDirectUrlTls(
     };
   }
 
-  let absolutePath: string;
+  // Path-shape check only (no fs). Ensures ../certs/... stays inside the repo
+  // when resolved from prisma/, without opening the file during preflight.
   try {
-    absolutePath = resolveDirectSslRootCertPath(sslrootcert, projectRoot);
+    resolveDirectSslRootCertPath(sslrootcert, projectRoot);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Invalid DIRECT_URL sslrootcert";
     return { ok: false, code: "DIRECT_URL_TLS", reason: message };
   }
 
-  if (!fs.existsSync(absolutePath)) {
-    return {
-      ok: false,
-      code: "DIRECT_URL_TLS",
-      reason: `DIRECT_URL sslrootcert file does not exist: ${absolutePath}`,
-    };
-  }
-
-  try {
-    const content = fs.readFileSync(absolutePath, "utf8").trim();
-    if (!content) {
-      return {
-        ok: false,
-        code: "DIRECT_URL_TLS",
-        reason: `DIRECT_URL sslrootcert file is empty: ${absolutePath}`,
-      };
-    }
-  } catch {
-    return {
-      ok: false,
-      code: "DIRECT_URL_TLS",
-      reason: `Unable to read DIRECT_URL sslrootcert file: ${absolutePath}`,
-    };
-  }
-
   return null;
+}
+
+/** Safe metadata for logging DIRECT_URL without secrets or opening sslrootcert. */
+export function describeDirectUrlTls(directUrl: string): {
+  sslmode: string | null;
+  hasSslRootCert: boolean;
+} {
+  const url = parsePgUrl(directUrl);
+  if (!url) {
+    return { sslmode: null, hasSslRootCert: false };
+  }
+  return {
+    sslmode: url.searchParams.get("sslmode"),
+    hasSslRootCert: url.searchParams.has("sslrootcert"),
+  };
 }
 
 export function assertSafeEnvironment(

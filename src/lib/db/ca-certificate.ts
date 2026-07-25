@@ -166,3 +166,26 @@ export function buildTrustedPgSsl(certificateContent: string): TrustedPgSsl {
     rejectUnauthorized: true,
   };
 }
+
+/**
+ * Preflight / runtime pool options.
+ * Always uses DATABASE_URL — never DIRECT_URL (whose sslrootcert is for Prisma CLI only).
+ */
+export function buildDatabasePoolConfig(
+  databaseUrl: string,
+  ssl: TrustedPgSsl,
+  options: { max?: number } = {},
+): {
+  connectionString: string;
+  ssl: TrustedPgSsl;
+  max: number;
+} {
+  if (!databaseUrl.trim()) {
+    throw new Error("DATABASE_URL is required for the database pool");
+  }
+  return {
+    connectionString: databaseUrl,
+    ssl,
+    max: options.max ?? 10,
+  };
+}
