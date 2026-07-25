@@ -1,56 +1,55 @@
 # GoldenSoft Platform
 
-Central Auth, multi-tenant control plane สำหรับ Resident V2, HR และ QR Station
+Central Auth และ multi-tenant control plane สำหรับ Resident V2, HR และ QR Station
 
 ## Stack
 
-- Next.js 15 App Router
-- React 19
-- TypeScript strict
-- Tailwind CSS 4
-- Prisma ORM
-- Supabase Auth (Central)
-- SQLite สำหรับทดสอบท้องถิ่น (PostgreSQL/Supabase ในขั้นถัดไป)
+- Next.js 15 App Router · React 19 · TypeScript strict · Tailwind CSS 4
+- Prisma ORM + PostgreSQL (`platform` schema)
+- Supabase Auth (Central project)
 
-## Quick start
+## Project refs (locked)
+
+| Role | Ref |
+|------|-----|
+| New / Expected | `horyhrnqbeaivdztekfv` |
+| Blocked Legacy | `invnwpyshxdadhocueeh` |
+
+## Quick start (local code)
 
 ```bash
 cp .env.example .env.local
-# ตั้งค่า APP_CODE, EXPECTED_SUPABASE_PROJECT_REF, BLOCKED_LEGACY_SUPABASE_PROJECT_REF
-# DATABASE_URL=file:./dev.db สำหรับ local test เท่านั้น
+# ใส่ค่าจาก Supabase Connect Panel ตาม docs/ENVIRONMENT_SETUP.md
 
 npm install
-npx prisma generate
-npx prisma db push
-npm run db:seed
-npm run dev
+npm run db:validate
+npm run db:generate
+npm test
+npm run build
 ```
 
-## Scripts
+## Database scripts
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Dev server |
-| `npm run build` | Production build |
-| `npm run typecheck` | TypeScript |
-| `npm run lint` | ESLint |
-| `npm test` | Unit/integration tests (SQLite test DB) |
-| `npm run db:validate` | Prisma validate |
-| `npm run db:generate` | Prisma generate |
-| `npm run preflight:env` | Environment guard |
+| `npm run db:validate` | Validate Prisma schema |
+| `npm run db:generate` | Generate Prisma Client |
+| `npm run db:migration:check` | Safety-check migration SQL (platform only) |
+| `npm run db:preflight` | Env guard + read-only DB ping (**needs real `.env.local`**) |
+| `npm run db:seed` | Seed (after migration applied + approval) |
+
+**ห้าม** รัน `prisma migrate deploy` / `db push` จนกว่า Project Manager จะอนุมัติ
 
 ## Safety
 
-- ห้ามชี้ `DATABASE_URL` / Supabase URL ไป Legacy หรือ Production ใน Phase นี้
-- Environment Guard จะหยุดแอป/seed หากเจอ Legacy project ref
+- Environment Guard บล็อก Legacy project ref ใน URL / DATABASE_URL / DIRECT_URL
+- Production ห้าม `ALLOW_TEST_AUTH=true`
+- Secret key อยู่เฉพาะ server (`SUPABASE_SECRET_KEY`)
 - ห้าม commit `.env*` (ยกเว้น `.env.example`)
 
 ## Docs
 
-- `docs/CENTRAL_AUTH_FOUNDATION.md`
-- `docs/ADR-001-CENTRAL_AUTH_AND_TENANCY.md`
-- `docs/PLATFORM_DATABASE_BLUEPRINT.md`
-- `docs/ADR-002-PLATFORM_DATA_AND_ENTITLEMENTS.md`
-- `docs/ENVIRONMENT_SETUP.md`
+- `docs/ENVIRONMENT_SETUP.md` — ขั้นตอนใส่ Connection String / Keys
 - `docs/IMPLEMENTATION_STATUS.md`
 - `docs/TEST_RESULTS.md`
+- Architecture ADRs ใน `docs/`

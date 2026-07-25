@@ -1,46 +1,42 @@
-# Implementation Status — Phase 2 MVP Foundation
+# Implementation Status
 
 ## Completed
 
-- Next.js 15 + React 19 + TypeScript strict + Tailwind 4 project scaffold
-- Environment Guard (`APP_CODE`, expected/blocked Supabase project ref)
-- Prisma schema สำหรับ Platform MVP models (SQLite test provider)
-- Central auth/session helpers + test auth header
-- ApplicationContext resolver (membership, branch scope, product membership, subscription, entitlement snapshot)
-- Organization bootstrap (transaction + idempotency + OWNER + audit + outbox)
-- Last-OWNER revoke protection
-- Subscription create with immutable JSON snapshot
-- API MVP: health, auth/me, context, organizations, branches, products, subscriptions
-- Basic UI pages: login placeholder, dashboard, orgs, branches, products, plans, subscriptions
-- Seed data script (orgs, branches, products, HR plans, users)
-- Tenant isolation + env guard + legacy untouched tests
-- Docs: README, ENVIRONMENT_SETUP, IMPLEMENTATION_STATUS, TEST_RESULTS
+### Phase 2
+- Next.js MVP, APIs, ApplicationContext, seed design, UI shells, tenant helper tests
+
+### Phase 3
+- Prisma datasource → PostgreSQL with `schemas = ["platform"]`
+- All models/enums tagged `@@schema("platform")`
+- JSONB subscription snapshot, timestamptz, Decimal money fields
+- `@prisma/adapter-pg` + `pg` runtime singleton
+- `prisma.config.ts` loads `.env.local` / `.env`; CLI uses `DIRECT_URL`
+- Environment Guard: API + DATABASE_URL + DIRECT_URL refs, Legacy block, prod test-auth ban
+- Auth vars: `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` (server-only admin module)
+- Initial migration SQL preview: `prisma/migrations/0001_platform_initial/migration.sql`
+- `npm run db:migration:check`, `npm run db:preflight` (preflight needs real `.env.local`)
 
 ## Not Implemented
 
-- Real Supabase Auth UI wiring / production login
-- Prisma migrations against Supabase PostgreSQL
-- `subscription_items` table (reserved conceptually; overrides present)
-- Outbox consumer workers
-- Automated billing / payment gateway
-- QR device credentials
-- RLS policies on PostgreSQL
-- Deploy / CI pipeline
+- Apply migration to Supabase
+- Live `db:preflight` against real project (รอ credentials ใน `.env.local`)
+- Real Supabase Auth login UI / user provisioning
+- FK จาก `platform.user_profiles.auth_user_id` → `auth.users` (เลี่ยงแตะ schema `auth` ใน initial migration)
+- Outbox workers, billing, QR device credentials, deploy
 
 ## Known Risks
 
-- Local schema uses SQLite — PostgreSQL enum/partial-unique differences ต้องตรวจตอนย้าย
-- `auth.users` FK (D105) ยังไม่ใส่ใน SQLite test schema (soft unique `authUserId`)
-- UI pages อ่าน DB โดยตรงสำหรับ demo — production ควรผ่าน API + authz เสมอ
-- `ALLOW_TEST_AUTH` อันตรายถ้าเปิดใน production
+- Pooler username format ต้องเป็น `postgres.<project_ref>` เพื่อให้ guard parse ได้
+- Initial migration ยังไม่สร้าง FK เข้า `auth` โดยเจตนา (schema boundary)
+- Seed ต้องการ PostgreSQL หลัง migrate แล้วเท่านั้น
 
 ## Test Results
 
-ดู `docs/TEST_RESULTS.md` — prisma validate/generate, seed, 9/9 tests, typecheck, lint, production build **PASS** (SQLite local)
+ดู `docs/TEST_RESULTS.md`
 
 ## Next Recommended Step
 
-1. สร้าง Supabase Project ใหม่ (Central Auth)
-2. สลับ Prisma datasource เป็น PostgreSQL + ใส่ FK `user_profiles.auth_user_id → auth.users`
-3. รัน migration บน project ใหม่เท่านั้น พร้อม Environment Guard
+1. ผู้ใช้ใส่ Connection Strings + Keys ใน `.env.local`
+2. รัน `npm run db:preflight`
+3. PM อนุมัติ → Apply `0001_platform_initial`
 4. เชื่อม Login UI กับ Supabase Auth

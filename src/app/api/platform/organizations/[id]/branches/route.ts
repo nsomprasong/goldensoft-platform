@@ -77,7 +77,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
           action: "branch.create",
           entityType: "Branch",
           entityId: created.id,
-          afterJson: JSON.stringify(created),
+          afterJson: {
+            id: created.id,
+            code: created.code,
+            name: created.name,
+            organizationId: created.organizationId,
+          },
         },
       });
       return created;

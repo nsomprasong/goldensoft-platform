@@ -94,7 +94,7 @@ export async function createSubscription(
             planVersionNumber: planVersion.versionNumber,
             priceAmount: planVersion.priceAmount,
             currency: planVersion.currency,
-            snapshotJson: JSON.stringify(snapshot),
+            snapshotJson: snapshot,
             startsAt: new Date(),
           },
         });
@@ -106,11 +106,11 @@ export async function createSubscription(
             action: "subscription.create",
             entityType: "Subscription",
             entityId: subscription.id,
-            afterJson: JSON.stringify({
+            afterJson: {
               productCode: product.code,
               planCode: plan.code,
               snapshot,
-            }),
+            },
           },
         });
 
@@ -120,11 +120,11 @@ export async function createSubscription(
             aggregateId: subscription.id,
             eventType: "subscription.changed",
             organizationId: input.organizationId,
-            payloadJson: JSON.stringify({
+            payloadJson: {
               organizationId: input.organizationId,
               productCode: product.code,
               subscriptionId: subscription.id,
-            }),
+            },
             idempotencyKey: `subscription.changed:${subscription.id}:create`,
           },
         });
@@ -141,13 +141,15 @@ export async function createSubscription(
 export async function assertCannotMutateSnapshot(
   db: PrismaClient,
   subscriptionId: string,
-  nextSnapshotJson: string,
+  nextSnapshot: unknown,
 ): Promise<void> {
   const sub = await db.subscription.findUnique({
     where: { id: subscriptionId },
   });
   if (!sub) throw new Error("Subscription not found");
-  if (sub.snapshotJson !== nextSnapshotJson) {
+  const current = JSON.stringify(sub.snapshotJson);
+  const next = JSON.stringify(nextSnapshot);
+  if (current !== next) {
     throw new Error(
       "Plan feature snapshot cannot be changed after activation",
     );

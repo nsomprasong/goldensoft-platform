@@ -131,12 +131,12 @@ export async function bootstrapOrganization(
             action: "organization.bootstrap",
             entityType: "Organization",
             entityId: organization.id,
-            afterJson: JSON.stringify({
+            afterJson: {
               customerCode: organization.customerCode,
               slug: organization.slug,
               ownerAuthUserId: input.ownerAuthUserId,
               branchId,
-            }),
+            },
           },
         });
 
@@ -146,12 +146,12 @@ export async function bootstrapOrganization(
             aggregateId: organization.id,
             eventType: "organization.created",
             organizationId: organization.id,
-            payloadJson: JSON.stringify({
+            payloadJson: {
               organizationId: organization.id,
               customerCode: organization.customerCode,
               slug: organization.slug,
               branchId,
-            }),
+            },
             idempotencyKey: `organization.created:${organization.id}`,
           },
         });
@@ -213,11 +213,15 @@ export async function revokeOrganizationRole(
         action: "organization.role.revoke",
         entityType: "OrganizationMembershipRole",
         entityId: role.id,
-        beforeJson: JSON.stringify({ role: role.role, status: role.status }),
-        afterJson: JSON.stringify({ role: role.role, status: "REVOKED" }),
+        beforeJson: { role: role.role, status: role.status },
+        afterJson: { role: role.role, status: "REVOKED" },
       },
     });
   });
+}
+
+export function wouldRemoveLastOwner(activeOwnerCount: number): boolean {
+  return activeOwnerCount <= 1;
 }
 
 export type TxClient = Prisma.TransactionClient;

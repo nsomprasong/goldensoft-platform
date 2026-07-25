@@ -1,11 +1,21 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
 import { requireSafeEnvironment } from "../src/lib/env/guard";
 import { buildSubscriptionSnapshot } from "../src/lib/platform/snapshot";
 
 requireSafeEnvironment();
 
-const prisma = new PrismaClient();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
+
+const AUTH = {
+  superAdmin: "11111111-1111-4111-8111-111111111111",
+  orgAAll: "22222222-2222-4222-8222-222222222222",
+  orgABm: "33333333-3333-4333-8333-333333333333",
+  orgBAdmin: "44444444-4444-4444-8444-444444444444",
+} as const;
 
 async function upsertProduct(code: string, name: string) {
   return prisma.product.upsert({
@@ -17,9 +27,9 @@ async function upsertProduct(code: string, name: string) {
 
 async function main() {
   const admin = await prisma.userProfile.upsert({
-    where: { authUserId: "auth-super-admin" },
+    where: { authUserId: AUTH.superAdmin },
     create: {
-      authUserId: "auth-super-admin",
+      authUserId: AUTH.superAdmin,
       email: "superadmin@goldensoft.local",
       displayName: "Platform Super Admin",
       status: "ACTIVE",
@@ -42,17 +52,14 @@ async function main() {
 
   const resident = await upsertProduct("RESIDENT", "Resident V2");
   const hr = await upsertProduct("HR", "HR");
-  const qr = await upsertProduct("QRSTATION", "QR Station");
+  await upsertProduct("QRSTATION", "QR Station");
 
-  const featureDefs = [
+  for (const f of [
     { productId: resident.id, code: "resident.booking.create", name: "Create booking" },
     { productId: resident.id, code: "resident.payment.approve", name: "Approve payment" },
     { productId: hr.id, code: "hr.employee.read", name: "Read employees" },
     { productId: hr.id, code: "hr.payroll.approve", name: "Approve payroll" },
-    { productId: qr.id, code: "qrstation.transaction.read", name: "Read transactions" },
-  ];
-
-  for (const f of featureDefs) {
+  ]) {
     await prisma.feature.upsert({
       where: { code: f.code },
       create: { ...f, status: "ACTIVE" },
@@ -60,7 +67,11 @@ async function main() {
     });
   }
 
-  async function ensureHrPlan(code: string, name: string, price: number, limits: Record<string, string>) {
+  async function ensureHrPlan(
+    code: string,
+    name: string,
+    price: number,
+  ) {
     const plan = await prisma.plan.upsert({
       where: { productId_code: { productId: hr.id, code } },
       create: { productId: hr.id, code, name, status: "ACTIVE" },
@@ -84,8 +95,7 @@ async function main() {
       });
     }
 
-    const hrFeatures = await prisma.feature.findMany({ where: { productId: hr.id } });
-    for (const feature of hrFeatures) {
+    for (const feature of await prisma.feature.findMany({ where: { productId: hr.id } })) {
       await prisma.planVersionFeature.upsert({
         where: {
           planVersionId_featureId: {
@@ -93,11 +103,7 @@ async function main() {
             featureId: feature.id,
           },
         },
-        create: {
-          planVersionId: version.id,
-          featureId: feature.id,
-          limitValue: limits[feature.code] ?? null,
-        },
+        create: { planVersionId: version.id, featureId: feature.id },
         update: {},
       });
     }
@@ -105,15 +111,9 @@ async function main() {
     return { plan, version };
   }
 
-  const hrStandard = await ensureHrPlan("STANDARD", "HR Standard", 1990, {
-    "hr.employee.read": "50",
-  });
-  await ensureHrPlan("ADVANCED", "HR Advanced", 3990, {
-    "hr.employee.read": "200",
-  });
-  await ensureHrPlan("PROFESSIONAL", "HR Professional", 7990, {
-    "hr.employee.read": "1000",
-  });
+  const hrStandard = await ensureHrPlan("STANDARD", "HR Standard", 1990);
+  await ensureHrPlan("ADVANCED", "HR Advanced", 3990);
+  await ensureHrPlan("PROFESSIONAL", "HR Professional", 7990);
 
   const residentPlan = await prisma.plan.upsert({
     where: { productId_code: { productId: resident.id, code: "STANDARD" } },
@@ -141,18 +141,6 @@ async function main() {
       },
     });
   }
-  for (const feature of await prisma.feature.findMany({ where: { productId: resident.id } })) {
-    await prisma.planVersionFeature.upsert({
-      where: {
-        planVersionId_featureId: {
-          planVersionId: residentVersion.id,
-          featureId: feature.id,
-        },
-      },
-      create: { planVersionId: residentVersion.id, featureId: feature.id },
-      update: {},
-    });
-  }
 
   const orgA = await prisma.organization.upsert({
     where: { slug: "org-a" },
@@ -165,7 +153,6 @@ async function main() {
     },
     update: { status: "ACTIVE" },
   });
-
   const orgB = await prisma.organization.upsert({
     where: { slug: "org-b" },
     create: {
@@ -178,25 +165,16 @@ async function main() {
     update: { status: "ACTIVE" },
   });
 
-  async function ensureBranches(
-    organizationId: string,
-    codes: string[],
-  ) {
+  async function ensureBranches(organizationId: string, codes: string[]) {
     const ids: string[] = [];
     for (const code of codes) {
       const existing = await prisma.branch.findUnique({
         where: { organizationId_code: { organizationId, code } },
       });
-      if (existing) {
-        ids.push(existing.id);
-      } else {
+      if (existing) ids.push(existing.id);
+      else {
         const created = await prisma.branch.create({
-          data: {
-            organizationId,
-            code,
-            name: `Branch ${code}`,
-            status: "ACTIVE",
-          },
+          data: { organizationId, code, name: `Branch ${code}`, status: "ACTIVE" },
         });
         ids.push(created.id);
       }
@@ -210,9 +188,9 @@ async function main() {
   async function ensureSubscription(
     organizationId: string,
     productId: string,
-    plan: { id: string; code: string; name: string },
-    version: { id: string; versionNumber: number; priceAmount: number; currency: string },
     productCode: string,
+    plan: { id: string; code: string; name: string },
+    version: { id: string; versionNumber: number; priceAmount: { toString(): string }; currency: string },
   ) {
     const existing = await prisma.subscription.findFirst({
       where: {
@@ -228,19 +206,12 @@ async function main() {
       include: { feature: true },
     });
     const snapshot = buildSubscriptionSnapshot({
-      product: { id: productId, code: productCode, name: productCode, status: "ACTIVE", createdAt: new Date(), updatedAt: new Date() },
-      plan: { id: plan.id, productId, code: plan.code, name: plan.name, status: "ACTIVE", createdAt: new Date(), updatedAt: new Date() },
+      product: { code: productCode },
+      plan: { code: plan.code, name: plan.name },
       planVersion: {
-        id: version.id,
-        planId: plan.id,
         versionNumber: version.versionNumber,
-        status: "PUBLISHED",
-        billingCycleDefault: "MONTHLY",
-        priceAmount: version.priceAmount,
+        priceAmount: version.priceAmount as never,
         currency: version.currency,
-        trialDays: null,
-        publishedAt: new Date(),
-        createdAt: new Date(),
       },
       billingCycle: "MONTHLY",
       featureCodes: features.map((f) => f.feature.code),
@@ -264,160 +235,27 @@ async function main() {
         billingCycle: "MONTHLY",
         planCode: plan.code,
         planVersionNumber: version.versionNumber,
-        priceAmount: version.priceAmount,
+        priceAmount: version.priceAmount as never,
         currency: version.currency,
-        snapshotJson: JSON.stringify(snapshot),
+        snapshotJson: snapshot,
         startsAt: new Date(),
       },
     });
   }
 
-  await ensureSubscription(orgA.id, resident.id, residentPlan, residentVersion, "RESIDENT");
-  await ensureSubscription(orgA.id, hr.id, hrStandard.plan, hrStandard.version, "HR");
-  await ensureSubscription(orgB.id, hr.id, hrStandard.plan, hrStandard.version, "HR");
+  await ensureSubscription(orgA.id, resident.id, "RESIDENT", residentPlan, residentVersion);
+  await ensureSubscription(orgA.id, hr.id, "HR", hrStandard.plan, hrStandard.version);
+  await ensureSubscription(orgB.id, hr.id, "HR", hrStandard.plan, hrStandard.version);
 
-  const allBranchUser = await prisma.userProfile.upsert({
-    where: { authUserId: "auth-org-a-all" },
-    create: {
-      authUserId: "auth-org-a-all",
-      email: "all-branches@org-a.local",
-      displayName: "Org A All Branches",
-      status: "ACTIVE",
-    },
-    update: { status: "ACTIVE" },
-  });
-
-  const branchManager = await prisma.userProfile.upsert({
-    where: { authUserId: "auth-org-a-bm" },
-    create: {
-      authUserId: "auth-org-a-bm",
-      email: "branch-manager@org-a.local",
-      displayName: "Org A Branch Manager",
-      status: "ACTIVE",
-    },
-    update: { status: "ACTIVE" },
-  });
-
-  async function ensureMembership(
-    organizationId: string,
-    userProfileId: string,
-    role: "OWNER" | "ADMIN",
-    scope:
-      | { type: "ALL_BRANCHES" }
-      | { type: "SELECTED"; branchId: string },
-    productIds: string[],
-  ) {
-    let membership = await prisma.organizationMembership.findUnique({
-      where: {
-        organizationId_userProfileId: { organizationId, userProfileId },
-      },
-    });
-    if (!membership) {
-      membership = await prisma.organizationMembership.create({
-        data: {
-          organizationId,
-          userProfileId,
-          status: "ACTIVE",
-          joinedAt: new Date(),
-        },
-      });
-    }
-
-    const hasRole = await prisma.organizationMembershipRole.findFirst({
-      where: { membershipId: membership.id, role, status: "ACTIVE" },
-    });
-    if (!hasRole) {
-      await prisma.organizationMembershipRole.create({
-        data: { membershipId: membership.id, role, status: "ACTIVE" },
-      });
-    }
-
-    const scopes = await prisma.organizationMembershipBranchScope.findMany({
-      where: { membershipId: membership.id, status: "ACTIVE" },
-    });
-    if (scopes.length === 0) {
-      await prisma.organizationMembershipBranchScope.create({
-        data: {
-          membershipId: membership.id,
-          scopeType: scope.type,
-          branchId: scope.type === "SELECTED" ? scope.branchId : null,
-          status: "ACTIVE",
-        },
-      });
-    }
-
-    for (const productId of productIds) {
-      await prisma.organizationProductMembership.upsert({
-        where: {
-          organizationId_userProfileId_productId: {
-            organizationId,
-            userProfileId,
-            productId,
-          },
-        },
-        create: {
-          organizationId,
-          membershipId: membership.id,
-          userProfileId,
-          productId,
-          status: "ACTIVE",
-        },
-        update: { status: "ACTIVE" },
-      });
-    }
-
-    await prisma.userPreference.upsert({
-      where: { userProfileId },
-      create: {
-        userProfileId,
-        lastOrganizationId: organizationId,
-        lastBranchId: scope.type === "SELECTED" ? scope.branchId : null,
-      },
-      update: {
-        lastOrganizationId: organizationId,
-        lastBranchId: scope.type === "SELECTED" ? scope.branchId : null,
-      },
-    });
-
-    return membership;
-  }
-
-  await ensureMembership(
-    orgA.id,
-    allBranchUser.id,
-    "ADMIN",
-    { type: "ALL_BRANCHES" },
-    [resident.id, hr.id],
-  );
-  await ensureMembership(
-    orgA.id,
-    branchManager.id,
-    "ADMIN",
-    { type: "SELECTED", branchId: orgABranches[0]! },
-    [resident.id, hr.id],
-  );
-
-  // Org B owner-like user for isolation tests
-  const orgBUser = await prisma.userProfile.upsert({
-    where: { authUserId: "auth-org-b-admin" },
-    create: {
-      authUserId: "auth-org-b-admin",
-      email: "admin@org-b.local",
-      displayName: "Org B Admin",
-      status: "ACTIVE",
-    },
-    update: { status: "ACTIVE" },
-  });
-  await ensureMembership(orgB.id, orgBUser.id, "OWNER", { type: "ALL_BRANCHES" }, [hr.id]);
-
-  console.log("Seed completed");
+  console.log("Seed completed", { orgABranches: orgABranches.length });
 }
 
 main()
   .catch((error) => {
-    console.error(error);
+    console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await pool.end();
   });

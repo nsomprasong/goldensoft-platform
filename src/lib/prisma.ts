@@ -1,17 +1,39 @@
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
+import { Pool } from "pg";
 
 import { requireSafeEnvironment } from "@/lib/env/guard";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
+  pgPool: Pool | undefined;
 };
 
-function createPrismaClient() {
-  // Skip hard fail during `next build` page collection when env is injected by CI later.
+function createPrismaClient(): PrismaClient {
   if (process.env.APP_CODE) {
     requireSafeEnvironment();
   }
-  return new PrismaClient();
+
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    // Allow prisma generate / build imports without opening a pool.
+    return new PrismaClient();
+  }
+
+  const pool =
+    globalForPrisma.pgPool ??
+    new Pool({
+      connectionString,
+      // Never log the connection string
+      max: 10,
+    });
+
+  if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.pgPool = pool;
+  }
+
+  const adapter = new PrismaPg(pool);
+  return new PrismaClient({ adapter });
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();

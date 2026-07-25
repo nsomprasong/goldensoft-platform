@@ -1,41 +1,53 @@
-// GoldenSoft Platform MVP — schema "platform" logical models
-// Test/local: SQLite. Production target: PostgreSQL + Supabase auth.users FK (see ADR-002 D105).
+// GoldenSoft Platform — PostgreSQL schema "platform" only
+// Do not define resident_v2 / hr / qrstation models in this repository.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  schemas   = ["platform"]
 }
 
 enum UserProfileStatus {
   ACTIVE
   DISABLED
   PENDING
+
+  @@schema("platform")
 }
 
 enum PlatformRole {
   SUPER_ADMIN
   SUPPORT
   BILLING_ADMIN
+
+  @@schema("platform")
 }
 
 enum AssignmentStatus {
   ACTIVE
   REVOKED
+
+  @@schema("platform")
 }
 
 enum OrganizationStatus {
   ACTIVE
   SUSPENDED
   CLOSED
+
+  @@schema("platform")
 }
 
 enum BranchStatus {
   ACTIVE
   INACTIVE
+
+  @@schema("platform")
 }
 
 enum MembershipStatus {
@@ -43,35 +55,47 @@ enum MembershipStatus {
   ACTIVE
   SUSPENDED
   REMOVED
+
+  @@schema("platform")
 }
 
 enum OrganizationRole {
   OWNER
   ADMIN
   BILLING_CONTACT
+
+  @@schema("platform")
 }
 
 enum BranchScopeType {
   ALL_BRANCHES
   SELECTED
   NONE
+
+  @@schema("platform")
 }
 
 enum CatalogStatus {
   ACTIVE
   RETIRED
+
+  @@schema("platform")
 }
 
 enum PlanVersionStatus {
   DRAFT
   PUBLISHED
   RETIRED
+
+  @@schema("platform")
 }
 
 enum BillingCycle {
   MONTHLY
   YEARLY
   MANUAL
+
+  @@schema("platform")
 }
 
 enum SubscriptionStatus {
@@ -81,18 +105,24 @@ enum SubscriptionStatus {
   SUSPENDED
   CANCELLED
   EXPIRED
+
+  @@schema("platform")
 }
 
 enum OverrideEffect {
   GRANT
   REVOKE
   LIMIT
+
+  @@schema("platform")
 }
 
 enum ProductMembershipStatus {
   ACTIVE
   SUSPENDED
   REVOKED
+
+  @@schema("platform")
 }
 
 enum OutboxStatus {
@@ -101,12 +131,16 @@ enum OutboxStatus {
   PROCESSED
   FAILED
   DEAD
+
+  @@schema("platform")
 }
 
 enum IdempotencyStatus {
   IN_PROGRESS
   COMPLETED
   FAILED
+
+  @@schema("platform")
 }
 
 enum MigrationStatus {
@@ -115,19 +149,22 @@ enum MigrationStatus {
   MIGRATED
   FAILED
   IGNORED
+
+  @@schema("platform")
 }
 
 model UserProfile {
-  id             String            @id @default(uuid())
-  authUserId     String            @unique @map("auth_user_id")
+  id             String            @id @default(uuid()) @db.Uuid
+  /// Soft logical link to auth.users.id (same Supabase project). No FK into auth schema in this migration.
+  authUserId     String            @unique @map("auth_user_id") @db.Uuid
   email          String            @unique
   displayName    String            @map("display_name")
   status         UserProfileStatus @default(PENDING)
   sessionVersion Int               @default(0) @map("session_version")
-  lastLoginAt    DateTime?         @map("last_login_at")
-  createdAt      DateTime          @default(now()) @map("created_at")
-  updatedAt      DateTime          @updatedAt @map("updated_at")
-  deletedAt      DateTime?         @map("deleted_at")
+  lastLoginAt    DateTime?         @map("last_login_at") @db.Timestamptz(6)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?         @map("deleted_at") @db.Timestamptz(6)
 
   platformRoles              PlatformRoleAssignment[]
   memberships                OrganizationMembership[]
@@ -136,38 +173,41 @@ model UserProfile {
 
   @@index([status])
   @@map("user_profiles")
+  @@schema("platform")
 }
 
 model UserPreference {
-  id                 String   @id @default(uuid())
-  userProfileId      String   @unique @map("user_profile_id")
-  lastOrganizationId String?  @map("last_organization_id")
-  lastBranchId       String?  @map("last_branch_id")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid()) @db.Uuid
+  userProfileId      String   @unique @map("user_profile_id") @db.Uuid
+  lastOrganizationId String?  @map("last_organization_id") @db.Uuid
+  lastBranchId       String?  @map("last_branch_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   userProfile UserProfile @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
 
   @@map("user_preferences")
+  @@schema("platform")
 }
 
 model PlatformRoleAssignment {
-  id                   String           @id @default(uuid())
-  userProfileId        String           @map("user_profile_id")
+  id                   String           @id @default(uuid()) @db.Uuid
+  userProfileId        String           @map("user_profile_id") @db.Uuid
   role                 PlatformRole
   status               AssignmentStatus @default(ACTIVE)
-  assignedAt           DateTime         @default(now()) @map("assigned_at")
-  assignedByAuthUserId String?          @map("assigned_by_auth_user_id")
-  revokedAt            DateTime?        @map("revoked_at")
+  assignedAt           DateTime         @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  assignedByAuthUserId String?          @map("assigned_by_auth_user_id") @db.Uuid
+  revokedAt            DateTime?        @map("revoked_at") @db.Timestamptz(6)
 
   userProfile UserProfile @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
 
   @@index([userProfileId, status])
   @@map("platform_role_assignments")
+  @@schema("platform")
 }
 
 model Organization {
-  id           String             @id @default(uuid())
+  id           String             @id @default(uuid()) @db.Uuid
   customerCode String             @unique @map("customer_code")
   slug         String             @unique
   legalName    String             @map("legal_name")
@@ -176,34 +216,35 @@ model Organization {
   taxId        String?            @map("tax_id")
   timezone     String             @default("Asia/Bangkok")
   currency     String             @default("THB")
-  createdAt    DateTime           @default(now()) @map("created_at")
-  updatedAt    DateTime           @updatedAt @map("updated_at")
-  deletedAt    DateTime?          @map("deleted_at")
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime?          @map("deleted_at") @db.Timestamptz(6)
 
-  branches              Branch[]
-  memberships           OrganizationMembership[]
-  subscriptions         Subscription[]
-  productMemberships    OrganizationProductMembership[]
-  auditLogs             AuditLog[]
+  branches               Branch[]
+  memberships            OrganizationMembership[]
+  subscriptions          Subscription[]
+  productMemberships     OrganizationProductMembership[]
+  auditLogs              AuditLog[]
   legacyIdentityMappings LegacyIdentityMapping[]
 
   @@map("organizations")
+  @@schema("platform")
 }
 
 model Branch {
-  id                      String       @id @default(uuid())
-  organizationId          String       @map("organization_id")
-  code                    String
-  name                    String
-  status                  BranchStatus @default(ACTIVE)
-  timezone                String       @default("Asia/Bangkok")
-  address                 String?
-  latitude                Float?
-  longitude               Float?
-  attendanceRadiusMeters  Int?         @map("attendance_radius_meters")
-  createdAt               DateTime     @default(now()) @map("created_at")
-  updatedAt               DateTime     @updatedAt @map("updated_at")
-  deletedAt               DateTime?    @map("deleted_at")
+  id                     String       @id @default(uuid()) @db.Uuid
+  organizationId         String       @map("organization_id") @db.Uuid
+  code                   String
+  name                   String
+  status                 BranchStatus @default(ACTIVE)
+  timezone               String       @default("Asia/Bangkok")
+  address                String?
+  latitude               Decimal?     @db.Decimal(10, 7)
+  longitude              Decimal?     @db.Decimal(10, 7)
+  attendanceRadiusMeters Int?         @map("attendance_radius_meters")
+  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt              DateTime?    @map("deleted_at") @db.Timestamptz(6)
 
   organization Organization                         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   branchScopes OrganizationMembershipBranchScope[]
@@ -211,18 +252,19 @@ model Branch {
   @@unique([organizationId, code])
   @@index([organizationId, status])
   @@map("branches")
+  @@schema("platform")
 }
 
 model OrganizationMembership {
-  id                    String           @id @default(uuid())
-  organizationId        String           @map("organization_id")
-  userProfileId         String           @map("user_profile_id")
-  status                MembershipStatus @default(INVITED)
-  joinedAt              DateTime?        @map("joined_at")
-  invitedByAuthUserId   String?          @map("invited_by_auth_user_id")
-  endedAt               DateTime?        @map("ended_at")
-  createdAt             DateTime         @default(now()) @map("created_at")
-  updatedAt             DateTime         @updatedAt @map("updated_at")
+  id                  String           @id @default(uuid()) @db.Uuid
+  organizationId      String           @map("organization_id") @db.Uuid
+  userProfileId       String           @map("user_profile_id") @db.Uuid
+  status              MembershipStatus @default(INVITED)
+  joinedAt            DateTime?        @map("joined_at") @db.Timestamptz(6)
+  invitedByAuthUserId String?          @map("invited_by_auth_user_id") @db.Uuid
+  endedAt             DateTime?        @map("ended_at") @db.Timestamptz(6)
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization       Organization                        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userProfile        UserProfile                         @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
@@ -233,44 +275,47 @@ model OrganizationMembership {
   @@unique([organizationId, userProfileId])
   @@index([userProfileId, status])
   @@map("organization_memberships")
+  @@schema("platform")
 }
 
 model OrganizationMembershipRole {
-  id           String           @id @default(uuid())
-  membershipId String           @map("membership_id")
+  id           String           @id @default(uuid()) @db.Uuid
+  membershipId String           @map("membership_id") @db.Uuid
   role         OrganizationRole
   status       AssignmentStatus @default(ACTIVE)
-  assignedAt   DateTime         @default(now()) @map("assigned_at")
-  revokedAt    DateTime?        @map("revoked_at")
+  assignedAt   DateTime         @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  revokedAt    DateTime?        @map("revoked_at") @db.Timestamptz(6)
 
   membership OrganizationMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 
   @@index([membershipId, status])
   @@map("organization_membership_roles")
+  @@schema("platform")
 }
 
 model OrganizationMembershipBranchScope {
-  id           String          @id @default(uuid())
-  membershipId String          @map("membership_id")
-  scopeType    BranchScopeType @map("scope_type")
-  branchId     String?         @map("branch_id")
+  id           String           @id @default(uuid()) @db.Uuid
+  membershipId String           @map("membership_id") @db.Uuid
+  scopeType    BranchScopeType  @map("scope_type")
+  branchId     String?          @map("branch_id") @db.Uuid
   status       AssignmentStatus @default(ACTIVE)
-  createdAt    DateTime        @default(now()) @map("created_at")
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
 
   membership OrganizationMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
   branch     Branch?                @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([membershipId, status])
   @@map("organization_membership_branch_scopes")
+  @@schema("platform")
 }
 
 model Product {
-  id        String        @id @default(uuid())
+  id        String        @id @default(uuid()) @db.Uuid
   code      String        @unique
   name      String
   status    CatalogStatus @default(ACTIVE)
-  createdAt DateTime      @default(now()) @map("created_at")
-  updatedAt DateTime      @updatedAt @map("updated_at")
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   features           Feature[]
   plans              Plan[]
@@ -278,34 +323,36 @@ model Product {
   productMemberships OrganizationProductMembership[]
 
   @@map("products")
+  @@schema("platform")
 }
 
 model Feature {
-  id          String        @id @default(uuid())
-  productId   String        @map("product_id")
+  id          String        @id @default(uuid()) @db.Uuid
+  productId   String        @map("product_id") @db.Uuid
   code        String        @unique
   name        String
   description String?
   status      CatalogStatus @default(ACTIVE)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  product               Product                      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product               Product                       @relation(fields: [productId], references: [id], onDelete: Cascade)
   planVersionFeatures   PlanVersionFeature[]
   subscriptionOverrides SubscriptionFeatureOverride[]
 
   @@index([productId])
   @@map("features")
+  @@schema("platform")
 }
 
 model Plan {
-  id        String        @id @default(uuid())
-  productId String        @map("product_id")
+  id        String        @id @default(uuid()) @db.Uuid
+  productId String        @map("product_id") @db.Uuid
   code      String
   name      String
   status    CatalogStatus @default(ACTIVE)
-  createdAt DateTime      @default(now()) @map("created_at")
-  updatedAt DateTime      @updatedAt @map("updated_at")
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   product       Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
   versions      PlanVersion[]
@@ -313,19 +360,20 @@ model Plan {
 
   @@unique([productId, code])
   @@map("plans")
+  @@schema("platform")
 }
 
 model PlanVersion {
-  id                  String            @id @default(uuid())
-  planId              String            @map("plan_id")
+  id                  String            @id @default(uuid()) @db.Uuid
+  planId              String            @map("plan_id") @db.Uuid
   versionNumber       Int               @map("version_number")
   status              PlanVersionStatus @default(DRAFT)
   billingCycleDefault BillingCycle      @default(MONTHLY) @map("billing_cycle_default")
-  priceAmount         Float             @map("price_amount")
+  priceAmount         Decimal           @map("price_amount") @db.Decimal(12, 2)
   currency            String            @default("THB")
   trialDays           Int?              @map("trial_days")
-  publishedAt         DateTime?         @map("published_at")
-  createdAt           DateTime          @default(now()) @map("created_at")
+  publishedAt         DateTime?         @map("published_at") @db.Timestamptz(6)
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
 
   plan          Plan                 @relation(fields: [planId], references: [id], onDelete: Cascade)
   features      PlanVersionFeature[]
@@ -333,43 +381,45 @@ model PlanVersion {
 
   @@unique([planId, versionNumber])
   @@map("plan_versions")
+  @@schema("platform")
 }
 
 model PlanVersionFeature {
-  id            String   @id @default(uuid())
-  planVersionId String   @map("plan_version_id")
-  featureId     String   @map("feature_id")
+  id            String   @id @default(uuid()) @db.Uuid
+  planVersionId String   @map("plan_version_id") @db.Uuid
+  featureId     String   @map("feature_id") @db.Uuid
   limitValue    String?  @map("limit_value")
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   planVersion PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
   feature     Feature     @relation(fields: [featureId], references: [id], onDelete: Cascade)
 
   @@unique([planVersionId, featureId])
   @@map("plan_version_features")
+  @@schema("platform")
 }
 
 model Subscription {
-  id                String             @id @default(uuid())
-  organizationId    String             @map("organization_id")
-  productId         String             @map("product_id")
-  planId            String             @map("plan_id")
-  planVersionId     String             @map("plan_version_id")
+  id                String             @id @default(uuid()) @db.Uuid
+  organizationId    String             @map("organization_id") @db.Uuid
+  productId         String             @map("product_id") @db.Uuid
+  planId            String             @map("plan_id") @db.Uuid
+  planVersionId     String             @map("plan_version_id") @db.Uuid
   status            SubscriptionStatus @default(TRIAL)
   billingCycle      BillingCycle       @map("billing_cycle")
   planCode          String             @map("plan_code")
   planVersionNumber Int                @map("plan_version_number")
-  priceAmount       Float              @map("price_amount")
+  priceAmount       Decimal            @map("price_amount") @db.Decimal(12, 2)
   currency          String
-  /// Immutable entitlement snapshot JSON (D102). Never mutate after activation.
-  snapshotJson      String             @map("snapshot_json")
-  startsAt          DateTime           @map("starts_at")
-  endsAt            DateTime?          @map("ends_at")
-  trialEndsAt       DateTime?          @map("trial_ends_at")
-  cancelledAt       DateTime?          @map("cancelled_at")
+  /// Immutable entitlement snapshot (D102). JSONB. Never mutate after activation.
+  snapshotJson      Json               @map("snapshot_json") @db.JsonB
+  startsAt          DateTime           @map("starts_at") @db.Timestamptz(6)
+  endsAt            DateTime?          @map("ends_at") @db.Timestamptz(6)
+  trialEndsAt       DateTime?          @map("trial_ends_at") @db.Timestamptz(6)
+  cancelledAt       DateTime?          @map("cancelled_at") @db.Timestamptz(6)
   externalRef       String?            @map("external_ref")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product      Product                       @relation(fields: [productId], references: [id], onDelete: Restrict)
@@ -381,37 +431,39 @@ model Subscription {
   @@index([organizationId, productId, status])
   @@index([status, endsAt])
   @@map("subscriptions")
+  @@schema("platform")
 }
 
 model SubscriptionFeatureOverride {
-  id             String           @id @default(uuid())
-  subscriptionId String           @map("subscription_id")
-  featureId      String           @map("feature_id")
+  id             String           @id @default(uuid()) @db.Uuid
+  subscriptionId String           @map("subscription_id") @db.Uuid
+  featureId      String           @map("feature_id") @db.Uuid
   effect         OverrideEffect
   limitValue     String?          @map("limit_value")
   reason         String
   approvedBy     String           @map("approved_by")
   status         AssignmentStatus @default(ACTIVE)
-  startsAt       DateTime         @map("starts_at")
-  endsAt         DateTime?        @map("ends_at")
-  createdAt      DateTime         @default(now()) @map("created_at")
+  startsAt       DateTime         @map("starts_at") @db.Timestamptz(6)
+  endsAt         DateTime?        @map("ends_at") @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
 
   subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   feature      Feature      @relation(fields: [featureId], references: [id], onDelete: Cascade)
 
   @@index([subscriptionId, status])
   @@map("subscription_feature_overrides")
+  @@schema("platform")
 }
 
 model OrganizationProductMembership {
-  id             String                  @id @default(uuid())
-  organizationId String                  @map("organization_id")
-  membershipId   String                  @map("membership_id")
-  userProfileId  String                  @map("user_profile_id")
-  productId      String                  @map("product_id")
+  id             String                  @id @default(uuid()) @db.Uuid
+  organizationId String                  @map("organization_id") @db.Uuid
+  membershipId   String                  @map("membership_id") @db.Uuid
+  userProfileId  String                  @map("user_profile_id") @db.Uuid
+  productId      String                  @map("product_id") @db.Uuid
   status         ProductMembershipStatus @default(ACTIVE)
-  grantedAt      DateTime                @default(now()) @map("granted_at")
-  revokedAt      DateTime?               @map("revoked_at")
+  grantedAt      DateTime                @default(now()) @map("granted_at") @db.Timestamptz(6)
+  revokedAt      DateTime?               @map("revoked_at") @db.Timestamptz(6)
 
   organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   membership   OrganizationMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
@@ -420,21 +472,22 @@ model OrganizationProductMembership {
 
   @@unique([organizationId, userProfileId, productId])
   @@map("organization_product_memberships")
+  @@schema("platform")
 }
 
 model AuditLog {
-  id              String   @id @default(uuid())
-  organizationId  String?  @map("organization_id")
-  actorAuthUserId String?  @map("actor_auth_user_id")
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String?   @map("organization_id") @db.Uuid
+  actorAuthUserId String?   @map("actor_auth_user_id") @db.Uuid
   action          String
-  entityType      String   @map("entity_type")
-  entityId        String   @map("entity_id")
-  beforeJson      String?  @map("before_json")
-  afterJson       String?  @map("after_json")
+  entityType      String    @map("entity_type")
+  entityId        String    @map("entity_id")
+  beforeJson      Json?     @map("before_json") @db.JsonB
+  afterJson       Json?     @map("after_json") @db.JsonB
   ip              String?
-  userAgent       String?  @map("user_agent")
-  createdAt       DateTime @default(now()) @map("created_at")
-  archivedAt      DateTime? @map("archived_at")
+  userAgent       String?   @map("user_agent")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  archivedAt      DateTime? @map("archived_at") @db.Timestamptz(6)
 
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
@@ -442,57 +495,61 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorAuthUserId])
   @@map("audit_logs")
+  @@schema("platform")
 }
 
 model OutboxEvent {
-  id             String       @id @default(uuid())
+  id             String       @id @default(uuid()) @db.Uuid
   aggregateType  String       @map("aggregate_type")
   aggregateId    String       @map("aggregate_id")
   eventType      String       @map("event_type")
-  payloadJson    String       @map("payload_json")
-  organizationId String?      @map("organization_id")
+  payloadJson    Json         @map("payload_json") @db.JsonB
+  organizationId String?      @map("organization_id") @db.Uuid
   status         OutboxStatus @default(PENDING)
   attempts       Int          @default(0)
-  availableAt    DateTime     @default(now()) @map("available_at")
-  processedAt    DateTime?    @map("processed_at")
-  lastError      String?      @map("last_error")
-  createdAt      DateTime     @default(now()) @map("created_at")
+  availableAt    DateTime     @default(now()) @map("available_at") @db.Timestamptz(6)
+  processedAt    DateTime?    @map("processed_at") @db.Timestamptz(6)
+  lastError      String?
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   idempotencyKey String?      @unique @map("idempotency_key")
-  archivedAt     DateTime?    @map("archived_at")
+  archivedAt     DateTime?    @map("archived_at") @db.Timestamptz(6)
 
   @@index([status, availableAt])
   @@map("outbox_events")
+  @@schema("platform")
 }
 
 model IdempotencyKey {
-  id           String            @id @default(uuid())
+  id           String            @id @default(uuid()) @db.Uuid
   key          String
   scope        String
   requestHash  String            @map("request_hash")
-  responseJson String?           @map("response_json")
+  responseJson Json?             @map("response_json") @db.JsonB
   status       IdempotencyStatus @default(IN_PROGRESS)
-  createdAt    DateTime          @default(now()) @map("created_at")
-  expiresAt    DateTime          @map("expires_at")
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt    DateTime          @map("expires_at") @db.Timestamptz(6)
 
   @@unique([scope, key])
   @@map("idempotency_keys")
+  @@schema("platform")
 }
 
 model LegacyIdentityMapping {
-  id                String          @id @default(uuid())
-  organizationId    String          @map("organization_id")
+  id                String          @id @default(uuid()) @db.Uuid
+  organizationId    String          @map("organization_id") @db.Uuid
   legacyAuthUserId  String          @map("legacy_auth_user_id")
-  centralAuthUserId String          @map("central_auth_user_id")
+  centralAuthUserId String          @map("central_auth_user_id") @db.Uuid
   legacyEmployeeId  String          @map("legacy_employee_id")
   newEmployeeId     String?         @map("new_employee_id")
   migrationStatus   MigrationStatus @default(PENDING) @map("migration_status")
   notes             String?
-  createdAt         DateTime        @default(now()) @map("created_at")
-  updatedAt         DateTime        @updatedAt @map("updated_at")
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, legacyAuthUserId])
   @@unique([organizationId, legacyEmployeeId])
   @@map("legacy_identity_mappings")
+  @@schema("platform")
 }

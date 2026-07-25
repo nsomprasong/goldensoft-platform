@@ -8,29 +8,32 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/env-guard.test.ts tests/tenant-isolation.test.ts tests/legacy-untouched.test.ts",
+    "test": "tsx --test tests/env-guard.test.ts tests/tenant-isolation.test.ts tests/migration-safety.test.ts tests/legacy-untouched.test.ts",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
-    "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:preflight": "tsx scripts/db-preflight.ts",
+    "db:migration:check": "tsx scripts/migration-check.ts",
     "preflight:env": "tsx scripts/preflight-env.ts"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "dependencies": {
+    "@prisma/adapter-pg": "^6.19.3",
     "@prisma/client": "^6.14.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.53.0",
+    "dotenv": "^17.4.2",
     "next": "15.5.3",
+    "pg": "^8.22.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "server-only": "^0.0.1",
     "zod": "^4.0.14"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

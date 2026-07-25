@@ -1,7 +1,7 @@
-# Test Results — Phase 2 MVP Foundation
+# Test Results — Phase 3
 
 วันที่รัน: 2026-07-25  
-ฐานข้อมูลทดสอบ: SQLite `file:./dev.db` / `prisma/test.db` (ไม่ใช่ Supabase Legacy หรือ Production)
+Database target: PostgreSQL schema `platform` (migration **preview only**, not applied)
 
 ## Commands
 
@@ -9,21 +9,22 @@
 |---------|--------|
 | `npx prisma validate` | PASS |
 | `npx prisma generate` | PASS |
-| `npx prisma db push` (local SQLite) | PASS |
-| `npx tsx prisma/seed.ts` | PASS |
-| `npm test` | PASS (9/9) |
+| `npm run db:migration:check` | PASS (schemas touched: `platform`) |
+| `npm test` | PASS (18/18) |
 | `npm run typecheck` | PASS |
 | `npm run lint` | PASS |
 | `npm run build` | PASS |
+| `prisma migrate deploy` / `db push` | **NOT RUN** (by design) |
+| `npm run db:preflight` | **NOT RUN** (รอ `.env.local` จริง) |
 
 ## Test suites
 
-1. **Environment Guard** — reject Legacy project ref, accept expected ref  
-2. **Tenant isolation / bootstrap** — OWNER bootstrap, idempotency, last OWNER guard, org isolation, branch scope, fake orgId reject, no subscription → product deny, immutable snapshot  
-3. **Legacy untouched** — Resident Legacy git status clean  
+1. Environment Guard — Legacy block, URL mismatch, prod test-auth ban, publishable key
+2. Tenant isolation helpers — branch scope, last OWNER, immutable snapshot
+3. Migration SQL safety — platform-only DDL
+4. Legacy untouched — Resident Legacy clean
 
 ## Notes
 
-- ไม่ได้รัน Prisma migrate กับ Supabase จริง  
-- ไม่ได้ deploy  
-- ไม่ได้แก้ Resident Legacy  
+- Initial migration: `prisma/migrations/0001_platform_initial/migration.sql`
+- ไม่เชื่อม Legacy / ไม่ Apply migration กับ Supabase

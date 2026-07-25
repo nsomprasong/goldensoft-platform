@@ -195,7 +195,7 @@ export async function resolveApplicationContext(
   };
 }
 
-function resolveAccessibleBranches(
+export function resolveAccessibleBranches(
   scopes: Array<{ scopeType: string; branchId: string | null }>,
   allActiveBranchIds: string[],
 ): string[] {

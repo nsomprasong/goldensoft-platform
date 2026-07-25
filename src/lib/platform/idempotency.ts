@@ -23,13 +23,13 @@ export async function withIdempotency<T>(
     where: { scope_key: { scope: input.scope, key: input.key } },
   });
 
-  if (existing?.status === "COMPLETED" && existing.responseJson) {
+  if (existing?.status === "COMPLETED" && existing.responseJson != null) {
     if (existing.requestHash !== requestHash) {
       throw new Error("Idempotency key reused with different payload");
     }
     return {
       reused: true,
-      result: JSON.parse(existing.responseJson) as T,
+      result: existing.responseJson as T,
     };
   }
 
@@ -51,7 +51,7 @@ export async function withIdempotency<T>(
       where: { scope_key: { scope: input.scope, key: input.key } },
       data: {
         status: "COMPLETED",
-        responseJson: JSON.stringify(result),
+        responseJson: result as object,
         requestHash,
       },
     });

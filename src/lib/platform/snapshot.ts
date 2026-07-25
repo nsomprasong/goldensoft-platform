@@ -1,11 +1,11 @@
-import type { BillingCycle, Plan, PlanVersion, Product } from "@prisma/client";
+import type { BillingCycle, Plan, PlanVersion, Product, Prisma } from "@prisma/client";
 
 import type { SubscriptionSnapshot } from "@/lib/context/types";
 
 export function buildSubscriptionSnapshot(input: {
-  product: Product;
-  plan: Plan;
-  planVersion: PlanVersion;
+  product: Pick<Product, "code">;
+  plan: Pick<Plan, "code" | "name">;
+  planVersion: Pick<PlanVersion, "versionNumber" | "currency" | "priceAmount">;
   billingCycle: BillingCycle;
   featureCodes: string[];
   limits: Record<string, number | boolean | string>;
@@ -19,32 +19,39 @@ export function buildSubscriptionSnapshot(input: {
     planName: input.plan.name,
     currency: input.planVersion.currency,
     billingCycle: input.billingCycle,
-    basePrice: input.planVersion.priceAmount,
+    basePrice: Number(input.planVersion.priceAmount),
     featureCodes: [...input.featureCodes].sort(),
     limits: { ...input.limits },
     capturedAt: (input.capturedAt ?? new Date()).toISOString(),
   };
 }
 
-export function parseSubscriptionSnapshot(json: string): SubscriptionSnapshot {
-  const parsed = JSON.parse(json) as SubscriptionSnapshot;
+export function parseSubscriptionSnapshot(
+  value: Prisma.JsonValue | string,
+): SubscriptionSnapshot {
+  const parsed =
+    typeof value === "string" ? (JSON.parse(value) as unknown) : value;
+
   if (
     typeof parsed !== "object" ||
     parsed === null ||
-    typeof parsed.schemaVersion !== "number" ||
-    typeof parsed.productCode !== "string" ||
-    !Array.isArray(parsed.featureCodes)
+    Array.isArray(parsed) ||
+    typeof (parsed as SubscriptionSnapshot).schemaVersion !== "number" ||
+    typeof (parsed as SubscriptionSnapshot).productCode !== "string" ||
+    !Array.isArray((parsed as SubscriptionSnapshot).featureCodes)
   ) {
     throw new Error("Invalid subscription snapshot");
   }
-  return parsed;
+  return parsed as SubscriptionSnapshot;
 }
 
 export function assertSnapshotImmutable(
-  existingJson: string,
-  nextJson: string,
+  existing: Prisma.JsonValue | string,
+  next: Prisma.JsonValue | string,
 ): void {
-  if (existingJson !== nextJson) {
+  const left = JSON.stringify(parseSubscriptionSnapshot(existing));
+  const right = JSON.stringify(parseSubscriptionSnapshot(next));
+  if (left !== right) {
     throw new Error(
       "Subscription snapshot is immutable after activation — create a revision instead",
     );

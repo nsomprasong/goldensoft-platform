@@ -1,29 +1,51 @@
-# Environment Setup
+# Environment Setup — PostgreSQL + Supabase
 
-## Required variables
+## Locked project refs
 
-| Variable | Purpose |
-|----------|---------|
-| `APP_CODE` | ต้องเป็น `PLATFORM` |
-| `NEXT_PUBLIC_SUPABASE_URL` | URL ของ Central Supabase เท่านั้น |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anon key (public) |
-| `EXPECTED_SUPABASE_PROJECT_REF` | Project ref ที่อนุญาต |
-| `BLOCKED_LEGACY_SUPABASE_PROJECT_REF` | Project ref ของ Legacy ที่ต้องบล็อก |
-| `DATABASE_URL` | ฐานทดสอบท้องถิ่น เช่น `file:./dev.db` |
-| `PLATFORM_CONTEXT_COOKIE_SECRET` | เซ็น cookie context (≥16 chars) |
-| `ALLOW_TEST_AUTH` | `1` เฉพาะ test/dev — ห้าม production |
+- `EXPECTED_SUPABASE_PROJECT_REF=horyhrnqbeaivdztekfv`
+- `BLOCKED_LEGACY_SUPABASE_PROJECT_REF=invnwpyshxdadhocueeh`
+
+## Connection strategy
+
+| Variable | Source | Port | Notes |
+|----------|--------|------|-------|
+| `DATABASE_URL` | Supavisor **Transaction** pooler | **6543** | Runtime Prisma adapter; เพิ่ม `pgbouncer=true` เมื่อจำเป็น |
+| `DIRECT_URL` | Supavisor **Session** pooler | **5432** | Prisma CLI / migrations |
+
+ห้ามเดา host เอง — **Copy จาก Supabase Connect Panel เท่านั้น**  
+ห้ามใช้ Connection String ของ Legacy (`invnwpyshxdadhocueeh`)
+
+## Auth keys
+
+| Variable | Where |
+|----------|--------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Browser + Server |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser + Server |
+| `SUPABASE_SECRET_KEY` | **Server only** (`src/lib/supabase/admin.ts`) |
+
+ห้ามใส่ Secret ลงตัวแปร `NEXT_PUBLIC_*`
+
+## ขั้นตอนที่ผู้ใช้ต้องทำต่อ
+
+1. เปิด Supabase Project `horyhrnqbeaivdztekfv` → **Connect**
+2. Copy **Transaction pooler** URL → ใส่ `DATABASE_URL` (port 6543, ต่อท้าย `pgbouncer=true` ถ้า panel แนะนำ)
+3. Copy **Session pooler** URL → ใส่ `DIRECT_URL` (port 5432)
+4. Copy **Publishable key** → `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+5. Copy **Secret key** → `SUPABASE_SECRET_KEY`
+6. ตั้ง `PLATFORM_CONTEXT_COOKIE_SECRET` เป็นค่าสุ่มยาว
+7. บันทึกเป็น `.env.local` (ถูก gitignore แล้ว)
+8. รัน `npm run db:preflight` (read-only; ห้าม apply migration)
+9. รอ Project Manager อนุมัติก่อน `prisma migrate deploy`
 
 ## Guard rules
 
-1. ดึง project ref จาก hostname ของ Supabase URL
-2. หากตรงกับ `BLOCKED_LEGACY_SUPABASE_PROJECT_REF` → หยุดทันที
-3. หากไม่ตรง `EXPECTED_SUPABASE_PROJECT_REF` → หยุด
-4. ห้าม log secret / service role key
+- `APP_CODE=PLATFORM`
+- Project ref จาก Supabase URL / DATABASE_URL / DIRECT_URL ต้องตรงกัน และเป็น project ใหม่
+- พบ Legacy ref → หยุดทันที
+- `NODE_ENV=production` ห้าม `ALLOW_TEST_AUTH=true` และต้องมี Publishable Key
+- Error ต้องไม่แสดง password / secret
 
-## Phase 2 constraint
+## Migration preview
 
-- ใช้ SQLite หรือ PostgreSQL ทดสอบเท่านั้น
-- **ห้าม** รัน migration กับ Supabase จริง
-- **ห้าม** เชื่อม Legacy database
-
-คัดลอกจาก `.env.example` ไป `.env` / `.env.local` แล้วแก้ค่า (ไฟล์เหล่านี้ถูก gitignore)
+ไฟล์: `prisma/migrations/0001_platform_initial/migration.sql`  
+สร้าง schema/table เฉพาะ `platform` — **ยังไม่ Apply ใน Phase นี้**
