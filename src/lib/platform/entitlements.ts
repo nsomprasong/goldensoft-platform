@@ -99,6 +99,30 @@ export function catalogFeaturesForProduct(
         valueKind: "numeric",
         defaultLimitValue: "50",
       },
+      {
+        code: "hr.branch_limit",
+        nameTh: "จำนวนสาขา HR",
+        valueKind: "numeric",
+        defaultLimitValue: "3",
+      },
+      {
+        code: "hr.mobile_clock_in",
+        nameTh: "ลงเวลาผ่านมือถือ",
+        valueKind: "boolean",
+        defaultLimitValue: "false",
+      },
+      {
+        code: "hr.payroll",
+        nameTh: "เงินเดือน",
+        valueKind: "boolean",
+        defaultLimitValue: "false",
+      },
+      {
+        code: "hr.overtime",
+        nameTh: "ล่วงเวลา",
+        valueKind: "boolean",
+        defaultLimitValue: "false",
+      },
     ];
   }
   if (code === "QRSTATION") {

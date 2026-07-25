@@ -4,6 +4,9 @@ import { MASTER } from "@/lib/platform/master-codes";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
+const auditActionIdCache = new Map<string, string>();
+const auditActionInFlight = new Map<string, Promise<string>>();
+
 const AUDIT_LABELS: Record<string, { nameTh: string; nameEn: string }> = {
   [MASTER.auditActionType.ORGANIZATION_CREATE]: {
     nameTh: "สร้างองค์กร",
@@ -101,6 +104,10 @@ const AUDIT_LABELS: Record<string, { nameTh: string; nameEn: string }> = {
     nameTh: "เปลี่ยนองค์กร/สาขา",
     nameEn: "Switch context",
   },
+  [MASTER.auditActionType.CONTEXT_PLATFORM_ADMIN]: {
+    nameTh: "สลับโหมดผู้ดูแลแพลตฟอร์ม",
+    nameEn: "Switch platform admin context",
+  },
 };
 
 /** Keys that must never appear in audit JSON payloads. */
@@ -131,23 +138,40 @@ export async function ensureAuditActionType(
   db: Db,
   code: string,
 ): Promise<string> {
+  const cached = auditActionIdCache.get(code);
+  if (cached) return cached;
+
+  const inFlight = auditActionInFlight.get(code);
+  if (inFlight) return inFlight;
+
   const labels = AUDIT_LABELS[code] ?? {
     nameTh: code,
     nameEn: code,
   };
-  const row = await db.auditActionType.upsert({
-    where: { code },
-    create: {
-      code,
-      nameTh: labels.nameTh,
-      nameEn: labels.nameEn,
-      isSystem: true,
-      isActive: true,
-      sortOrder: 100,
-    },
-    update: {},
-  });
-  return row.id;
+
+  const promise = db.auditActionType
+    .upsert({
+      where: { code },
+      create: {
+        code,
+        nameTh: labels.nameTh,
+        nameEn: labels.nameEn,
+        isSystem: true,
+        isActive: true,
+        sortOrder: 100,
+      },
+      update: {},
+    })
+    .then((row) => {
+      auditActionIdCache.set(code, row.id);
+      return row.id;
+    })
+    .finally(() => {
+      auditActionInFlight.delete(code);
+    });
+
+  auditActionInFlight.set(code, promise);
+  return promise;
 }
 
 export async function writeAuditLog(
