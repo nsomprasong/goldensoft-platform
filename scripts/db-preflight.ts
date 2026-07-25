@@ -4,6 +4,122 @@ import path from "node:path";
 // Load .env.local / .env before any Environment Guard usage.
 loadEnvConfig(process.cwd());
 
+export const PLATFORM_MIGRATION_NAME = "0001_platform_initial";
+
+export type SqlQuery = (
+  text: string,
+  values?: unknown[],
+) => Promise<{ rows: Array<Record<string, unknown>>; rowCount: number | null }>;
+
+export type PlatformMigrationStatus = {
+  applied: boolean;
+  schema: string | null;
+  reason:
+    | "applied"
+    | "table_missing"
+    | "migration_missing"
+    | "not_finished"
+    | "rolled_back";
+};
+
+const SAFE_IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function quoteIdent(ident: string): string {
+  if (!SAFE_IDENT.test(ident)) {
+    throw new Error(`Unsafe SQL identifier rejected: ${ident}`);
+  }
+  return `"${ident}"`;
+}
+
+/** Locate `_prisma_migrations` via PostgreSQL catalog (any schema). Read-only. */
+export async function locatePrismaMigrationsTable(
+  query: SqlQuery,
+): Promise<{ schema: string; table: string } | null> {
+  const result = await query(
+    `
+    SELECT n.nspname AS schema_name, c.relname AS table_name
+    FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relkind = 'r'
+      AND c.relname = '_prisma_migrations'
+    ORDER BY
+      CASE n.nspname
+        WHEN 'public' THEN 0
+        WHEN 'platform' THEN 1
+        ELSE 2
+      END,
+      n.nspname
+    LIMIT 1
+    `,
+  );
+
+  const row = result.rows[0];
+  if (!row?.schema_name || !row?.table_name) {
+    return null;
+  }
+
+  return {
+    schema: String(row.schema_name),
+    table: String(row.table_name),
+  };
+}
+
+/**
+ * True when migration_name = 0001_platform_initial is finished and not rolled back.
+ * Does not assume the history table lives in schema platform.
+ */
+export async function checkPlatformMigrationApplied(
+  query: SqlQuery,
+  migrationName: string = PLATFORM_MIGRATION_NAME,
+): Promise<PlatformMigrationStatus> {
+  const located = await locatePrismaMigrationsTable(query);
+  if (!located) {
+    return { applied: false, schema: null, reason: "table_missing" };
+  }
+
+  const qualified = `${quoteIdent(located.schema)}.${quoteIdent(located.table)}`;
+  const result = await query(
+    `
+    SELECT migration_name, finished_at, rolled_back_at
+    FROM ${qualified}
+    WHERE migration_name = $1
+    LIMIT 1
+    `,
+    [migrationName],
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    return {
+      applied: false,
+      schema: located.schema,
+      reason: "migration_missing",
+    };
+  }
+
+  if (row.rolled_back_at != null) {
+    return {
+      applied: false,
+      schema: located.schema,
+      reason: "rolled_back",
+    };
+  }
+
+  if (row.finished_at == null) {
+    return {
+      applied: false,
+      schema: located.schema,
+      reason: "not_finished",
+    };
+  }
+
+  return {
+    applied: true,
+    schema: located.schema,
+    reason: "applied",
+  };
+}
+
 async function main() {
   const {
     assertSafeEnvironment,
@@ -101,14 +217,17 @@ async function main() {
     const tables = await pool.query(
       `select table_name from information_schema.tables where table_schema = 'platform'`,
     );
-    const migrations = await pool.query(
-      `select 1 from information_schema.tables
-       where table_schema = 'platform' and table_name = '_prisma_migrations'
-       limit 1`,
-    );
 
-    const migrationApplied = Boolean(migrations.rowCount);
-    console.log("Platform migration applied:", migrationApplied);
+    const migrationStatus = await checkPlatformMigrationApplied(async (text, values) =>
+      pool.query(text, values),
+    );
+    console.log("Platform migration applied:", migrationStatus.applied);
+    if (migrationStatus.schema) {
+      console.log("Prisma migrations table schema:", migrationStatus.schema);
+    }
+    if (!migrationStatus.applied) {
+      console.log("Platform migration status reason:", migrationStatus.reason);
+    }
 
     if (schema.rowCount && tables.rowCount && tables.rowCount > 0) {
       console.log(
@@ -127,13 +246,19 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  const message = error instanceof Error ? error.message : "preflight failed";
-  console.error(
-    "db:preflight failed:",
-    message
-      .replace(/:[^:@/]+@/g, ":***@")
-      .replace(/-----BEGIN[\s\S]*?-----END[^-]+-----/g, "[redacted-pem]"),
-  );
-  process.exit(1);
-});
+const isDirectRun =
+  typeof process.argv[1] === "string" &&
+  process.argv[1].replace(/\\/g, "/").endsWith("scripts/db-preflight.ts");
+
+if (isDirectRun) {
+  main().catch((error) => {
+    const message = error instanceof Error ? error.message : "preflight failed";
+    console.error(
+      "db:preflight failed:",
+      message
+        .replace(/:[^:@/]+@/g, ":***@")
+        .replace(/-----BEGIN[\s\S]*?-----END[^-]+-----/g, "[redacted-pem]"),
+    );
+    process.exit(1);
+  });
+}

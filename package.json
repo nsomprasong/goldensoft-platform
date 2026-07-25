@@ -8,11 +8,12 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/env-guard.test.ts tests/env-local-load.test.ts tests/ca-certificate.test.ts tests/db-preflight.test.ts tests/tenant-isolation.test.ts tests/migration-safety.test.ts tests/schema-masters.test.ts tests/legacy-untouched.test.ts",
+    "test": "tsx --test tests/env-guard.test.ts tests/env-local-load.test.ts tests/ca-certificate.test.ts tests/db-preflight.test.ts tests/db-verify.test.ts tests/tenant-isolation.test.ts tests/migration-safety.test.ts tests/schema-masters.test.ts tests/legacy-untouched.test.ts",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:seed": "tsx prisma/seed.ts",
     "db:preflight": "tsx scripts/db-preflight.ts",
+    "db:verify": "tsx scripts/db-verify.ts",
     "db:migration:check": "tsx scripts/migration-check.ts",
     "preflight:env": "tsx scripts/preflight-env.ts"
   },

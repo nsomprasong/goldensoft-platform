@@ -9,6 +9,11 @@ import {
   loadSupabaseDbCaCertificate,
 } from "../src/lib/db/ca-certificate";
 import { assertSafeEnvironment } from "../src/lib/env/guard";
+import {
+  checkPlatformMigrationApplied,
+  PLATFORM_MIGRATION_NAME,
+  type SqlQuery,
+} from "../scripts/db-preflight";
 
 const PROJECT_ROOT = path.resolve(process.cwd());
 const CA_REL = "certs/prod-ca-2021.crt";
@@ -110,3 +115,109 @@ describe("db:preflight connection source", () => {
     if (!missingMode.ok) assert.equal(missingMode.code, "DIRECT_URL_TLS");
   });
 });
+
+describe("Platform migration applied detection", () => {
+  function mockQuery(handlers: {
+    locateRows?: Array<Record<string, unknown>>;
+    migrationRows?: Array<Record<string, unknown>>;
+  }): SqlQuery {
+    return async (text) => {
+      if (text.includes("pg_catalog.pg_class")) {
+        const rows = handlers.locateRows ?? [];
+        return { rows, rowCount: rows.length };
+      }
+      if (text.includes("migration_name")) {
+        const rows = handlers.migrationRows ?? [];
+        return { rows, rowCount: rows.length };
+      }
+      throw new Error(`Unexpected query in test: ${text.slice(0, 80)}`);
+    };
+  }
+
+  it("reports applied when finished migration exists in catalog schema", async () => {
+    const status = await checkPlatformMigrationApplied(
+      mockQuery({
+        locateRows: [{ schema_name: "public", table_name: "_prisma_migrations" }],
+        migrationRows: [
+          {
+            migration_name: PLATFORM_MIGRATION_NAME,
+            finished_at: new Date("2026-07-25T00:00:00Z"),
+            rolled_back_at: null,
+          },
+        ],
+      }),
+    );
+    assert.equal(status.applied, true);
+    assert.equal(status.schema, "public");
+    assert.equal(status.reason, "applied");
+  });
+
+  it("reports not applied when _prisma_migrations table is missing", async () => {
+    const status = await checkPlatformMigrationApplied(
+      mockQuery({ locateRows: [] }),
+    );
+    assert.equal(status.applied, false);
+    assert.equal(status.reason, "table_missing");
+  });
+
+  it("reports not applied when migration row is missing", async () => {
+    const status = await checkPlatformMigrationApplied(
+      mockQuery({
+        locateRows: [{ schema_name: "public", table_name: "_prisma_migrations" }],
+        migrationRows: [],
+      }),
+    );
+    assert.equal(status.applied, false);
+    assert.equal(status.reason, "migration_missing");
+  });
+
+  it("reports not applied when finished_at is null", async () => {
+    const status = await checkPlatformMigrationApplied(
+      mockQuery({
+        locateRows: [{ schema_name: "public", table_name: "_prisma_migrations" }],
+        migrationRows: [
+          {
+            migration_name: PLATFORM_MIGRATION_NAME,
+            finished_at: null,
+            rolled_back_at: null,
+          },
+        ],
+      }),
+    );
+    assert.equal(status.applied, false);
+    assert.equal(status.reason, "not_finished");
+  });
+
+  it("reports not applied when migration was rolled back", async () => {
+    const status = await checkPlatformMigrationApplied(
+      mockQuery({
+        locateRows: [{ schema_name: "public", table_name: "_prisma_migrations" }],
+        migrationRows: [
+          {
+            migration_name: PLATFORM_MIGRATION_NAME,
+            finished_at: new Date("2026-07-25T00:00:00Z"),
+            rolled_back_at: new Date("2026-07-25T01:00:00Z"),
+          },
+        ],
+      }),
+    );
+    assert.equal(status.applied, false);
+    assert.equal(status.reason, "rolled_back");
+  });
+
+  it("preflight uses catalog lookup instead of assuming platform schema", () => {
+    const src = fs.readFileSync(
+      path.join(PROJECT_ROOT, "scripts/db-preflight.ts"),
+      "utf8",
+    );
+    assert.match(src, /pg_catalog\.pg_class/);
+    assert.match(src, /checkPlatformMigrationApplied/);
+    assert.equal(
+      /table_schema\s*=\s*'platform'\s+and\s+table_name\s*=\s*'_prisma_migrations'/i.test(
+        src,
+      ),
+      false,
+    );
+  });
+});
+
