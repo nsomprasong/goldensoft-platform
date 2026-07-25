@@ -8,6 +8,9 @@ import {
   resolveDirectSslRootCertPath,
   resolveProjectRelativePath,
 } from "../db/ca-certificate";
+import { isTestAuthEnabled } from "./test-auth";
+
+export { isTestAuthEnabled } from "./test-auth";
 
 export type EnvGuardInput = {
   appCode?: string;
@@ -53,11 +56,6 @@ const FORBIDDEN_DATABASE_SSL_PARAMS = [
   "sslcert",
   "sslkey",
 ] as const;
-
-export function isTestAuthEnabled(value?: string): boolean {
-  const raw = (value ?? process.env.ALLOW_TEST_AUTH ?? "").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes";
-}
 
 export function extractSupabaseProjectRef(supabaseUrl: string): string | null {
   try {

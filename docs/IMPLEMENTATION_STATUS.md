@@ -51,6 +51,20 @@
 
 Additional masters (not former Prisma enums, but required as lookup): FeatureValueType (STRING, NUMBER, BOOLEAN), AuditActionType (action codes).
 
+### Phase 4 — Central Auth + Thai UI
+- Supabase SSR login/logout, middleware session refresh, production test-auth ban
+- Profile / membership gating (no auto-create profile)
+- Signed HTTP-only `gs_platform_ctx` cookie for active org/branch (server re-checks membership)
+- Thai UI shell, login, access, org selector, and main pages
+- APIs: `/api/auth/me`, `/api/platform/context` (GET/POST), bootstrap, logout
+- No Auth user provisioning in this phase
+
+### Phase 4B — First Super Admin Bootstrap
+- One-time idempotent scripts: `auth:bootstrap-admin`, `auth:verify-admin`
+- Requires existing Auth user + `BOOTSTRAP_CONFIRM=CREATE_FIRST_SUPER_ADMIN` to write
+- Thai guide: `docs/BOOTSTRAP_FIRST_SUPER_ADMIN.md`
+- Does not create Auth users, invite emails, or auto-create organizations
+
 ### Phase 3C — Trusted Supabase TLS
 - Public CA: `certs/prod-ca-2021.crt` via `SUPABASE_DB_CA_CERT_PATH`
 - Shared server utility: `src/lib/db/ca-certificate.ts` (`rejectUnauthorized: true`)

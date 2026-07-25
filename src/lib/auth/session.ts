@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 
-import { isTestAuthEnabled } from "@/lib/env/guard";
+import { isTestAuthEnabled } from "@/lib/env/test-auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type AuthSessionUser = {

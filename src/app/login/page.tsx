@@ -1,38 +1,33 @@
-export default function LoginPage() {
+import { redirect } from "next/navigation";
+
+import { LoginForm } from "@/components/login-form";
+import { getAuthUser } from "@/lib/auth/session";
+import { TH } from "@/lib/i18n/th";
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const user = await getAuthUser();
+  if (user) {
+    redirect("/");
+  }
+
+  const params = await searchParams;
+  const nextPath =
+    params.next && params.next.startsWith("/") ? params.next : "/";
+
   return (
-    <section className="card mx-auto max-w-lg">
-      <h2 className="text-xl font-semibold">Login</h2>
-      <p className="mt-2 text-sm text-slate-600">
-        Placeholder สำหรับเชื่อม Supabase Auth ของ Central Project
-        (ยังไม่เชื่อม Production ใน Phase นี้)
-      </p>
-      <form className="mt-6 grid gap-3">
-        <label className="grid gap-1 text-sm">
-          Email
-          <input
-            className="rounded-lg border border-[var(--border)] px-3 py-2"
-            type="email"
-            placeholder="you@company.com"
-            disabled
-          />
-        </label>
-        <label className="grid gap-1 text-sm">
-          Password
-          <input
-            className="rounded-lg border border-[var(--border)] px-3 py-2"
-            type="password"
-            placeholder="••••••••"
-            disabled
-          />
-        </label>
-        <button className="btn mt-2 opacity-60" type="button" disabled>
-          Sign in (wire Supabase Auth next)
-        </button>
-      </form>
-      <p className="mt-4 text-xs text-slate-500">
-        Test auth ใช้ header <code>x-test-auth-user-id</code> เมื่อ
-        ALLOW_TEST_AUTH=1
-      </p>
-    </section>
+    <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-10">
+      <section className="card">
+        <p className="text-sm font-semibold text-[var(--accent)]">{TH.brand}</p>
+        <h1 className="mt-1 text-2xl font-bold">{TH.login.title}</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          ใช้บัญชีที่ยืนยันตัวตนผ่านระบบกลาง (Supabase Auth)
+        </p>
+        <LoginForm nextPath={nextPath} />
+      </section>
+    </div>
   );
 }

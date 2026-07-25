@@ -1,12 +1,10 @@
-import { loadEnvConfig } from "@next/env";
-
 import {
   checkPlatformMigrationApplied,
   PLATFORM_MIGRATION_NAME,
   type SqlQuery,
 } from "./db-preflight";
 
-loadEnvConfig(process.cwd());
+// Env is loaded by the db-preflight import (project files win over ambient stubs).
 
 export const EXPECTED_PLATFORM_TABLE_COUNT = 41;
 

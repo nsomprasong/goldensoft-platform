@@ -1,8 +1,9 @@
-import { loadEnvConfig } from "@next/env";
 import path from "node:path";
 
-// Load .env.local / .env before any Environment Guard usage.
-loadEnvConfig(process.cwd());
+import { loadProjectEnv } from "./load-project-env";
+
+// Shell/IDE stubs must not shadow project .env.local for DB / API URLs.
+loadProjectEnv(process.cwd());
 
 export const PLATFORM_MIGRATION_NAME = "0001_platform_initial";
 

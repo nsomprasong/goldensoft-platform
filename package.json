@@ -8,14 +8,18 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/env-guard.test.ts tests/env-local-load.test.ts tests/ca-certificate.test.ts tests/db-preflight.test.ts tests/db-verify.test.ts tests/tenant-isolation.test.ts tests/migration-safety.test.ts tests/schema-masters.test.ts tests/legacy-untouched.test.ts",
+    "test": "tsx --test tests/env-guard.test.ts tests/env-local-load.test.ts tests/ca-certificate.test.ts tests/db-preflight.test.ts tests/db-verify.test.ts tests/auth-access.test.ts tests/bootstrap-first-admin.test.ts tests/bootstrap-organization.test.ts tests/tenant-isolation.test.ts tests/migration-safety.test.ts tests/schema-masters.test.ts tests/legacy-untouched.test.ts",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:seed": "tsx prisma/seed.ts",
     "db:preflight": "tsx scripts/db-preflight.ts",
     "db:verify": "tsx scripts/db-verify.ts",
     "db:migration:check": "tsx scripts/migration-check.ts",
-    "preflight:env": "tsx scripts/preflight-env.ts"
+    "preflight:env": "tsx scripts/preflight-env.ts",
+    "auth:bootstrap-admin": "tsx scripts/bootstrap-first-super-admin.ts",
+    "auth:verify-admin": "tsx scripts/verify-first-super-admin.ts",
+    "org:bootstrap-goldensoft": "tsx scripts/bootstrap-goldensoft-organization.ts",
+    "org:verify-goldensoft": "tsx scripts/verify-goldensoft-organization.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^6.19.3",

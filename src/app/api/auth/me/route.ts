@@ -1,70 +1,113 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 import { requireAuthUser } from "@/lib/auth/request-auth";
-import { MASTER } from "@/lib/platform/master-codes";
-import { prisma } from "@/lib/prisma";
+import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
+import {
+  COOKIE_NAME,
+  decodeContextCookie,
+} from "@/lib/context/cookie";
+import { TH } from "@/lib/i18n/th";
+import { permissionsForRoles } from "@/lib/permissions/codes";
+
+const meResponseSchema = z.object({
+  user: z.object({
+    id: z.string(),
+    email: z.string().nullable(),
+  }),
+  profile: z
+    .object({
+      displayName: z.string(),
+      email: z.string(),
+      statusCode: z.string(),
+    })
+    .nullable(),
+  platformRoles: z.array(z.string()),
+  memberships: z.array(
+    z.object({
+      organizationId: z.string(),
+      organizationName: z.string(),
+      organizationStatus: z.string(),
+      roles: z.array(z.string()),
+      branchCount: z.number().int().nonnegative(),
+    }),
+  ),
+  activeOrganization: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+    })
+    .nullable(),
+  activeBranch: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      code: z.string(),
+    })
+    .nullable(),
+  permissions: z.array(z.string()),
+});
 
 export async function GET(request: NextRequest) {
   const user = await requireAuthUser(request);
   if (!user) {
     return NextResponse.json(
-      { message: "Authentication required" },
+      { code: "UNAUTHENTICATED", message: TH.common.sessionExpired },
       { status: 401 },
     );
   }
 
-  const assignmentActive = await prisma.assignmentStatus.findUnique({
-    where: { code: MASTER.assignmentStatus.ACTIVE },
-  });
-  const membershipActive = await prisma.membershipStatus.findUnique({
-    where: { code: MASTER.membershipStatus.ACTIVE },
-  });
-  if (!assignmentActive || !membershipActive) {
-    return NextResponse.json(
-      { message: "Master data incomplete" },
-      { status: 503 },
-    );
-  }
+  const bundle = await loadPlatformUserBundle(user.id);
+  const cookie = decodeContextCookie(request.cookies.get(COOKIE_NAME)?.value);
 
-  const profile = await prisma.userProfile.findUnique({
-    where: { authUserId: user.id },
-    include: {
-      status: true,
-      platformRoles: {
-        where: { statusId: assignmentActive.id },
-        include: { role: true },
-      },
-      preference: true,
-      memberships: {
-        where: { statusId: membershipActive.id },
-        include: {
-          organization: true,
-          roles: {
-            where: { statusId: assignmentActive.id },
-            include: { role: true },
-          },
-        },
-      },
-    },
+  const activeMembership = cookie
+    ? bundle.memberships.find((m) => m.organizationId === cookie.organizationId)
+    : null;
+
+  const activeBranch =
+    activeMembership && cookie?.branchId
+      ? (activeMembership.branches.find((b) => b.id === cookie.branchId) ??
+        null)
+      : null;
+
+  const organizationRoles = activeMembership?.roles ?? [];
+  const permissions = permissionsForRoles({
+    platformRoles: bundle.platformRoles,
+    organizationRoles,
   });
 
-  if (!profile || profile.status.code !== MASTER.userProfileStatus.ACTIVE) {
-    return NextResponse.json(
-      { message: "User profile not configured", code: "PROFILE_NOT_FOUND" },
-      { status: 403 },
-    );
-  }
-
-  return NextResponse.json({
-    authUserId: profile.authUserId,
-    email: profile.email,
-    displayName: profile.displayName,
-    platformRoles: profile.platformRoles.map((r) => r.role.code),
-    preference: profile.preference,
-    memberships: profile.memberships.map((m) => ({
+  const payload = meResponseSchema.parse({
+    user: { id: user.id, email: user.email },
+    profile: bundle.profile
+      ? {
+          displayName: bundle.profile.displayName,
+          email: bundle.profile.email,
+          statusCode: bundle.profile.statusCode,
+        }
+      : null,
+    platformRoles: bundle.platformRoles,
+    memberships: bundle.memberships.map((m) => ({
       organizationId: m.organizationId,
-      organizationName: m.organization.displayName,
-      roles: m.roles.map((r) => r.role.code),
+      organizationName: m.organizationName,
+      organizationStatus: m.organizationStatus,
+      roles: m.roles,
+      branchCount: m.branches.length,
     })),
+    activeOrganization: activeMembership
+      ? {
+          id: activeMembership.organizationId,
+          name: activeMembership.organizationName,
+        }
+      : null,
+    activeBranch: activeBranch
+      ? {
+          id: activeBranch.id,
+          name: activeBranch.name,
+          code: activeBranch.code,
+        }
+      : null,
+    permissions,
   });
+
+  return NextResponse.json(payload);
 }

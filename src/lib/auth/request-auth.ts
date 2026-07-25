@@ -36,7 +36,7 @@ export async function requireApplicationContext(
     return {
       ok: false,
       status: 401,
-      message: "Authentication required",
+      message: "เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง",
       code: "UNAUTHENTICATED",
     };
   }
