@@ -235,6 +235,7 @@ export function filterNavForRoles(input: {
 
 export function isProtectedPath(pathname: string): boolean {
   if (pathname.startsWith("/login")) return false;
+  if (pathname.startsWith("/auth/accept-invite")) return false;
   if (pathname.startsWith("/access")) return false;
   if (pathname.startsWith("/api/health")) return false;
   if (pathname.startsWith("/_next")) return false;

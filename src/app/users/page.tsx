@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PlatformShell } from "@/components/platform-shell";
+import { ResendInviteButton } from "@/components/resend-invite-button";
 import {
   AccessDenied,
   DataTable,
@@ -10,7 +11,12 @@ import {
 } from "@/components/ui/admin-ui";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
-import { TH, labelRole, labelStatus } from "@/lib/i18n/th";
+import {
+  TH,
+  labelInvitationStatus,
+  labelRole,
+  labelStatus,
+} from "@/lib/i18n/th";
 import { MASTER } from "@/lib/platform/master-codes";
 import {
   PLATFORM_PERMISSIONS,
@@ -100,6 +106,32 @@ export default async function UsersPage({
     orderBy: { createdAt: "desc" },
     take: 50,
   });
+  const invitations = await prisma.userInvitation.findMany({
+    where: {
+      ...orgFilter,
+      ...(q
+        ? {
+            OR: [
+              { emailNormalized: { contains: q, mode: "insensitive" } },
+              { displayName: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      emailNormalized: true,
+      displayName: true,
+      createdAt: true,
+      attemptCount: true,
+      organization: { select: { displayName: true } },
+      organizationRole: { select: { code: true } },
+      status: { select: { code: true } },
+      invitedByProfile: { select: { displayName: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
 
   const canInvite = perms.includes(PLATFORM_PERMISSIONS.userInvite);
 
@@ -116,6 +148,59 @@ export default async function UsersPage({
             ) : null
           }
         />
+        {invitations.length > 0 ? (
+          <div className="mb-6 overflow-x-auto">
+            <h3 className="mb-2 font-semibold">คำเชิญผู้ใช้งาน</h3>
+            <DataTable
+              headers={[
+                TH.users.displayName,
+                TH.users.email,
+                TH.nav.organizations,
+                "บทบาท",
+                "วันที่เชิญ",
+                "ผู้เชิญ",
+                TH.common.status,
+                TH.common.actions,
+              ]}
+            >
+              {invitations.map((invitation) => (
+                <tr key={invitation.id} className="border-b border-[var(--border)]">
+                  <td className="px-2 py-2">
+                    <Link href={`/users/${invitation.id}`} className="underline">
+                      {invitation.displayName}
+                    </Link>
+                  </td>
+                  <td className="px-2 py-2">{invitation.emailNormalized}</td>
+                  <td className="px-2 py-2">{invitation.organization.displayName}</td>
+                  <td className="px-2 py-2">
+                    {labelRole(invitation.organizationRole.code)}
+                  </td>
+                  <td className="px-2 py-2">
+                    {invitation.createdAt.toLocaleString("th-TH")}
+                  </td>
+                  <td className="px-2 py-2">
+                    {invitation.invitedByProfile.displayName}
+                  </td>
+                  <td className="px-2 py-2">
+                    <StatusBadge
+                      label={labelInvitationStatus(invitation.status.code)}
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    {canInvite &&
+                    ["PENDING", "AUTH_SENT", "FAILED", "PLATFORM_SETUP_FAILED"].includes(
+                      invitation.status.code,
+                    ) ? (
+                      <ResendInviteButton invitationId={invitation.id} />
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </DataTable>
+          </div>
+        ) : null}
         <form method="get" className="mb-4 flex gap-2">
           <input
             name="q"

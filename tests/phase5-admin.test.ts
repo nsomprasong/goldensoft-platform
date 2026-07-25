@@ -315,7 +315,7 @@ describe("Phase 5 migration preview safety", () => {
 });
 
 describe("Phase 5 security source checks", () => {
-  it("invite API uses mock adapter and does not import ws", () => {
+  it("invite API selects the server-side adapter and does not import ws", () => {
     const inviteApi = path.join(
       process.cwd(),
       "src/app/api/platform/users/invite/route.ts",
@@ -331,7 +331,8 @@ describe("Phase 5 security source checks", () => {
       return;
     }
     const src = fs.readFileSync(inviteApi, "utf8");
-    assert.match(src, /createMockAuthInviteAdapter/);
+    assert.match(src, /createAuthInviteAdapter/);
+    assert.match(src, /resolveInviteEnvironment/);
     assert.equal(/inviteUserByEmail\([^)]*supabase/i.test(src), false);
     assert.equal(/\bfrom\s+["']ws["']/.test(src), false);
   });

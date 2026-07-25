@@ -258,7 +258,7 @@ function createFakeDb(options?: {
             a.entityId === where.entityId,
         ).length,
     },
-    async $transaction<T>(fn: (tx: typeof db) => Promise<T>): Promise<T> {
+    async $transaction<T>(fn: (tx: never) => Promise<T>): Promise<T> {
       const snapshot = {
         organizations: structuredClone(state.organizations),
         branches: structuredClone(state.branches),
@@ -267,7 +267,7 @@ function createFakeDb(options?: {
         writes: state.writes,
       };
       try {
-        const result = await fn(db);
+        const result = await fn(this as never);
         state.committed = true;
         return result;
       } catch (error) {

@@ -120,15 +120,58 @@ describe("Platform migration applied detection", () => {
   function mockQuery(handlers: {
     locateRows?: Array<Record<string, unknown>>;
     migrationRows?: Array<Record<string, unknown>>;
+    migrationCounts?: {
+      applied_count?: number;
+      rolled_back_count?: number;
+      unresolved_count?: number;
+      total_count?: number;
+    };
   }): SqlQuery {
     return async (text) => {
       if (text.includes("pg_catalog.pg_class")) {
         const rows = handlers.locateRows ?? [];
         return { rows, rowCount: rows.length };
       }
-      if (text.includes("migration_name")) {
+      if (text.includes("applied_count") || text.includes("migration_name")) {
+        if (handlers.migrationCounts) {
+          const counts = handlers.migrationCounts;
+          const row = {
+            applied_count: counts.applied_count ?? 0,
+            rolled_back_count: counts.rolled_back_count ?? 0,
+            unresolved_count: counts.unresolved_count ?? 0,
+            total_count:
+              counts.total_count ??
+              (counts.applied_count ?? 0) +
+                (counts.rolled_back_count ?? 0) +
+                (counts.unresolved_count ?? 0),
+          };
+          return { rows: [row], rowCount: 1 };
+        }
+        // Derive aggregate counts from legacy row fixtures used by older tests.
         const rows = handlers.migrationRows ?? [];
-        return { rows, rowCount: rows.length };
+        let applied_count = 0;
+        let rolled_back_count = 0;
+        let unresolved_count = 0;
+        for (const row of rows) {
+          if (row.rolled_back_at != null) {
+            rolled_back_count += 1;
+          } else if (row.finished_at == null) {
+            unresolved_count += 1;
+          } else {
+            applied_count += 1;
+          }
+        }
+        return {
+          rows: [
+            {
+              applied_count,
+              rolled_back_count,
+              unresolved_count,
+              total_count: rows.length,
+            },
+          ],
+          rowCount: 1,
+        };
       }
       throw new Error(`Unexpected query in test: ${text.slice(0, 80)}`);
     };
@@ -150,6 +193,26 @@ describe("Platform migration applied detection", () => {
     assert.equal(status.applied, true);
     assert.equal(status.schema, "public");
     assert.equal(status.reason, "applied");
+    assert.equal(status.appliedCount, 1);
+  });
+
+  it("reports applied when rolled-back history exists alongside a successful attempt", async () => {
+    const status = await checkPlatformMigrationApplied(
+      mockQuery({
+        locateRows: [{ schema_name: "public", table_name: "_prisma_migrations" }],
+        migrationCounts: {
+          applied_count: 1,
+          rolled_back_count: 1,
+          unresolved_count: 0,
+          total_count: 2,
+        },
+      }),
+    );
+    assert.equal(status.applied, true);
+    assert.equal(status.reason, "applied");
+    assert.equal(status.appliedCount, 1);
+    assert.equal(status.rolledBackCount, 1);
+    assert.equal(status.unresolvedCount, 0);
   });
 
   it("reports not applied when _prisma_migrations table is missing", async () => {
@@ -186,6 +249,7 @@ describe("Platform migration applied detection", () => {
     );
     assert.equal(status.applied, false);
     assert.equal(status.reason, "not_finished");
+    assert.equal(status.unresolvedCount, 1);
   });
 
   it("reports not applied when migration was rolled back", async () => {
@@ -203,6 +267,8 @@ describe("Platform migration applied detection", () => {
     );
     assert.equal(status.applied, false);
     assert.equal(status.reason, "rolled_back");
+    assert.equal(status.rolledBackCount, 1);
+    assert.equal(status.appliedCount, 0);
   });
 
   it("preflight uses catalog lookup instead of assuming platform schema", () => {
@@ -212,6 +278,9 @@ describe("Platform migration applied detection", () => {
     );
     assert.match(src, /pg_catalog\.pg_class/);
     assert.match(src, /checkPlatformMigrationApplied/);
+    assert.match(src, /applied_count/);
+    assert.match(src, /COUNT\(\*\) FILTER/);
+    assert.equal(/WHERE migration_name = \$1\s+LIMIT 1/i.test(src), false);
     assert.equal(
       /table_schema\s*=\s*'platform'\s+and\s+table_name\s*=\s*'_prisma_migrations'/i.test(
         src,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormField } from "@/components/ui/admin-ui";
@@ -30,6 +30,7 @@ export function UserInviteWizard(props: {
     "ALL_BRANCHES" | "SELECTED" | "NONE"
   >("ALL_BRANCHES");
   const [branchIds, setBranchIds] = useState<string[]>([]);
+  const idempotencyKey = useRef(crypto.randomUUID());
 
   const branches = useMemo(
     () => props.branchesByOrg[organizationId] ?? [],
@@ -41,14 +42,18 @@ export function UserInviteWizard(props: {
     setError(null);
     const res = await fetch("/api/platform/users/invite", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey.current,
+      },
       body: JSON.stringify({
         email,
         displayName,
         organizationId,
-        organizationRole,
+        organizationRoleCode: organizationRole,
         branchScope,
         branchIds: branchScope === "SELECTED" ? branchIds : [],
+        idempotencyKey: idempotencyKey.current,
       }),
     });
     const data = (await res.json()) as { message?: string };

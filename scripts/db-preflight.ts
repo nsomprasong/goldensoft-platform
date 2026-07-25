@@ -21,7 +21,19 @@ export type PlatformMigrationStatus = {
     | "migration_missing"
     | "not_finished"
     | "rolled_back";
+  /** Successful attempts: finished_at IS NOT NULL AND rolled_back_at IS NULL */
+  appliedCount: number;
+  /** Attempts with rolled_back_at IS NOT NULL */
+  rolledBackCount: number;
+  /** Unresolved attempts: finished_at IS NULL AND rolled_back_at IS NULL */
+  unresolvedCount: number;
 };
+
+const EMPTY_MIGRATION_COUNTS = {
+  appliedCount: 0,
+  rolledBackCount: 0,
+  unresolvedCount: 0,
+} as const;
 
 const SAFE_IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -66,8 +78,10 @@ export async function locatePrismaMigrationsTable(
 }
 
 /**
- * True when migration_name = 0001_platform_initial is finished and not rolled back.
- * Does not assume the history table lives in schema platform.
+ * True when at least one successful attempt exists for the migration name:
+ * finished_at IS NOT NULL AND rolled_back_at IS NULL.
+ * Older rolled-back rows for the same name do not force a failure.
+ * Unresolved attempts (finished_at IS NULL AND rolled_back_at IS NULL) fail closed.
  */
 export async function checkPlatformMigrationApplied(
   query: SqlQuery,
@@ -75,49 +89,86 @@ export async function checkPlatformMigrationApplied(
 ): Promise<PlatformMigrationStatus> {
   const located = await locatePrismaMigrationsTable(query);
   if (!located) {
-    return { applied: false, schema: null, reason: "table_missing" };
+    return {
+      applied: false,
+      schema: null,
+      reason: "table_missing",
+      ...EMPTY_MIGRATION_COUNTS,
+    };
   }
 
   const qualified = `${quoteIdent(located.schema)}.${quoteIdent(located.table)}`;
   const result = await query(
     `
-    SELECT migration_name, finished_at, rolled_back_at
+    SELECT
+      COUNT(*) FILTER (
+        WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL
+      )::int AS applied_count,
+      COUNT(*) FILTER (
+        WHERE rolled_back_at IS NOT NULL
+      )::int AS rolled_back_count,
+      COUNT(*) FILTER (
+        WHERE finished_at IS NULL AND rolled_back_at IS NULL
+      )::int AS unresolved_count,
+      COUNT(*)::int AS total_count
     FROM ${qualified}
     WHERE migration_name = $1
-    LIMIT 1
     `,
     [migrationName],
   );
 
   const row = result.rows[0];
-  if (!row) {
+  const appliedCount = Number(row?.applied_count ?? 0);
+  const rolledBackCount = Number(row?.rolled_back_count ?? 0);
+  const unresolvedCount = Number(row?.unresolved_count ?? 0);
+  const totalCount = Number(row?.total_count ?? 0);
+  const counts = {
+    appliedCount,
+    rolledBackCount,
+    unresolvedCount,
+  };
+
+  if (totalCount === 0) {
     return {
       applied: false,
       schema: located.schema,
       reason: "migration_missing",
+      ...counts,
     };
   }
 
-  if (row.rolled_back_at != null) {
-    return {
-      applied: false,
-      schema: located.schema,
-      reason: "rolled_back",
-    };
-  }
-
-  if (row.finished_at == null) {
+  if (unresolvedCount > 0) {
     return {
       applied: false,
       schema: located.schema,
       reason: "not_finished",
+      ...counts,
+    };
+  }
+
+  if (appliedCount >= 1) {
+    return {
+      applied: true,
+      schema: located.schema,
+      reason: "applied",
+      ...counts,
+    };
+  }
+
+  if (rolledBackCount > 0) {
+    return {
+      applied: false,
+      schema: located.schema,
+      reason: "rolled_back",
+      ...counts,
     };
   }
 
   return {
-    applied: true,
+    applied: false,
     schema: located.schema,
-    reason: "applied",
+    reason: "migration_missing",
+    ...counts,
   };
 }
 

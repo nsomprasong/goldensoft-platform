@@ -137,7 +137,6 @@ function createFakeDb(options?: {
 
   const db = {
     state,
-    organization,
     branch1,
     masters: {
       userProfileStatus: [userActive],
@@ -412,7 +411,7 @@ function createFakeDb(options?: {
       findUnique: async ({ where }: { where: { code: string } }) =>
         [branchActive].find((m) => m.code === where.code) ?? null,
     },
-    async $transaction<T>(fn: (tx: typeof db) => Promise<T>): Promise<T> {
+    async $transaction<T>(fn: (tx: never) => Promise<T>): Promise<T> {
       const snapshot = {
         profiles: structuredClone(state.profiles),
         platformRoleAssignments: structuredClone(state.platformRoleAssignments),
@@ -424,7 +423,7 @@ function createFakeDb(options?: {
         writes: state.writes,
       };
       try {
-        const result = await fn(db);
+        const result = await fn(this as never);
         state.committed = true;
         return result;
       } catch (error) {
@@ -473,7 +472,9 @@ function createFakeDb(options?: {
 
   // Attach for verify path that includes status on profile
   const originalFindUnique = db.userProfile.findUnique;
-  db.userProfile.findUnique = async (args) => {
+  db.userProfile.findUnique = async (
+    args: Parameters<typeof originalFindUnique>[0],
+  ) => {
     const row = await originalFindUnique(args);
     if (!row) return null;
     return { ...row, status: userActive };

@@ -6,7 +6,13 @@ import type { ActorAccess } from "@/lib/platform/organizations-admin";
 export async function loadActorAccess(
   db: PrismaClient,
   authUserId: string,
-): Promise<ActorAccess & { organizationRoles: string[]; profileId: string | null }> {
+): Promise<
+  ActorAccess & {
+    organizationRoles: string[];
+    organizationRolesByOrganization: Record<string, string[]>;
+    profileId: string | null;
+  }
+> {
   const assignmentActive = await db.assignmentStatus.findUnique({
     where: { code: MASTER.assignmentStatus.ACTIVE },
   });
@@ -19,6 +25,7 @@ export async function loadActorAccess(
       platformRoles: [],
       membershipOrganizationIds: [],
       organizationRoles: [],
+      organizationRolesByOrganization: {},
       profileId: null,
     };
   }
@@ -48,6 +55,7 @@ export async function loadActorAccess(
       platformRoles: [],
       membershipOrganizationIds: [],
       organizationRoles: [],
+      organizationRolesByOrganization: {},
       profileId: null,
     };
   }
@@ -59,6 +67,12 @@ export async function loadActorAccess(
     membershipOrganizationIds: profile.memberships.map((m) => m.organizationId),
     organizationRoles: profile.memberships.flatMap((m) =>
       m.roles.map((r) => r.role.code),
+    ),
+    organizationRolesByOrganization: Object.fromEntries(
+      profile.memberships.map((membership) => [
+        membership.organizationId,
+        membership.roles.map((role) => role.role.code),
+      ]),
     ),
   };
 }

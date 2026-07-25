@@ -179,6 +179,10 @@ export const TH = {
     PAST_DUE: "ค้างชำระ",
     CLOSED: "ปิด",
     INVITED: "เชิญแล้ว",
+    AUTH_SENT: "ส่งคำเชิญแล้ว",
+    COMPLETED: "เปิดใช้งานแล้ว",
+    FAILED: "ส่งไม่สำเร็จ",
+    PLATFORM_SETUP_FAILED: "จัดเตรียมสิทธิ์ไม่สำเร็จ",
     REMOVED: "ถอดออก",
     RETIRED: "เลิกใช้",
     DRAFT: "ฉบับร่าง",
@@ -215,6 +219,19 @@ export const TH = {
 
 export function labelStatus(code: string): string {
   return TH.status[code] ?? code;
+}
+
+export function labelInvitationStatus(code: string): string {
+  const labels: Record<string, string> = {
+    PENDING: "รอส่งคำเชิญ",
+    AUTH_SENT: "ส่งคำเชิญแล้ว",
+    COMPLETED: "เปิดใช้งานแล้ว",
+    FAILED: "ส่งไม่สำเร็จ",
+    PLATFORM_SETUP_FAILED: "จัดเตรียมสิทธิ์ไม่สำเร็จ",
+    CANCELLED: "ยกเลิก",
+    EXPIRED: "หมดอายุ",
+  };
+  return labels[code] ?? code;
 }
 
 export function labelRole(code: string): string {

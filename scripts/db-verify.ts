@@ -6,9 +6,26 @@ import {
 
 // Env is loaded by the db-preflight import (project files win over ambient stubs).
 
-export const EXPECTED_PLATFORM_TABLE_COUNT = 41;
+export const EXPECTED_PLATFORM_TABLE_COUNT = 43;
 
-/** Master / lookup tables seeded by prisma/seed-masters.ts */
+export const INVITATION_MIGRATION_NAME = "0003_user_invitations";
+
+export const INVITATION_TABLES = [
+  "user_invitation_statuses",
+  "user_invitations",
+] as const;
+
+export const EXPECTED_INVITATION_STATUS_CODES = [
+  "PENDING",
+  "AUTH_SENT",
+  "COMPLETED",
+  "FAILED",
+  "PLATFORM_SETUP_FAILED",
+  "CANCELLED",
+  "EXPIRED",
+] as const;
+
+/** Master / lookup tables seeded by prisma/seed-masters.ts (includes 0003). */
 export const MASTER_TABLES = [
   "user_profile_statuses",
   "platform_roles",
@@ -31,6 +48,7 @@ export const MASTER_TABLES = [
   "legacy_migration_statuses",
   "feature_value_types",
   "audit_action_types",
+  "user_invitation_statuses",
 ] as const;
 
 const SAFE_IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -62,6 +80,32 @@ async function countPlatformTables(query: SqlQuery): Promise<number> {
     WHERE table_schema = 'platform'
       AND table_type = 'BASE TABLE'
     `,
+  );
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+async function countInvitationTables(query: SqlQuery): Promise<number> {
+  const result = await query(
+    `
+    SELECT COUNT(*)::int AS count
+    FROM information_schema.tables
+    WHERE table_schema = 'platform'
+      AND table_type = 'BASE TABLE'
+      AND table_name = ANY($1::text[])
+    `,
+    [INVITATION_TABLES as unknown as string[]],
+  );
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+async function countInvitationStatuses(query: SqlQuery): Promise<number> {
+  const result = await query(
+    `
+    SELECT COUNT(*)::int AS count
+    FROM "platform"."user_invitation_statuses"
+    WHERE "code" = ANY($1::text[])
+    `,
+    [EXPECTED_INVITATION_STATUS_CODES as unknown as string[]],
   );
   return Number(result.rows[0]?.count ?? 0);
 }
@@ -106,8 +150,29 @@ export async function verifyPlatformDatabase(
   checks.push({
     name: `migration_${PLATFORM_MIGRATION_NAME}`,
     ok: migration.applied,
-    count: migration.applied ? 1 : 0,
-    detail: migration.reason,
+    count: migration.appliedCount,
+    detail: migration.applied ? undefined : migration.reason,
+  });
+
+  const migration0003 = await checkPlatformMigrationApplied(
+    query,
+    INVITATION_MIGRATION_NAME,
+  );
+  const invitationTableCount = await countInvitationTables(query);
+  const migration0003SchemaOk =
+    !migration0003.applied ||
+    invitationTableCount === INVITATION_TABLES.length;
+  const migration0003Ok = migration0003.applied && migration0003SchemaOk;
+  const migration0003Detail = migration0003Ok
+    ? `successful=${migration0003.appliedCount};rolled_back=${migration0003.rolledBackCount};unresolved=${migration0003.unresolvedCount}`
+    : !migration0003SchemaOk
+      ? "schema_inconsistent"
+      : migration0003.reason;
+  checks.push({
+    name: `migration_${INVITATION_MIGRATION_NAME}`,
+    ok: migration0003Ok,
+    count: migration0003.appliedCount,
+    detail: migration0003Detail,
   });
 
   const tableCount = await countPlatformTables(query);
@@ -115,6 +180,19 @@ export async function verifyPlatformDatabase(
     name: "platform_tables",
     ok: tableCount === EXPECTED_PLATFORM_TABLE_COUNT,
     count: tableCount,
+  });
+
+  checks.push({
+    name: "invitation_tables",
+    ok: invitationTableCount === INVITATION_TABLES.length,
+    count: invitationTableCount,
+  });
+
+  const invitationStatusCount = await countInvitationStatuses(query);
+  checks.push({
+    name: "invitation_statuses",
+    ok: invitationStatusCount === EXPECTED_INVITATION_STATUS_CODES.length,
+    count: invitationStatusCount,
   });
 
   const masters = await countMasterTablesWithData(query);
@@ -143,7 +221,7 @@ function printChecks(result: VerifyResult): void {
     const status = check.ok ? "PASS" : "FAIL";
     const countPart =
       check.count === undefined ? "" : ` count=${check.count}`;
-    const detailPart = check.detail && !check.ok ? ` (${check.detail})` : "";
+    const detailPart = check.detail ? ` (${check.detail})` : "";
     console.log(`${check.name}: ${status}${countPart}${detailPart}`);
   }
   console.log(`verify_result: ${result.ok ? "PASS" : "FAIL"}`);

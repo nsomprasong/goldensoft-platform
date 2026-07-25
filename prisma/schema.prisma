@@ -138,6 +138,7 @@ model OrganizationRole {
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   assignments OrganizationMembershipRole[]
+  invitations UserInvitation[]
 
   @@map("organization_roles")
   @@schema("platform")
@@ -156,6 +157,7 @@ model BranchScopeType {
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   branchScopes OrganizationMembershipBranchScope[]
+  invitations UserInvitation[]
 
   @@map("branch_scope_types")
   @@schema("platform")
@@ -396,6 +398,24 @@ model AuditActionType {
   @@schema("platform")
 }
 
+model UserInvitationStatus {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  nameTh      String   @map("name_th")
+  nameEn      String   @map("name_en")
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  isSystem    Boolean  @default(true) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  invitations UserInvitation[]
+
+  @@map("user_invitation_statuses")
+  @@schema("platform")
+}
+
 // ─── Business tables ──────────────────────────────────────────────────────
 
 model UserProfile {
@@ -415,6 +435,7 @@ model UserProfile {
   memberships                OrganizationMembership[]
   preference                 UserPreference?
   organizationProductMembers OrganizationProductMembership[]
+  invitationsSent            UserInvitation[]              @relation("InvitationInviter")
 
   @@index([statusId])
   @@map("user_profiles")
@@ -479,6 +500,7 @@ model Organization {
   productMemberships     OrganizationProductMembership[]
   auditLogs              AuditLog[]
   legacyIdentityMappings LegacyIdentityMapping[]
+  userInvitations        UserInvitation[]
 
   @@index([statusId])
   @@map("organizations")
@@ -571,6 +593,44 @@ model OrganizationMembershipBranchScope {
 
   @@index([membershipId, statusId])
   @@map("organization_membership_branch_scopes")
+  @@schema("platform")
+}
+
+model UserInvitation {
+  id                       String    @id @default(uuid()) @db.Uuid
+  emailNormalized          String    @map("email_normalized")
+  displayName              String    @map("display_name")
+  organizationId           String    @map("organization_id") @db.Uuid
+  organizationRoleId       String    @map("organization_role_id") @db.Uuid
+  branchScopeTypeId        String    @map("branch_scope_type_id") @db.Uuid
+  branchIdsJson            Json      @default("[]") @map("branch_ids_json") @db.JsonB
+  statusId                 String    @map("status_id") @db.Uuid
+  isActive                 Boolean   @default(true) @map("is_active")
+  invitedByProfileId       String    @map("invited_by_profile_id") @db.Uuid
+  authUserId               String?   @map("auth_user_id") @db.Uuid
+  idempotencyKey           String    @map("idempotency_key")
+  authInviteSentAt         DateTime? @map("auth_invite_sent_at") @db.Timestamptz(6)
+  platformSetupCompletedAt DateTime? @map("platform_setup_completed_at") @db.Timestamptz(6)
+  processingStartedAt      DateTime? @map("processing_started_at") @db.Timestamptz(6)
+  lastAttemptAt            DateTime? @map("last_attempt_at") @db.Timestamptz(6)
+  lastErrorCode            String?   @map("last_error_code")
+  attemptCount             Int       @default(0) @map("attempt_count")
+  expiresAt                DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organizationRole OrganizationRole     @relation(fields: [organizationRoleId], references: [id], onDelete: Restrict)
+  branchScopeType  BranchScopeType      @relation(fields: [branchScopeTypeId], references: [id], onDelete: Restrict)
+  status           UserInvitationStatus @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  invitedByProfile UserProfile          @relation("InvitationInviter", fields: [invitedByProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, createdAt])
+  @@index([emailNormalized, organizationId])
+  @@index([statusId, updatedAt])
+  @@index([authUserId])
+  @@map("user_invitations")
   @@schema("platform")
 }
 

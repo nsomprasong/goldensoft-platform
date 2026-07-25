@@ -37,6 +37,42 @@ const AUDIT_LABELS: Record<string, { nameTh: string; nameEn: string }> = {
     nameTh: "ส่งคำเชิญอีกครั้ง",
     nameEn: "Reinvite user",
   },
+  [MASTER.auditActionType.USER_INVITE_REQUESTED]: {
+    nameTh: "ร้องขอส่งคำเชิญ",
+    nameEn: "User invite requested",
+  },
+  [MASTER.auditActionType.USER_INVITE_SENT]: {
+    nameTh: "ส่งคำเชิญแล้ว",
+    nameEn: "User invite sent",
+  },
+  [MASTER.auditActionType.USER_INVITE_FAILED]: {
+    nameTh: "ส่งคำเชิญไม่สำเร็จ",
+    nameEn: "User invite failed",
+  },
+  [MASTER.auditActionType.USER_REINVITE_REQUESTED]: {
+    nameTh: "ร้องขอส่งคำเชิญอีกครั้ง",
+    nameEn: "User reinvite requested",
+  },
+  [MASTER.auditActionType.USER_REINVITE_SENT]: {
+    nameTh: "ส่งคำเชิญอีกครั้งแล้ว",
+    nameEn: "User reinvite sent",
+  },
+  [MASTER.auditActionType.USER_REINVITE_FAILED]: {
+    nameTh: "ส่งคำเชิญอีกครั้งไม่สำเร็จ",
+    nameEn: "User reinvite failed",
+  },
+  [MASTER.auditActionType.USER_INVITE_ACCEPTED]: {
+    nameTh: "ยอมรับคำเชิญ",
+    nameEn: "User invite accepted",
+  },
+  [MASTER.auditActionType.USER_PLATFORM_SETUP_COMPLETED]: {
+    nameTh: "จัดเตรียมสิทธิ์สำเร็จ",
+    nameEn: "User platform setup completed",
+  },
+  [MASTER.auditActionType.USER_PLATFORM_SETUP_FAILED]: {
+    nameTh: "จัดเตรียมสิทธิ์ไม่สำเร็จ",
+    nameEn: "User platform setup failed",
+  },
   [MASTER.auditActionType.USER_ACTIVATE]: {
     nameTh: "เปิดใช้งานบัญชี",
     nameEn: "Activate user",

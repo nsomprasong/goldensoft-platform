@@ -25,6 +25,9 @@ export type EnvGuardInput = {
   allowTestAuth?: string;
   caCertPath?: string;
   projectRoot?: string;
+  appUrl?: string;
+  authInviteMode?: string;
+  inviteRedirectPath?: string;
 };
 
 export type EnvGuardResult =
@@ -45,7 +48,10 @@ export type EnvGuardResult =
         | "CA_CERT_MISSING"
         | "CA_CERT_INVALID"
         | "DATABASE_URL_SSL_PARAM"
-        | "DIRECT_URL_TLS";
+        | "DIRECT_URL_TLS"
+        | "AUTH_INVITE_MODE"
+        | "AUTH_INVITE_APP_URL"
+        | "AUTH_INVITE_REDIRECT";
     };
 
 const NEW_PROJECT_REF_DEFAULT = "horyhrnqbeaivdztekfv";
@@ -304,6 +310,15 @@ export function assertSafeEnvironment(
     input.caCertPath ?? process.env.SUPABASE_DB_CA_CERT_PATH;
   // Always resolve CA paths from process.cwd() unless tests inject projectRoot.
   const projectRoot = path.resolve(input.projectRoot ?? process.cwd());
+  const authInviteMode =
+    input.authInviteMode ??
+    process.env.AUTH_INVITE_MODE ??
+    (nodeEnv === "production" ? "real" : "mock");
+  const appUrl = input.appUrl ?? process.env.NEXT_PUBLIC_APP_URL;
+  const inviteRedirectPath =
+    input.inviteRedirectPath ??
+    process.env.SUPABASE_INVITE_REDIRECT_PATH ??
+    "/auth/accept-invite";
 
   if (appCode !== "PLATFORM") {
     return {
@@ -336,6 +351,52 @@ export function assertSafeEnvironment(
     };
   }
 
+  if (!["mock", "real"].includes(authInviteMode)) {
+    return {
+      ok: false,
+      code: "AUTH_INVITE_MODE",
+      reason: "AUTH_INVITE_MODE must be mock or real",
+    };
+  }
+  if (nodeEnv === "production" && authInviteMode !== "real") {
+    return {
+      ok: false,
+      code: "AUTH_INVITE_MODE",
+      reason: "AUTH_INVITE_MODE=mock is forbidden in production",
+    };
+  }
+  if (appUrl) {
+    try {
+      const parsedAppUrl = new URL(appUrl);
+      if (
+        parsedAppUrl.username ||
+        parsedAppUrl.password ||
+        parsedAppUrl.search ||
+        parsedAppUrl.hash ||
+        (nodeEnv === "production" && parsedAppUrl.protocol !== "https:")
+      ) {
+        throw new Error("unsafe app URL");
+      }
+    } catch {
+      return {
+        ok: false,
+        code: "AUTH_INVITE_APP_URL",
+        reason: "NEXT_PUBLIC_APP_URL must be a safe HTTPS origin in production",
+      };
+    }
+  }
+  if (
+    !inviteRedirectPath.startsWith("/") ||
+    inviteRedirectPath.startsWith("//") ||
+    inviteRedirectPath.includes("\\")
+  ) {
+    return {
+      ok: false,
+      code: "AUTH_INVITE_REDIRECT",
+      reason: "SUPABASE_INVITE_REDIRECT_PATH must be an app-relative path",
+    };
+  }
+
   if (nodeEnv === "production" && !publishableKey?.trim()) {
     return {
       ok: false,
@@ -351,6 +412,13 @@ export function assertSafeEnvironment(
     if (nodeEnv === "production") {
       const caError = validateCaCertificateFile(caCertPath, projectRoot);
       if (caError) return caError;
+      if (!appUrl) {
+        return {
+          ok: false,
+          code: "AUTH_INVITE_APP_URL",
+          reason: "NEXT_PUBLIC_APP_URL is required in production",
+        };
+      }
     }
     return { ok: true, projectRef: expected };
   }
@@ -428,6 +496,14 @@ export function assertSafeEnvironment(
       ok: false,
       code: "UNEXPECTED_REF",
       reason: "Supabase project ref does not match EXPECTED_SUPABASE_PROJECT_REF",
+    };
+  }
+
+  if (nodeEnv === "production" && !appUrl) {
+    return {
+      ok: false,
+      code: "AUTH_INVITE_APP_URL",
+      reason: "NEXT_PUBLIC_APP_URL is required in production",
     };
   }
 

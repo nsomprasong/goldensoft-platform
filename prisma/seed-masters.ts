@@ -201,6 +201,23 @@ export async function seedAllMasters(prisma: PrismaClient) {
       ],
     ],
     [
+      "userInvitationStatus",
+      [
+        { code: "PENDING", nameTh: "รอส่งคำเชิญ", nameEn: "Pending", sortOrder: 1 },
+        { code: "AUTH_SENT", nameTh: "ส่งคำเชิญแล้ว", nameEn: "Auth sent", sortOrder: 2 },
+        { code: "COMPLETED", nameTh: "เปิดใช้งานแล้ว", nameEn: "Completed", sortOrder: 3 },
+        { code: "FAILED", nameTh: "ส่งไม่สำเร็จ", nameEn: "Failed", sortOrder: 4 },
+        {
+          code: "PLATFORM_SETUP_FAILED",
+          nameTh: "จัดเตรียมสิทธิ์ไม่สำเร็จ",
+          nameEn: "Platform setup failed",
+          sortOrder: 5,
+        },
+        { code: "CANCELLED", nameTh: "ยกเลิก", nameEn: "Cancelled", sortOrder: 6 },
+        { code: "EXPIRED", nameTh: "หมดอายุ", nameEn: "Expired", sortOrder: 7 },
+      ],
+    ],
+    [
       "auditActionType",
       [
         {
@@ -311,6 +328,15 @@ export async function seedAllMasters(prisma: PrismaClient) {
           nameEn: "Create subscription",
           sortOrder: 18,
         },
+        { code: "user.invite.requested", nameTh: "ร้องขอส่งคำเชิญ", nameEn: "User invite requested", sortOrder: 19 },
+        { code: "user.invite.sent", nameTh: "ส่งคำเชิญแล้ว", nameEn: "User invite sent", sortOrder: 20 },
+        { code: "user.invite.failed", nameTh: "ส่งคำเชิญไม่สำเร็จ", nameEn: "User invite failed", sortOrder: 21 },
+        { code: "user.reinvite.requested", nameTh: "ร้องขอส่งคำเชิญอีกครั้ง", nameEn: "User reinvite requested", sortOrder: 22 },
+        { code: "user.reinvite.sent", nameTh: "ส่งคำเชิญอีกครั้งแล้ว", nameEn: "User reinvite sent", sortOrder: 23 },
+        { code: "user.reinvite.failed", nameTh: "ส่งคำเชิญอีกครั้งไม่สำเร็จ", nameEn: "User reinvite failed", sortOrder: 24 },
+        { code: "user.invite.accepted", nameTh: "ยอมรับคำเชิญ", nameEn: "User invite accepted", sortOrder: 25 },
+        { code: "user.platform_setup.completed", nameTh: "จัดเตรียมสิทธิ์สำเร็จ", nameEn: "User platform setup completed", sortOrder: 26 },
+        { code: "user.platform_setup.failed", nameTh: "จัดเตรียมสิทธิ์ไม่สำเร็จ", nameEn: "User platform setup failed", sortOrder: 27 },
       ],
     ],
   ];

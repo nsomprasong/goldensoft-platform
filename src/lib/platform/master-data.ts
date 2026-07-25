@@ -21,7 +21,8 @@ export type MasterTableName =
   | "idempotencyStatus"
   | "legacyMigrationStatus"
   | "featureValueType"
-  | "auditActionType";
+  | "auditActionType"
+  | "userInvitationStatus";
 
 type MasterRow = {
   id: string;
@@ -107,9 +108,17 @@ export async function countMasterReferences(
     case "membershipStatus":
       return db.organizationMembership.count({ where: { statusId: masterId } });
     case "organizationRole":
-      return db.organizationMembershipRole.count({ where: { roleId: masterId } });
+      return (
+        (await db.organizationMembershipRole.count({ where: { roleId: masterId } })) +
+        (await db.userInvitation.count({ where: { organizationRoleId: masterId } }))
+      );
     case "branchScopeType":
-      return db.organizationMembershipBranchScope.count({ where: { scopeTypeId: masterId } });
+      return (
+        (await db.organizationMembershipBranchScope.count({
+          where: { scopeTypeId: masterId },
+        })) +
+        (await db.userInvitation.count({ where: { branchScopeTypeId: masterId } }))
+      );
     case "productStatus":
       return db.product.count({ where: { statusId: masterId } });
     case "featureStatus":
@@ -139,6 +148,8 @@ export async function countMasterReferences(
       return db.planVersionFeature.count({ where: { valueTypeId: masterId } });
     case "auditActionType":
       return db.auditLog.count({ where: { actionTypeId: masterId } });
+    case "userInvitationStatus":
+      return db.userInvitation.count({ where: { statusId: masterId } });
     default:
       return 0;
   }

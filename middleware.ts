@@ -5,6 +5,18 @@ import { isTestAuthEnabled } from "@/lib/env/test-auth";
 import { updateSession } from "@/lib/supabase/middleware";
 
 export async function middleware(request: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    const inviteConfigurationError = productionInviteConfigurationError();
+    if (inviteConfigurationError) {
+      return NextResponse.json(
+        {
+          code: inviteConfigurationError,
+          message: "การตั้งค่าระบบคำเชิญใน Production ไม่ปลอดภัย",
+        },
+        { status: 500 },
+      );
+    }
+  }
   if (
     process.env.NODE_ENV === "production" &&
     isTestAuthEnabled(process.env.ALLOW_TEST_AUTH)
@@ -55,6 +67,36 @@ export async function middleware(request: NextRequest) {
   }
 
   return response;
+}
+
+function productionInviteConfigurationError(): string | null {
+  if ((process.env.AUTH_INVITE_MODE ?? "real") !== "real") {
+    return "AUTH_INVITE_MOCK_IN_PRODUCTION";
+  }
+  if (
+    !process.env.SUPABASE_SECRET_KEY ||
+    !process.env.NEXT_PUBLIC_SUPABASE_URL
+  ) {
+    return "AUTH_INVITE_CONFIGURATION_MISSING";
+  }
+  try {
+    const appUrl = new URL(process.env.NEXT_PUBLIC_APP_URL ?? "");
+    if (appUrl.protocol !== "https:" || appUrl.search || appUrl.hash) {
+      return "AUTH_INVITE_APP_URL_INVALID";
+    }
+  } catch {
+    return "AUTH_INVITE_APP_URL_INVALID";
+  }
+  const redirectPath =
+    process.env.SUPABASE_INVITE_REDIRECT_PATH ?? "/auth/accept-invite";
+  if (
+    !redirectPath.startsWith("/") ||
+    redirectPath.startsWith("//") ||
+    redirectPath.includes("\\")
+  ) {
+    return "AUTH_INVITE_REDIRECT_INVALID";
+  }
+  return null;
 }
 
 export const config = {
