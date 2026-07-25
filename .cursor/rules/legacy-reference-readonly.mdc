@@ -1,0 +1,44 @@
+﻿---
+description: Protect Resident Legacy and enforce isolated development
+alwaysApply: true
+---
+
+# Resident Legacy Protection
+
+The workspace may contain a folder named:
+
+REFERENCE ONLY - Resident Legacy
+
+This folder is strictly read-only reference material.
+
+## Never perform these actions inside the legacy folder
+
+- Never create files
+- Never edit files
+- Never delete files
+- Never rename or move files
+- Never format files
+- Never install packages
+- Never run database migrations
+- Never change environment files
+- Never commit or push
+- Never run commands whose working directory is the legacy folder
+
+## Allowed actions
+
+- Read source code
+- Search source code
+- Analyze business logic
+- Analyze UI flows
+- Analyze validation
+- Analyze Prisma models
+- Analyze API behavior
+- Analyze permissions and reports
+
+## Implementation rule
+
+All new source code, documentation, tests, migrations, and configuration
+must be created inside the TARGET project only.
+
+Before making changes, list the files that will be modified and confirm
+that every file is inside the TARGET project.
