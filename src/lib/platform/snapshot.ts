@@ -1,4 +1,4 @@
-import type { BillingCycle, Plan, PlanVersion, Product, Prisma } from "@prisma/client";
+import type { Plan, PlanVersion, Product, Prisma } from "@prisma/client";
 
 import type { SubscriptionSnapshot } from "@/lib/context/types";
 
@@ -6,7 +6,7 @@ export function buildSubscriptionSnapshot(input: {
   product: Pick<Product, "code">;
   plan: Pick<Plan, "code" | "name">;
   planVersion: Pick<PlanVersion, "versionNumber" | "currency" | "priceAmount">;
-  billingCycle: BillingCycle;
+  billingCycleCode: string;
   featureCodes: string[];
   limits: Record<string, number | boolean | string>;
   capturedAt?: Date;
@@ -18,7 +18,7 @@ export function buildSubscriptionSnapshot(input: {
     planVersion: input.planVersion.versionNumber,
     planName: input.plan.name,
     currency: input.planVersion.currency,
-    billingCycle: input.billingCycle,
+    billingCycle: input.billingCycleCode,
     basePrice: Number(input.planVersion.priceAmount),
     featureCodes: [...input.featureCodes].sort(),
     limits: { ...input.limits },

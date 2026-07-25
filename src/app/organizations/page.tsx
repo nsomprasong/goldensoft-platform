@@ -7,7 +7,10 @@ export const dynamic = "force-dynamic";
 export default async function OrganizationsPage() {
   const organizations = await prisma.organization.findMany({
     where: { deletedAt: null },
-    include: { _count: { select: { branches: true } } },
+    include: {
+      status: true,
+      _count: { select: { branches: true } },
+    },
     orderBy: { displayName: "asc" },
   });
 
@@ -28,7 +31,7 @@ export default async function OrganizationsPage() {
                 {org.customerCode} · {org.slug} · {org._count.branches} branches
               </p>
             </div>
-            <span className="text-xs font-semibold">{org.status}</span>
+            <span className="text-xs font-semibold">{org.status.code}</span>
           </li>
         ))}
       </ul>

@@ -10,19 +10,21 @@ export async function GET(request: NextRequest) {
   }
 
   const products = await prisma.product.findMany({
-    where: { status: "ACTIVE" },
+    where: { status: { code: "ACTIVE" } },
     include: {
+      status: true,
       plans: {
-        where: { status: "ACTIVE" },
+        where: { status: { code: "ACTIVE" } },
         include: {
+          status: true,
           versions: {
-            where: { status: "PUBLISHED" },
+            where: { status: { code: "PUBLISHED" } },
             orderBy: { versionNumber: "desc" },
             take: 1,
           },
         },
       },
-      features: { where: { status: "ACTIVE" } },
+      features: { where: { status: { code: "ACTIVE" } } },
     },
     orderBy: { code: "asc" },
   });

@@ -4,7 +4,10 @@ export const dynamic = "force-dynamic";
 
 export default async function ProductsPage() {
   const products = await prisma.product.findMany({
-    include: { _count: { select: { features: true, plans: true } } },
+    include: {
+      status: true,
+      _count: { select: { features: true, plans: true } },
+    },
     orderBy: { code: "asc" },
   });
 
@@ -18,7 +21,8 @@ export default async function ProductsPage() {
               {p.code} — {p.name}
             </div>
             <p className="text-xs text-slate-500">
-              {p._count.plans} plans · {p._count.features} features · {p.status}
+              {p._count.plans} plans · {p._count.features} features ·{" "}
+              {p.status.code}
             </p>
           </li>
         ))}

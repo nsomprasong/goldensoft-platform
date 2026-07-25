@@ -6,7 +6,11 @@ export default async function PlansPage() {
   const plans = await prisma.plan.findMany({
     include: {
       product: true,
-      versions: { orderBy: { versionNumber: "desc" }, take: 3 },
+      versions: {
+        include: { status: true },
+        orderBy: { versionNumber: "desc" },
+        take: 3,
+      },
     },
     orderBy: [{ product: { code: "asc" } }, { code: "asc" }],
   });
@@ -23,7 +27,7 @@ export default async function PlansPage() {
             <p className="text-xs text-slate-500">
               versions:{" "}
               {plan.versions
-                .map((v) => `v${v.versionNumber}:${v.status}`)
+                .map((v) => `v${v.versionNumber}:${v.status.code}`)
                 .join(", ") || "none"}
             </p>
           </li>

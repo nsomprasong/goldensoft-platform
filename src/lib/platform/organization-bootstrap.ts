@@ -1,6 +1,8 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { withIdempotency } from "@/lib/platform/idempotency";
+import { MASTER } from "@/lib/platform/master-codes";
+import { requireActiveMasterId } from "@/lib/platform/master-data";
 
 export type BootstrapOrganizationInput = {
   customerCode: string;
@@ -43,6 +45,32 @@ export async function bootstrapOrganization(
     },
     execute: async () => {
       return db.$transaction(async (tx) => {
+        const [
+          userActiveId,
+          orgActiveId,
+          branchActiveId,
+          membershipActiveId,
+          ownerRoleId,
+          assignmentActiveId,
+          allBranchesScopeId,
+          auditActionId,
+          outboxPendingId,
+        ] = await Promise.all([
+          requireActiveMasterId(tx, "userProfileStatus", MASTER.userProfileStatus.ACTIVE),
+          requireActiveMasterId(tx, "organizationStatus", MASTER.organizationStatus.ACTIVE),
+          requireActiveMasterId(tx, "branchStatus", MASTER.branchStatus.ACTIVE),
+          requireActiveMasterId(tx, "membershipStatus", MASTER.membershipStatus.ACTIVE),
+          requireActiveMasterId(tx, "organizationRole", MASTER.organizationRole.OWNER),
+          requireActiveMasterId(tx, "assignmentStatus", MASTER.assignmentStatus.ACTIVE),
+          requireActiveMasterId(tx, "branchScopeType", MASTER.branchScopeType.ALL_BRANCHES),
+          requireActiveMasterId(
+            tx,
+            "auditActionType",
+            MASTER.auditActionType.ORGANIZATION_BOOTSTRAP,
+          ),
+          requireActiveMasterId(tx, "outboxEventStatus", MASTER.outboxEventStatus.PENDING),
+        ]);
+
         let owner = await tx.userProfile.findUnique({
           where: { authUserId: input.ownerAuthUserId },
         });
@@ -53,7 +81,7 @@ export async function bootstrapOrganization(
               authUserId: input.ownerAuthUserId,
               email: input.ownerEmail,
               displayName: input.ownerDisplayName,
-              status: "ACTIVE",
+              statusId: userActiveId,
             },
           });
         }
@@ -67,7 +95,7 @@ export async function bootstrapOrganization(
             timezone: input.timezone ?? "Asia/Bangkok",
             currency: input.currency ?? "THB",
             taxId: input.taxId ?? null,
-            status: "ACTIVE",
+            statusId: orgActiveId,
           },
         });
 
@@ -79,7 +107,7 @@ export async function bootstrapOrganization(
               code: input.initialBranch.code,
               name: input.initialBranch.name,
               timezone: input.initialBranch.timezone ?? organization.timezone,
-              status: "ACTIVE",
+              statusId: branchActiveId,
             },
           });
           branchId = branch.id;
@@ -89,7 +117,7 @@ export async function bootstrapOrganization(
           data: {
             organizationId: organization.id,
             userProfileId: owner.id,
-            status: "ACTIVE",
+            statusId: membershipActiveId,
             joinedAt: new Date(),
             invitedByAuthUserId: input.actorAuthUserId,
           },
@@ -98,16 +126,16 @@ export async function bootstrapOrganization(
         await tx.organizationMembershipRole.create({
           data: {
             membershipId: membership.id,
-            role: "OWNER",
-            status: "ACTIVE",
+            roleId: ownerRoleId,
+            statusId: assignmentActiveId,
           },
         });
 
         await tx.organizationMembershipBranchScope.create({
           data: {
             membershipId: membership.id,
-            scopeType: "ALL_BRANCHES",
-            status: "ACTIVE",
+            scopeTypeId: allBranchesScopeId,
+            statusId: assignmentActiveId,
           },
         });
 
@@ -128,7 +156,7 @@ export async function bootstrapOrganization(
           data: {
             organizationId: organization.id,
             actorAuthUserId: input.actorAuthUserId,
-            action: "organization.bootstrap",
+            actionTypeId: auditActionId,
             entityType: "Organization",
             entityId: organization.id,
             afterJson: {
@@ -146,6 +174,7 @@ export async function bootstrapOrganization(
             aggregateId: organization.id,
             eventType: "organization.created",
             organizationId: organization.id,
+            statusId: outboxPendingId,
             payloadJson: {
               organizationId: organization.id,
               customerCode: organization.customerCode,
@@ -177,44 +206,72 @@ export async function revokeOrganizationRole(
   await db.$transaction(async (tx) => {
     const role = await tx.organizationMembershipRole.findUnique({
       where: { id: input.membershipRoleId },
-      include: { membership: true },
+      include: {
+        membership: true,
+        role: true,
+        status: true,
+      },
     });
 
-    if (!role || role.status !== "ACTIVE") {
+    if (!role || role.status.code !== MASTER.assignmentStatus.ACTIVE) {
       throw new Error("Role assignment not found");
     }
 
-    if (role.role === "OWNER") {
+    if (role.role.code === MASTER.organizationRole.OWNER) {
+      const ownerRole = await tx.organizationRole.findUnique({
+        where: { code: MASTER.organizationRole.OWNER },
+      });
+      const activeStatus = await tx.assignmentStatus.findUnique({
+        where: { code: MASTER.assignmentStatus.ACTIVE },
+      });
+      const membershipActive = await tx.membershipStatus.findUnique({
+        where: { code: MASTER.membershipStatus.ACTIVE },
+      });
+      if (!ownerRole || !activeStatus || !membershipActive) {
+        throw new Error("Master data incomplete");
+      }
+
       const activeOwners = await tx.organizationMembershipRole.count({
         where: {
-          role: "OWNER",
-          status: "ACTIVE",
+          roleId: ownerRole.id,
+          statusId: activeStatus.id,
           membership: {
             organizationId: role.membership.organizationId,
-            status: "ACTIVE",
+            statusId: membershipActive.id,
           },
         },
       });
 
-      if (activeOwners <= 1) {
+      if (wouldRemoveLastOwner(activeOwners)) {
         throw new Error("Cannot revoke the last active OWNER");
       }
     }
 
+    const revokedStatusId = await requireActiveMasterId(
+      tx,
+      "assignmentStatus",
+      MASTER.assignmentStatus.REVOKED,
+    );
+    const auditActionId = await requireActiveMasterId(
+      tx,
+      "auditActionType",
+      MASTER.auditActionType.ORGANIZATION_ROLE_REVOKE,
+    );
+
     await tx.organizationMembershipRole.update({
       where: { id: role.id },
-      data: { status: "REVOKED", revokedAt: new Date() },
+      data: { statusId: revokedStatusId, revokedAt: new Date() },
     });
 
     await tx.auditLog.create({
       data: {
         organizationId: role.membership.organizationId,
         actorAuthUserId: input.actorAuthUserId,
-        action: "organization.role.revoke",
+        actionTypeId: auditActionId,
         entityType: "OrganizationMembershipRole",
         entityId: role.id,
-        beforeJson: { role: role.role, status: role.status },
-        afterJson: { role: role.role, status: "REVOKED" },
+        beforeJson: { role: role.role.code, status: role.status.code },
+        afterJson: { role: role.role.code, status: MASTER.assignmentStatus.REVOKED },
       },
     });
   });

@@ -47,7 +47,7 @@ describe("Platform tenant isolation helpers", () => {
         currency: "THB",
         priceAmount: 1990 as never,
       },
-      billingCycle: "MONTHLY",
+      billingCycleCode: "MONTHLY",
       featureCodes: ["hr.employee.read"],
       limits: { maxEmployees: 50 },
     });

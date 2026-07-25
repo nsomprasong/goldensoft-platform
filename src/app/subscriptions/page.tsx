@@ -5,7 +5,12 @@ export const dynamic = "force-dynamic";
 
 export default async function SubscriptionsPage() {
   const subscriptions = await prisma.subscription.findMany({
-    include: { organization: true, product: true, plan: true },
+    include: {
+      organization: true,
+      product: true,
+      plan: true,
+      status: true,
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -25,7 +30,7 @@ export default async function SubscriptionsPage() {
                 {sub.plan.code}
               </div>
               <p className="text-xs text-slate-500">
-                {sub.status} · snapshot v{snapshot.planVersion} · features{" "}
+                {sub.status.code} · snapshot v{snapshot.planVersion} · features{" "}
                 {snapshot.featureCodes.length}
               </p>
             </li>

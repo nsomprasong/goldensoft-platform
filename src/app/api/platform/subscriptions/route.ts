@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireAuthUser } from "@/lib/auth/request-auth";
+import { MASTER } from "@/lib/platform/master-codes";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions/codes";
 import { permissionsForRoles } from "@/lib/permissions/codes";
 import { createSubscription } from "@/lib/platform/subscriptions";
 import { prisma } from "@/lib/prisma";
-import type { BillingCycle } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   const user = await requireAuthUser(request);
@@ -14,18 +14,33 @@ export async function GET(request: NextRequest) {
   }
 
   const organizationId = request.nextUrl.searchParams.get("organizationId");
+  const assignmentActive = await prisma.assignmentStatus.findUnique({
+    where: { code: MASTER.assignmentStatus.ACTIVE },
+  });
+  const membershipActive = await prisma.membershipStatus.findUnique({
+    where: { code: MASTER.membershipStatus.ACTIVE },
+  });
+  if (!assignmentActive || !membershipActive) {
+    return NextResponse.json({ message: "Master data incomplete" }, { status: 503 });
+  }
+
   const profile = await prisma.userProfile.findUnique({
     where: { authUserId: user.id },
     include: {
-      platformRoles: { where: { status: "ACTIVE" } },
-      memberships: { where: { status: "ACTIVE" } },
+      platformRoles: {
+        where: { statusId: assignmentActive.id },
+        include: { role: true },
+      },
+      memberships: { where: { statusId: membershipActive.id } },
     },
   });
   if (!profile) {
     return NextResponse.json({ message: "Profile not found" }, { status: 403 });
   }
 
-  const isSuper = profile.platformRoles.some((r) => r.role === "SUPER_ADMIN");
+  const isSuper = profile.platformRoles.some(
+    (r) => r.role.code === MASTER.platformRole.SUPER_ADMIN,
+  );
   const memberOrgIds = profile.memberships.map((m) => m.organizationId);
 
   if (organizationId && !isSuper && !memberOrgIds.includes(organizationId)) {
@@ -40,11 +55,23 @@ export async function GET(request: NextRequest) {
           ? undefined
           : { in: memberOrgIds },
     },
-    include: { product: true, plan: true, organization: true },
+    include: {
+      product: true,
+      plan: true,
+      organization: true,
+      status: true,
+      billingCycle: true,
+    },
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json({ subscriptions });
+  return NextResponse.json({
+    subscriptions: subscriptions.map((s) => ({
+      ...s,
+      status: s.status.code,
+      billingCycle: s.billingCycle.code,
+    })),
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -53,14 +80,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Authentication required" }, { status: 401 });
   }
 
+  const assignmentActive = await prisma.assignmentStatus.findUnique({
+    where: { code: MASTER.assignmentStatus.ACTIVE },
+  });
+  if (!assignmentActive) {
+    return NextResponse.json({ message: "Master data incomplete" }, { status: 503 });
+  }
+
   const profile = await prisma.userProfile.findUnique({
     where: { authUserId: user.id },
-    include: { platformRoles: { where: { status: "ACTIVE" } } },
+    include: {
+      platformRoles: {
+        where: { statusId: assignmentActive.id },
+        include: { role: true },
+      },
+    },
   });
-  const platformRoles = profile?.platformRoles.map((r) => r.role) ?? [];
+  const platformRoles = profile?.platformRoles.map((r) => r.role.code) ?? [];
   const perms = permissionsForRoles({ platformRoles, organizationRoles: [] });
   if (
-    !platformRoles.includes("SUPER_ADMIN") &&
+    !platformRoles.includes(MASTER.platformRole.SUPER_ADMIN) &&
     !perms.includes(PLATFORM_PERMISSIONS.subscriptionManage)
   ) {
     return NextResponse.json({ message: "Insufficient permissions" }, { status: 403 });
@@ -70,19 +109,21 @@ export async function POST(request: NextRequest) {
     organizationId?: string;
     productCode?: string;
     planCode?: string;
-    billingCycle?: BillingCycle;
+    billingCycle?: string;
+    billingCycleCode?: string;
     idempotencyKey?: string;
     limits?: Record<string, number | boolean | string>;
   };
 
   const idempotencyKey =
     body.idempotencyKey ?? request.headers.get("idempotency-key");
+  const billingCycleCode = body.billingCycleCode ?? body.billingCycle;
 
   if (
     !body.organizationId ||
     !body.productCode ||
     !body.planCode ||
-    !body.billingCycle ||
+    !billingCycleCode ||
     !idempotencyKey
   ) {
     return NextResponse.json(
@@ -96,7 +137,7 @@ export async function POST(request: NextRequest) {
       organizationId: body.organizationId,
       productCode: body.productCode,
       planCode: body.planCode,
-      billingCycle: body.billingCycle,
+      billingCycleCode,
       actorAuthUserId: user.id,
       idempotencyKey,
       limits: body.limits,

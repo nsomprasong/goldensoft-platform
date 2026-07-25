@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireAuthUser } from "@/lib/auth/request-auth";
+import { MASTER } from "@/lib/platform/master-codes";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions/codes";
 import { permissionsForRoles } from "@/lib/permissions/codes";
 import { bootstrapOrganization } from "@/lib/platform/organization-bootstrap";
@@ -15,33 +16,51 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const assignmentActive = await prisma.assignmentStatus.findUnique({
+    where: { code: MASTER.assignmentStatus.ACTIVE },
+  });
+  const membershipActive = await prisma.membershipStatus.findUnique({
+    where: { code: MASTER.membershipStatus.ACTIVE },
+  });
+  if (!assignmentActive || !membershipActive) {
+    return NextResponse.json({ message: "Master data incomplete" }, { status: 503 });
+  }
+
   const profile = await prisma.userProfile.findUnique({
     where: { authUserId: user.id },
     include: {
-      platformRoles: { where: { status: "ACTIVE" } },
+      platformRoles: {
+        where: { statusId: assignmentActive.id },
+        include: { role: true },
+      },
       memberships: {
-        where: { status: "ACTIVE" },
-        include: { organization: true },
+        where: { statusId: membershipActive.id },
+        include: { organization: { include: { status: true } } },
       },
     },
   });
 
   if (!profile) {
-    return NextResponse.json(
-      { message: "Profile not found" },
-      { status: 403 },
-    );
+    return NextResponse.json({ message: "Profile not found" }, { status: 403 });
   }
 
-  const isSuper = profile.platformRoles.some((r) => r.role === "SUPER_ADMIN");
+  const isSuper = profile.platformRoles.some(
+    (r) => r.role.code === MASTER.platformRole.SUPER_ADMIN,
+  );
   const orgs = isSuper
     ? await prisma.organization.findMany({
         where: { deletedAt: null },
+        include: { status: true },
         orderBy: { displayName: "asc" },
       })
     : profile.memberships.map((m) => m.organization);
 
-  return NextResponse.json({ organizations: orgs });
+  return NextResponse.json({
+    organizations: orgs.map((o) => ({
+      ...o,
+      status: o.status.code,
+    })),
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -53,19 +72,31 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const assignmentActive = await prisma.assignmentStatus.findUnique({
+    where: { code: MASTER.assignmentStatus.ACTIVE },
+  });
+  if (!assignmentActive) {
+    return NextResponse.json({ message: "Master data incomplete" }, { status: 503 });
+  }
+
   const profile = await prisma.userProfile.findUnique({
     where: { authUserId: user.id },
-    include: { platformRoles: { where: { status: "ACTIVE" } } },
+    include: {
+      platformRoles: {
+        where: { statusId: assignmentActive.id },
+        include: { role: true },
+      },
+    },
   });
 
-  const platformRoles = profile?.platformRoles.map((r) => r.role) ?? [];
+  const platformRoles = profile?.platformRoles.map((r) => r.role.code) ?? [];
   const perms = permissionsForRoles({
     platformRoles,
     organizationRoles: [],
   });
 
   if (
-    !platformRoles.includes("SUPER_ADMIN") &&
+    !platformRoles.includes(MASTER.platformRole.SUPER_ADMIN) &&
     !perms.includes(PLATFORM_PERMISSIONS.organizationManage)
   ) {
     return NextResponse.json(
@@ -86,7 +117,6 @@ export async function POST(request: NextRequest) {
     idempotencyKey?: string;
   };
 
-  // Never accept OWNER role from client — bootstrap always assigns OWNER server-side.
   if (!body.customerCode || !body.slug || !body.legalName || !body.displayName) {
     return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
   }

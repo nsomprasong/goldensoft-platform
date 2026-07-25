@@ -1,22 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireAuthUser } from "@/lib/auth/request-auth";
+import { MASTER } from "@/lib/platform/master-codes";
+import { requireActiveMasterId } from "@/lib/platform/master-data";
 import { prisma } from "@/lib/prisma";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 async function assertOrgAccess(authUserId: string, organizationId: string) {
+  const assignmentActive = await prisma.assignmentStatus.findUnique({
+    where: { code: MASTER.assignmentStatus.ACTIVE },
+  });
+  const membershipActive = await prisma.membershipStatus.findUnique({
+    where: { code: MASTER.membershipStatus.ACTIVE },
+  });
+  if (!assignmentActive || !membershipActive) return false;
+
   const profile = await prisma.userProfile.findUnique({
     where: { authUserId },
     include: {
-      platformRoles: { where: { status: "ACTIVE" } },
+      platformRoles: {
+        where: { statusId: assignmentActive.id },
+        include: { role: true },
+      },
       memberships: {
-        where: { organizationId, status: "ACTIVE" },
+        where: { organizationId, statusId: membershipActive.id },
       },
     },
   });
   if (!profile) return false;
-  if (profile.platformRoles.some((r) => r.role === "SUPER_ADMIN")) return true;
+  if (
+    profile.platformRoles.some(
+      (r) => r.role.code === MASTER.platformRole.SUPER_ADMIN,
+    )
+  ) {
+    return true;
+  }
   return profile.memberships.length > 0;
 }
 
@@ -62,19 +81,30 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   try {
     const branch = await prisma.$transaction(async (tx) => {
+      const statusId = await requireActiveMasterId(
+        tx,
+        "branchStatus",
+        MASTER.branchStatus.ACTIVE,
+      );
+      const actionTypeId = await requireActiveMasterId(
+        tx,
+        "auditActionType",
+        MASTER.auditActionType.BRANCH_CREATE,
+      );
       const created = await tx.branch.create({
         data: {
           organizationId: id,
           code: body.code!,
           name: body.name!,
           timezone: body.timezone ?? "Asia/Bangkok",
+          statusId,
         },
       });
       await tx.auditLog.create({
         data: {
           organizationId: id,
           actorAuthUserId: user.id,
-          action: "branch.create",
+          actionTypeId,
           entityType: "Branch",
           entityId: created.id,
           afterJson: {

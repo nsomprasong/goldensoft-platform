@@ -1,5 +1,9 @@
 # Implementation Status
 
+## Architecture Rule
+
+`GoldenSoft uses master tables instead of Prisma/PostgreSQL enums.`
+
 ## Completed
 
 ### Phase 2
@@ -7,7 +11,7 @@
 
 ### Phase 3
 - Prisma datasource → PostgreSQL with `schemas = ["platform"]`
-- All models/enums tagged `@@schema("platform")`
+- All models tagged `@@schema("platform")`
 - JSONB subscription snapshot, timestamptz, Decimal money fields
 - `@prisma/adapter-pg` + `pg` runtime singleton
 - `prisma.config.ts` loads `.env.local` / `.env`; CLI uses `DIRECT_URL`
@@ -15,6 +19,37 @@
 - Auth vars: `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` (server-only admin module)
 - Initial migration SQL preview: `prisma/migrations/0001_platform_initial/migration.sql`
 - `npm run db:migration:check`, `npm run db:preflight` (preflight needs real `.env.local`)
+
+### Phase 3B — Enums → Master Tables
+- Removed all Prisma `enum` declarations (17 former enums)
+- Each status/type/role/cycle is a dedicated master model with FK from business tables
+- Seed masters idempotent via `prisma/seed-masters.ts`
+- Master service guards: code immutable when referenced, no delete for `isSystem` or referenced rows, inactive blocked for new writes
+- Migration preview regenerated — no `CREATE TYPE` / `AS ENUM`
+
+#### Enum → Master mapping
+
+| Former Enum | Used on (examples) | Master Model | Seed codes |
+|-------------|-------------------|--------------|------------|
+| UserProfileStatus | UserProfile.status | UserProfileStatus | ACTIVE, DISABLED, PENDING |
+| PlatformRole | PlatformRoleAssignment.role | PlatformRole | SUPER_ADMIN, SUPPORT, BILLING_ADMIN |
+| AssignmentStatus | role assignments, overrides, scopes | AssignmentStatus | ACTIVE, REVOKED |
+| OrganizationStatus | Organization.status | OrganizationStatus | ACTIVE, SUSPENDED, CLOSED |
+| BranchStatus | Branch.status | BranchStatus | ACTIVE, INACTIVE |
+| MembershipStatus | OrganizationMembership.status | MembershipStatus | INVITED, ACTIVE, SUSPENDED, REMOVED |
+| OrganizationRole | OrganizationMembershipRole.role | OrganizationRole | OWNER, ADMIN, BILLING_CONTACT |
+| BranchScopeType | OrganizationMembershipBranchScope.scopeType | BranchScopeType | ALL_BRANCHES, SELECTED, NONE |
+| CatalogStatus | Product / Feature / Plan status | ProductStatus, FeatureStatus, PlanStatus | ACTIVE, RETIRED |
+| PlanVersionStatus | PlanVersion.status | PlanVersionStatus | DRAFT, PUBLISHED, RETIRED |
+| BillingCycle | PlanVersion default, Subscription | BillingCycle | MONTHLY, YEARLY, MANUAL |
+| SubscriptionStatus | Subscription.status | SubscriptionStatus | TRIAL, ACTIVE, PAST_DUE, SUSPENDED, CANCELLED, EXPIRED |
+| OverrideEffect | SubscriptionFeatureOverride | SubscriptionOverrideType | GRANT, REVOKE, LIMIT |
+| ProductMembershipStatus | OrganizationProductMembership | ProductMembershipStatus | ACTIVE, SUSPENDED, REVOKED |
+| OutboxStatus | OutboxEvent.status | OutboxEventStatus | PENDING, PROCESSING, PROCESSED, FAILED, DEAD |
+| IdempotencyStatus | IdempotencyKey.status | IdempotencyStatus | IN_PROGRESS, COMPLETED, FAILED |
+| MigrationStatus | LegacyIdentityMapping | LegacyMigrationStatus | PENDING, LINKED, MIGRATED, FAILED, IGNORED |
+
+Additional masters (not former Prisma enums, but required as lookup): FeatureValueType (STRING, NUMBER, BOOLEAN), AuditActionType (action codes).
 
 ## Not Implemented
 

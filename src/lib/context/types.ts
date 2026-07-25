@@ -26,9 +26,4 @@ export type SubscriptionSnapshot = {
   capturedAt: string;
 };
 
-export const ACTIVE_SUBSCRIPTION_STATUSES = [
-  "TRIAL",
-  "ACTIVE",
-  "PAST_DUE",
-  "SUSPENDED",
-] as const;
+export { ACTIVE_SUBSCRIPTION_STATUS_CODES as ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/platform/master-codes";

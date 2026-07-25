@@ -12,8 +12,15 @@ export default async function OrganizationDetailPage({ params }: Props) {
   const org = await prisma.organization.findUnique({
     where: { id },
     include: {
-      branches: { where: { deletedAt: null }, orderBy: { code: "asc" } },
-      subscriptions: { include: { product: true, plan: true } },
+      status: true,
+      branches: {
+        where: { deletedAt: null },
+        include: { status: true },
+        orderBy: { code: "asc" },
+      },
+      subscriptions: {
+        include: { product: true, plan: true, status: true },
+      },
     },
   });
 
@@ -45,7 +52,7 @@ export default async function OrganizationDetailPage({ params }: Props) {
         <ul className="mt-2 text-sm">
           {org.subscriptions.map((s) => (
             <li key={s.id}>
-              {s.product.code} / {s.plan.code} · {s.status}
+              {s.product.code} / {s.plan.code} · {s.status.code}
             </li>
           ))}
         </ul>

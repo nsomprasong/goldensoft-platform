@@ -186,24 +186,37 @@ PK `id` · FK `organization_id` เท่านั้น
 Unique ตาม `(organization_id, legacy_auth_user_id)` / `(organization_id, legacy_employee_id)`  
 Status: `PENDING|LINKED|MIGRATED|FAILED|IGNORED`
 
-## 7. Enums
+## 7. Master Tables (no Prisma/PostgreSQL enums)
 
-| Enum | ค่า |
-|------|-----|
+**Architecture rule:** `GoldenSoft uses master tables instead of Prisma/PostgreSQL enums.`
+
+ทุกสถานะ / ประเภท / Role / รอบบิลเป็น Master Model แยกใน schema `platform`  
+ฟิลด์มาตรฐาน: `id`, `code` (unique), `name_th`, `name_en`, `description?`, `sort_order`, `is_active`, `is_system`, timestamps  
+Business tables อ้างด้วย FK (`status_id`, `role_id`, `billing_cycle_id`, …)
+
+| Master | Seed codes (system) |
+|--------|---------------------|
 | PlatformRole | SUPER_ADMIN, SUPPORT, BILLING_ADMIN |
 | OrganizationRole | OWNER, ADMIN, BILLING_CONTACT |
 | UserProfileStatus | ACTIVE, DISABLED, PENDING |
 | OrganizationStatus | ACTIVE, SUSPENDED, CLOSED |
 | BranchStatus | ACTIVE, INACTIVE |
 | MembershipStatus | INVITED, ACTIVE, SUSPENDED, REMOVED |
+| AssignmentStatus | ACTIVE, REVOKED |
 | BranchScopeType | ALL_BRANCHES, SELECTED, NONE |
-| ProductCode (seed) | RESIDENT, HR, QRSTATION |
+| ProductStatus / FeatureStatus / PlanStatus | ACTIVE, RETIRED |
+| PlanVersionStatus | DRAFT, PUBLISHED, RETIRED |
 | SubscriptionStatus | TRIAL, ACTIVE, PAST_DUE, SUSPENDED, CANCELLED, EXPIRED |
 | BillingCycle | MONTHLY, YEARLY, MANUAL |
-| PlanVersionStatus | DRAFT, PUBLISHED, RETIRED |
-| OverrideEffect | GRANT, REVOKE, LIMIT |
-| OutboxStatus | PENDING, PROCESSING, PROCESSED, FAILED, DEAD |
-| MigrationStatus | PENDING, LINKED, MIGRATED, FAILED, IGNORED |
+| SubscriptionOverrideType | GRANT, REVOKE, LIMIT |
+| ProductMembershipStatus | ACTIVE, SUSPENDED, REVOKED |
+| OutboxEventStatus | PENDING, PROCESSING, PROCESSED, FAILED, DEAD |
+| IdempotencyStatus | IN_PROGRESS, COMPLETED, FAILED |
+| LegacyMigrationStatus | PENDING, LINKED, MIGRATED, FAILED, IGNORED |
+| FeatureValueType | STRING, NUMBER, BOOLEAN |
+| AuditActionType | organization.bootstrap, … |
+
+Product seed codes (business catalog, not status masters): RESIDENT, HR, QRSTATION
 
 ## 8. Constraints and Indexes
 
@@ -231,11 +244,12 @@ Status: `PENDING|LINKED|MIGRATED|FAILED|IGNORED`
 - Soft-delete เก็บแถวเพื่อประวัติ  
 - ลูกค้าเก่าใช้ `plan_version_id` + snapshot แม้มี version ใหม่  
 
-## 10. MVP Tables (19)
+## 10. MVP Tables
 
-ใช้ Login / Org / Branch / Membership / Product / Plan / Subscription / Entitlement / Audit พื้นฐาน:
+ใช้ Login / Org / Branch / Membership / Product / Plan / Subscription / Entitlement / Audit พื้นฐาน  
+บวก Master tables ทั้งหมดใน §7:
 
-`user_profiles`, `platform_role_assignments`, `organizations`, `branches`, `organization_memberships`, `organization_membership_roles`, `organization_membership_branch_scopes`, `products`, `features`, `plans`, `plan_versions`, `plan_version_features`, `subscriptions`, `subscription_feature_overrides`, `organization_product_memberships`, `audit_logs`, `outbox_events`, `idempotency_keys`, `legacy_identity_mappings`
+Business: `user_profiles`, `user_preferences`, `platform_role_assignments`, `organizations`, `branches`, `organization_memberships`, `organization_membership_roles`, `organization_membership_branch_scopes`, `products`, `features`, `plans`, `plan_versions`, `plan_version_features`, `subscriptions`, `subscription_feature_overrides`, `organization_product_memberships`, `audit_logs`, `outbox_events`, `idempotency_keys`, `legacy_identity_mappings`
 
 ## 11. Deferred Tables (7 กลุ่ม)
 

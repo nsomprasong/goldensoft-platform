@@ -6,6 +6,7 @@ Central Auth และ multi-tenant control plane สำหรับ Resident V2
 
 - Next.js 15 App Router · React 19 · TypeScript strict · Tailwind CSS 4
 - Prisma ORM + PostgreSQL (`platform` schema)
+- Master tables instead of Prisma/PostgreSQL enums
 - Supabase Auth (Central project)
 
 ## Project refs (locked)
@@ -46,6 +47,7 @@ npm run build
 - Production ห้าม `ALLOW_TEST_AUTH=true`
 - Secret key อยู่เฉพาะ server (`SUPABASE_SECRET_KEY`)
 - ห้าม commit `.env*` (ยกเว้น `.env.example`)
+- Migration ต้องไม่มี `CREATE TYPE` / `AS ENUM` และแตะเฉพาะ schema `platform` (`npm run db:migration:check`)
 
 ## Docs
 

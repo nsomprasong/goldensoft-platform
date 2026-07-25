@@ -1,20 +1,18 @@
 import type { PrismaClient } from "@prisma/client";
 
+import type { ApplicationContext, SubscriptionSnapshot } from "@/lib/context/types";
 import {
-  ACTIVE_SUBSCRIPTION_STATUSES,
-  type ApplicationContext,
-  type SubscriptionSnapshot,
-} from "@/lib/context/types";
+  ACTIVE_SUBSCRIPTION_STATUS_CODES,
+  MASTER,
+} from "@/lib/platform/master-codes";
 import { parseSubscriptionSnapshot } from "@/lib/platform/snapshot";
 import { permissionsForRoles } from "@/lib/permissions/codes";
 
 export type ResolveContextInput = {
   authUserId: string;
-  /** Claimed values from cookie only — never trusted without membership checks */
   claimedOrganizationId?: string | null;
   claimedBranchId?: string | null;
   productCode: string;
-  /** Reject if client sends a different organizationId than claimed/cookie */
   clientOrganizationId?: string | null;
 };
 
@@ -50,23 +48,26 @@ export async function resolveApplicationContext(
     );
   }
 
-  if (
-    input.clientOrganizationId &&
-    !input.claimedOrganizationId
-  ) {
-    // Client-supplied org without server cookie/preference still must be verified
-    // via membership below using clientOrganizationId as candidate.
+  const assignmentActive = await db.assignmentStatus.findUnique({
+    where: { code: MASTER.assignmentStatus.ACTIVE },
+  });
+  if (!assignmentActive) {
+    throw new ContextError("Master data incomplete", "PROFILE_NOT_FOUND");
   }
 
   const profile = await db.userProfile.findUnique({
     where: { authUserId: input.authUserId },
     include: {
-      platformRoles: { where: { status: "ACTIVE" } },
+      status: true,
+      platformRoles: {
+        where: { statusId: assignmentActive.id },
+        include: { role: true },
+      },
       preference: true,
     },
   });
 
-  if (!profile || profile.status !== "ACTIVE") {
+  if (!profile || profile.status.code !== MASTER.userProfileStatus.ACTIVE) {
     throw new ContextError("User profile not found or disabled", "PROFILE_NOT_FOUND");
   }
 
@@ -80,7 +81,13 @@ export async function resolveApplicationContext(
     throw new ContextError("No organization context available", "ORG_FORBIDDEN");
   }
 
-  // Never trust client org alone — always verify membership
+  const branchActive = await db.branchStatus.findUnique({
+    where: { code: MASTER.branchStatus.ACTIVE },
+  });
+  if (!branchActive) {
+    throw new ContextError("Master data incomplete", "ORG_FORBIDDEN");
+  }
+
   const membership = await db.organizationMembership.findUnique({
     where: {
       organizationId_userProfileId: {
@@ -89,28 +96,43 @@ export async function resolveApplicationContext(
       },
     },
     include: {
-      roles: { where: { status: "ACTIVE" } },
-      branchScopes: { where: { status: "ACTIVE" } },
+      status: true,
+      roles: {
+        where: { statusId: assignmentActive.id },
+        include: { role: true },
+      },
+      branchScopes: {
+        where: { statusId: assignmentActive.id },
+        include: { scopeType: true },
+      },
       organization: {
-        include: { branches: { where: { status: "ACTIVE", deletedAt: null } } },
+        include: {
+          status: true,
+          branches: {
+            where: { statusId: branchActive.id, deletedAt: null },
+          },
+        },
       },
     },
   });
 
-  if (!membership || membership.status !== "ACTIVE") {
+  if (
+    !membership ||
+    membership.status.code !== MASTER.membershipStatus.ACTIVE
+  ) {
     throw new ContextError(
       "Not a member of the requested organization",
       "ORG_FORBIDDEN",
     );
   }
 
-  if (membership.organization.status !== "ACTIVE") {
+  if (membership.organization.status.code !== MASTER.organizationStatus.ACTIVE) {
     throw new ContextError("Organization is not active", "ORG_FORBIDDEN");
   }
 
   const accessibleBranchIds = resolveAccessibleBranches(
     membership.branchScopes.map((s) => ({
-      scopeType: s.scopeType,
+      scopeType: s.scopeType.code,
       branchId: s.branchId,
     })),
     membership.organization.branches.map((b) => b.id),
@@ -134,8 +156,9 @@ export async function resolveApplicationContext(
 
   const product = await db.product.findUnique({
     where: { code: input.productCode },
+    include: { status: true },
   });
-  if (!product || product.status !== "ACTIVE") {
+  if (!product || product.status.code !== MASTER.productStatus.ACTIVE) {
     throw new ContextError("Product not available", "PRODUCT_FORBIDDEN");
   }
 
@@ -147,20 +170,29 @@ export async function resolveApplicationContext(
         productId: product.id,
       },
     },
+    include: { status: true },
   });
 
-  if (!productMembership || productMembership.status !== "ACTIVE") {
+  if (
+    !productMembership ||
+    productMembership.status.code !== MASTER.productMembershipStatus.ACTIVE
+  ) {
     throw new ContextError(
       "No product membership for this organization",
       "PRODUCT_FORBIDDEN",
     );
   }
 
+  const activeSubStatuses = await db.subscriptionStatus.findMany({
+    where: { code: { in: [...ACTIVE_SUBSCRIPTION_STATUS_CODES] } },
+    select: { id: true },
+  });
+
   const subscription = await db.subscription.findFirst({
     where: {
       organizationId: membership.organizationId,
       productId: product.id,
-      status: { in: [...ACTIVE_SUBSCRIPTION_STATUSES] },
+      statusId: { in: activeSubStatuses.map((s) => s.id) },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -176,8 +208,8 @@ export async function resolveApplicationContext(
     subscription.snapshotJson,
   );
 
-  const platformRoles = profile.platformRoles.map((r) => r.role);
-  const organizationRoles = membership.roles.map((r) => r.role);
+  const platformRoles = profile.platformRoles.map((r) => r.role.code);
+  const organizationRoles = membership.roles.map((r) => r.role.code);
   const permissions = permissionsForRoles({ platformRoles, organizationRoles });
 
   return {

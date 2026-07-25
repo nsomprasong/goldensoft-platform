@@ -1,6 +1,10 @@
-import type { BillingCycle, PrismaClient, SubscriptionStatus } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
-import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/context/types";
+import {
+  ACTIVE_SUBSCRIPTION_STATUS_CODES,
+} from "@/lib/platform/master-codes";
+import { MASTER } from "@/lib/platform/master-codes";
+import { requireActiveMasterId } from "@/lib/platform/master-data";
 import { buildSubscriptionSnapshot } from "@/lib/platform/snapshot";
 import { withIdempotency } from "@/lib/platform/idempotency";
 
@@ -10,8 +14,8 @@ export async function createSubscription(
     organizationId: string;
     productCode: string;
     planCode: string;
-    billingCycle: BillingCycle;
-    status?: SubscriptionStatus;
+    billingCycleCode: string;
+    statusCode?: string;
     actorAuthUserId: string;
     idempotencyKey: string;
     limits?: Record<string, number | boolean | string>;
@@ -24,24 +28,36 @@ export async function createSubscription(
       organizationId: input.organizationId,
       productCode: input.productCode,
       planCode: input.planCode,
-      billingCycle: input.billingCycle,
+      billingCycleCode: input.billingCycleCode,
     },
     execute: async () => {
       return db.$transaction(async (tx) => {
         const product = await tx.product.findUnique({
           where: { code: input.productCode },
+          include: { status: true },
         });
-        if (!product) throw new Error("Product not found");
+        if (!product || product.status.code !== MASTER.productStatus.ACTIVE) {
+          throw new Error("Product not found");
+        }
 
         const plan = await tx.plan.findUnique({
           where: {
             productId_code: { productId: product.id, code: input.planCode },
           },
+          include: { status: true },
         });
-        if (!plan) throw new Error("Plan not found");
+        if (!plan || plan.status.code !== MASTER.planStatus.ACTIVE) {
+          throw new Error("Plan not found");
+        }
+
+        const publishedStatusId = await requireActiveMasterId(
+          tx,
+          "planVersionStatus",
+          MASTER.planVersionStatus.PUBLISHED,
+        );
 
         const planVersion = await tx.planVersion.findFirst({
-          where: { planId: plan.id, status: "PUBLISHED" },
+          where: { planId: plan.id, statusId: publishedStatusId },
           orderBy: { versionNumber: "desc" },
           include: {
             features: { include: { feature: true } },
@@ -49,11 +65,16 @@ export async function createSubscription(
         });
         if (!planVersion) throw new Error("Published plan version not found");
 
+        const activeStatusIds = await tx.subscriptionStatus.findMany({
+          where: { code: { in: [...ACTIVE_SUBSCRIPTION_STATUS_CODES] } },
+          select: { id: true },
+        });
+
         const existing = await tx.subscription.findFirst({
           where: {
             organizationId: input.organizationId,
             productId: product.id,
-            status: { in: [...ACTIVE_SUBSCRIPTION_STATUSES] },
+            statusId: { in: activeStatusIds.map((s) => s.id) },
           },
         });
         if (existing) {
@@ -61,6 +82,27 @@ export async function createSubscription(
             "Active subscription already exists for this organization and product",
           );
         }
+
+        const billingCycleId = await requireActiveMasterId(
+          tx,
+          "billingCycle",
+          input.billingCycleCode,
+        );
+        const statusId = await requireActiveMasterId(
+          tx,
+          "subscriptionStatus",
+          input.statusCode ?? MASTER.subscriptionStatus.ACTIVE,
+        );
+        const auditActionId = await requireActiveMasterId(
+          tx,
+          "auditActionType",
+          MASTER.auditActionType.SUBSCRIPTION_CREATE,
+        );
+        const outboxPendingId = await requireActiveMasterId(
+          tx,
+          "outboxEventStatus",
+          MASTER.outboxEventStatus.PENDING,
+        );
 
         const featureCodes = planVersion.features.map((f) => f.feature.code);
         const limitsFromPlan: Record<string, number | boolean | string> = {};
@@ -77,7 +119,7 @@ export async function createSubscription(
           product,
           plan,
           planVersion,
-          billingCycle: input.billingCycle,
+          billingCycleCode: input.billingCycleCode,
           featureCodes,
           limits: { ...limitsFromPlan, ...(input.limits ?? {}) },
         });
@@ -88,8 +130,8 @@ export async function createSubscription(
             productId: product.id,
             planId: plan.id,
             planVersionId: planVersion.id,
-            status: input.status ?? "ACTIVE",
-            billingCycle: input.billingCycle,
+            statusId,
+            billingCycleId,
             planCode: plan.code,
             planVersionNumber: planVersion.versionNumber,
             priceAmount: planVersion.priceAmount,
@@ -103,7 +145,7 @@ export async function createSubscription(
           data: {
             organizationId: input.organizationId,
             actorAuthUserId: input.actorAuthUserId,
-            action: "subscription.create",
+            actionTypeId: auditActionId,
             entityType: "Subscription",
             entityId: subscription.id,
             afterJson: {
@@ -120,6 +162,7 @@ export async function createSubscription(
             aggregateId: subscription.id,
             eventType: "subscription.changed",
             organizationId: input.organizationId,
+            statusId: outboxPendingId,
             payloadJson: {
               organizationId: input.organizationId,
               productCode: product.code,

@@ -21,8 +21,18 @@ describe("Migration SQL safety", () => {
   it("rejects SQL that alters auth schema", () => {
     const result = checkMigrationSql(`
       CREATE SCHEMA IF NOT EXISTS platform;
+      CREATE TABLE "platform"."user_profile_statuses" (id uuid);
       ALTER TABLE auth.users ADD COLUMN hacked text;
     `);
     assert.equal(result.ok, false);
+  });
+
+  it("rejects PostgreSQL enum DDL", () => {
+    const result = checkMigrationSql(`
+      CREATE SCHEMA IF NOT EXISTS platform;
+      CREATE TYPE "platform"."SubscriptionStatus" AS ENUM ('ACTIVE');
+    `);
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some((e) => /ENUM|CREATE TYPE/i.test(e)));
   });
 });

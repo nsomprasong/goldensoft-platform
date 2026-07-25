@@ -3,7 +3,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
 import { requireSafeEnvironment } from "../src/lib/env/guard";
+import { MASTER } from "../src/lib/platform/master-codes";
+import { requireActiveMasterId } from "../src/lib/platform/master-data";
 import { buildSubscriptionSnapshot } from "../src/lib/platform/snapshot";
+import { seedAllMasters } from "./seed-masters";
 
 requireSafeEnvironment();
 
@@ -17,36 +20,129 @@ const AUTH = {
   orgBAdmin: "44444444-4444-4444-8444-444444444444",
 } as const;
 
-async function upsertProduct(code: string, name: string) {
-  return prisma.product.upsert({
-    where: { code },
-    create: { code, name, status: "ACTIVE" },
-    update: { name, status: "ACTIVE" },
-  });
-}
-
 async function main() {
+  await seedAllMasters(prisma);
+
+  const userActiveId = await requireActiveMasterId(
+    prisma,
+    "userProfileStatus",
+    MASTER.userProfileStatus.ACTIVE,
+  );
+  const platformRoleId = await requireActiveMasterId(
+    prisma,
+    "platformRole",
+    MASTER.platformRole.SUPER_ADMIN,
+  );
+  const assignmentActiveId = await requireActiveMasterId(
+    prisma,
+    "assignmentStatus",
+    MASTER.assignmentStatus.ACTIVE,
+  );
+  const orgActiveId = await requireActiveMasterId(
+    prisma,
+    "organizationStatus",
+    MASTER.organizationStatus.ACTIVE,
+  );
+  const branchActiveId = await requireActiveMasterId(
+    prisma,
+    "branchStatus",
+    MASTER.branchStatus.ACTIVE,
+  );
+  const membershipActiveId = await requireActiveMasterId(
+    prisma,
+    "membershipStatus",
+    MASTER.membershipStatus.ACTIVE,
+  );
+  const orgAdminRoleId = await requireActiveMasterId(
+    prisma,
+    "organizationRole",
+    MASTER.organizationRole.ADMIN,
+  );
+  const orgOwnerRoleId = await requireActiveMasterId(
+    prisma,
+    "organizationRole",
+    MASTER.organizationRole.OWNER,
+  );
+  const allBranchesId = await requireActiveMasterId(
+    prisma,
+    "branchScopeType",
+    MASTER.branchScopeType.ALL_BRANCHES,
+  );
+  const selectedScopeId = await requireActiveMasterId(
+    prisma,
+    "branchScopeType",
+    MASTER.branchScopeType.SELECTED,
+  );
+  const productActiveId = await requireActiveMasterId(
+    prisma,
+    "productStatus",
+    MASTER.productStatus.ACTIVE,
+  );
+  const featureActiveId = await requireActiveMasterId(
+    prisma,
+    "featureStatus",
+    MASTER.featureStatus.ACTIVE,
+  );
+  const planActiveId = await requireActiveMasterId(
+    prisma,
+    "planStatus",
+    MASTER.planStatus.ACTIVE,
+  );
+  const planPublishedId = await requireActiveMasterId(
+    prisma,
+    "planVersionStatus",
+    MASTER.planVersionStatus.PUBLISHED,
+  );
+  const monthlyId = await requireActiveMasterId(
+    prisma,
+    "billingCycle",
+    MASTER.billingCycle.MONTHLY,
+  );
+  const subActiveId = await requireActiveMasterId(
+    prisma,
+    "subscriptionStatus",
+    MASTER.subscriptionStatus.ACTIVE,
+  );
+  const productMemberActiveId = await requireActiveMasterId(
+    prisma,
+    "productMembershipStatus",
+    MASTER.productMembershipStatus.ACTIVE,
+  );
+
   const admin = await prisma.userProfile.upsert({
     where: { authUserId: AUTH.superAdmin },
     create: {
       authUserId: AUTH.superAdmin,
       email: "superadmin@goldensoft.local",
       displayName: "Platform Super Admin",
-      status: "ACTIVE",
+      statusId: userActiveId,
     },
-    update: { status: "ACTIVE" },
+    update: { statusId: userActiveId },
   });
 
   const existingRole = await prisma.platformRoleAssignment.findFirst({
-    where: { userProfileId: admin.id, role: "SUPER_ADMIN", status: "ACTIVE" },
+    where: {
+      userProfileId: admin.id,
+      roleId: platformRoleId,
+      statusId: assignmentActiveId,
+    },
   });
   if (!existingRole) {
     await prisma.platformRoleAssignment.create({
       data: {
         userProfileId: admin.id,
-        role: "SUPER_ADMIN",
+        roleId: platformRoleId,
+        statusId: assignmentActiveId,
         assignedByAuthUserId: admin.authUserId,
       },
+    });
+  }
+
+  async function upsertProduct(code: string, name: string) {
+    return prisma.product.upsert({
+      where: { code },
+      create: { code, name, statusId: productActiveId },
+      update: { name, statusId: productActiveId },
     });
   }
 
@@ -56,28 +152,27 @@ async function main() {
 
   for (const f of [
     { productId: resident.id, code: "resident.booking.create", name: "Create booking" },
-    { productId: resident.id, code: "resident.payment.approve", name: "Approve payment" },
     { productId: hr.id, code: "hr.employee.read", name: "Read employees" },
     { productId: hr.id, code: "hr.payroll.approve", name: "Approve payroll" },
   ]) {
     await prisma.feature.upsert({
       where: { code: f.code },
-      create: { ...f, status: "ACTIVE" },
-      update: { name: f.name, status: "ACTIVE" },
+      create: { ...f, statusId: featureActiveId },
+      update: { name: f.name, statusId: featureActiveId },
     });
   }
 
-  async function ensureHrPlan(
+  async function ensurePlan(
+    productId: string,
     code: string,
     name: string,
     price: number,
   ) {
     const plan = await prisma.plan.upsert({
-      where: { productId_code: { productId: hr.id, code } },
-      create: { productId: hr.id, code, name, status: "ACTIVE" },
-      update: { name, status: "ACTIVE" },
+      where: { productId_code: { productId, code } },
+      create: { productId, code, name, statusId: planActiveId },
+      update: { name, statusId: planActiveId },
     });
-
     let version = await prisma.planVersion.findUnique({
       where: { planId_versionNumber: { planId: plan.id, versionNumber: 1 } },
     });
@@ -86,59 +181,35 @@ async function main() {
         data: {
           planId: plan.id,
           versionNumber: 1,
-          status: "PUBLISHED",
-          billingCycleDefault: "MONTHLY",
+          statusId: planPublishedId,
+          billingCycleDefaultId: monthlyId,
           priceAmount: price,
           currency: "THB",
           publishedAt: new Date(),
         },
       });
     }
-
-    for (const feature of await prisma.feature.findMany({ where: { productId: hr.id } })) {
-      await prisma.planVersionFeature.upsert({
-        where: {
-          planVersionId_featureId: {
-            planVersionId: version.id,
-            featureId: feature.id,
-          },
-        },
-        create: { planVersionId: version.id, featureId: feature.id },
-        update: {},
-      });
-    }
-
     return { plan, version };
   }
 
-  const hrStandard = await ensureHrPlan("STANDARD", "HR Standard", 1990);
-  await ensureHrPlan("ADVANCED", "HR Advanced", 3990);
-  await ensureHrPlan("PROFESSIONAL", "HR Professional", 7990);
+  const hrStandard = await ensurePlan(hr.id, "STANDARD", "HR Standard", 1990);
+  await ensurePlan(hr.id, "ADVANCED", "HR Advanced", 3990);
+  await ensurePlan(hr.id, "PROFESSIONAL", "HR Professional", 7990);
+  const residentPlan = await ensurePlan(resident.id, "STANDARD", "Resident Standard", 4990);
 
-  const residentPlan = await prisma.plan.upsert({
-    where: { productId_code: { productId: resident.id, code: "STANDARD" } },
-    create: {
-      productId: resident.id,
-      code: "STANDARD",
-      name: "Resident Standard",
-      status: "ACTIVE",
-    },
-    update: { status: "ACTIVE" },
-  });
-  let residentVersion = await prisma.planVersion.findUnique({
-    where: { planId_versionNumber: { planId: residentPlan.id, versionNumber: 1 } },
-  });
-  if (!residentVersion) {
-    residentVersion = await prisma.planVersion.create({
-      data: {
-        planId: residentPlan.id,
-        versionNumber: 1,
-        status: "PUBLISHED",
-        billingCycleDefault: "MONTHLY",
-        priceAmount: 4990,
-        currency: "THB",
-        publishedAt: new Date(),
+  for (const feature of await prisma.feature.findMany({ where: { productId: hr.id } })) {
+    await prisma.planVersionFeature.upsert({
+      where: {
+        planVersionId_featureId: {
+          planVersionId: hrStandard.version.id,
+          featureId: feature.id,
+        },
       },
+      create: {
+        planVersionId: hrStandard.version.id,
+        featureId: feature.id,
+      },
+      update: {},
     });
   }
 
@@ -149,9 +220,9 @@ async function main() {
       slug: "org-a",
       legalName: "Organization A Co., Ltd.",
       displayName: "Organization A",
-      status: "ACTIVE",
+      statusId: orgActiveId,
     },
-    update: { status: "ACTIVE" },
+    update: { statusId: orgActiveId },
   });
   const orgB = await prisma.organization.upsert({
     where: { slug: "org-b" },
@@ -160,9 +231,9 @@ async function main() {
       slug: "org-b",
       legalName: "Organization B Co., Ltd.",
       displayName: "Organization B",
-      status: "ACTIVE",
+      statusId: orgActiveId,
     },
-    update: { status: "ACTIVE" },
+    update: { statusId: orgActiveId },
   });
 
   async function ensureBranches(organizationId: string, codes: string[]) {
@@ -174,7 +245,12 @@ async function main() {
       if (existing) ids.push(existing.id);
       else {
         const created = await prisma.branch.create({
-          data: { organizationId, code, name: `Branch ${code}`, status: "ACTIVE" },
+          data: {
+            organizationId,
+            code,
+            name: `Branch ${code}`,
+            statusId: branchActiveId,
+          },
         });
         ids.push(created.id);
       }
@@ -196,7 +272,9 @@ async function main() {
       where: {
         organizationId,
         productId,
-        status: { in: ["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED"] },
+        status: {
+          code: { in: ["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED"] },
+        },
       },
     });
     if (existing) return existing;
@@ -213,16 +291,9 @@ async function main() {
         priceAmount: version.priceAmount as never,
         currency: version.currency,
       },
-      billingCycle: "MONTHLY",
+      billingCycleCode: MASTER.billingCycle.MONTHLY,
       featureCodes: features.map((f) => f.feature.code),
-      limits: {
-        maxUsers: 50,
-        maxEmployees: 100,
-        maxBranches: 10,
-        maxRooms: 40,
-        maxStations: 5,
-        maxDevices: 20,
-      },
+      limits: { maxUsers: 50, maxEmployees: 100, maxBranches: 10 },
     });
 
     return prisma.subscription.create({
@@ -231,8 +302,8 @@ async function main() {
         productId,
         planId: plan.id,
         planVersionId: version.id,
-        status: "ACTIVE",
-        billingCycle: "MONTHLY",
+        statusId: subActiveId,
+        billingCycleId: monthlyId,
         planCode: plan.code,
         planVersionNumber: version.versionNumber,
         priceAmount: version.priceAmount as never,
@@ -243,11 +314,142 @@ async function main() {
     });
   }
 
-  await ensureSubscription(orgA.id, resident.id, "RESIDENT", residentPlan, residentVersion);
+  await ensureSubscription(orgA.id, resident.id, "RESIDENT", residentPlan.plan, residentPlan.version);
   await ensureSubscription(orgA.id, hr.id, "HR", hrStandard.plan, hrStandard.version);
   await ensureSubscription(orgB.id, hr.id, "HR", hrStandard.plan, hrStandard.version);
 
-  console.log("Seed completed", { orgABranches: orgABranches.length });
+  async function ensureMembership(
+    organizationId: string,
+    authUserId: string,
+    email: string,
+    displayName: string,
+    roleId: string,
+    scopeTypeId: string,
+    branchId: string | null,
+    productIds: string[],
+  ) {
+    const user = await prisma.userProfile.upsert({
+      where: { authUserId },
+      create: { authUserId, email, displayName, statusId: userActiveId },
+      update: { statusId: userActiveId },
+    });
+
+    let membership = await prisma.organizationMembership.findUnique({
+      where: {
+        organizationId_userProfileId: {
+          organizationId,
+          userProfileId: user.id,
+        },
+      },
+    });
+    if (!membership) {
+      membership = await prisma.organizationMembership.create({
+        data: {
+          organizationId,
+          userProfileId: user.id,
+          statusId: membershipActiveId,
+          joinedAt: new Date(),
+        },
+      });
+    }
+
+    const hasRole = await prisma.organizationMembershipRole.findFirst({
+      where: {
+        membershipId: membership.id,
+        roleId,
+        statusId: assignmentActiveId,
+      },
+    });
+    if (!hasRole) {
+      await prisma.organizationMembershipRole.create({
+        data: {
+          membershipId: membership.id,
+          roleId,
+          statusId: assignmentActiveId,
+        },
+      });
+    }
+
+    const scopes = await prisma.organizationMembershipBranchScope.findMany({
+      where: { membershipId: membership.id, statusId: assignmentActiveId },
+    });
+    if (scopes.length === 0) {
+      await prisma.organizationMembershipBranchScope.create({
+        data: {
+          membershipId: membership.id,
+          scopeTypeId,
+          branchId,
+          statusId: assignmentActiveId,
+        },
+      });
+    }
+
+    for (const productId of productIds) {
+      await prisma.organizationProductMembership.upsert({
+        where: {
+          organizationId_userProfileId_productId: {
+            organizationId,
+            userProfileId: user.id,
+            productId,
+          },
+        },
+        create: {
+          organizationId,
+          membershipId: membership.id,
+          userProfileId: user.id,
+          productId,
+          statusId: productMemberActiveId,
+        },
+        update: { statusId: productMemberActiveId },
+      });
+    }
+
+    await prisma.userPreference.upsert({
+      where: { userProfileId: user.id },
+      create: {
+        userProfileId: user.id,
+        lastOrganizationId: organizationId,
+        lastBranchId: branchId,
+      },
+      update: {
+        lastOrganizationId: organizationId,
+        lastBranchId: branchId,
+      },
+    });
+  }
+
+  await ensureMembership(
+    orgA.id,
+    AUTH.orgAAll,
+    "all-branches@org-a.local",
+    "Org A All Branches",
+    orgAdminRoleId,
+    allBranchesId,
+    null,
+    [resident.id, hr.id],
+  );
+  await ensureMembership(
+    orgA.id,
+    AUTH.orgABm,
+    "branch-manager@org-a.local",
+    "Org A Branch Manager",
+    orgAdminRoleId,
+    selectedScopeId,
+    orgABranches[0]!,
+    [resident.id, hr.id],
+  );
+  await ensureMembership(
+    orgB.id,
+    AUTH.orgBAdmin,
+    "admin@org-b.local",
+    "Org B Admin",
+    orgOwnerRoleId,
+    allBranchesId,
+    null,
+    [hr.id],
+  );
+
+  console.log("Seed completed (masters + demo tenants)");
 }
 
 main()
