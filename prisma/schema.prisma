@@ -1,0 +1,498 @@
+// GoldenSoft Platform MVP — schema "platform" logical models
+// Test/local: SQLite. Production target: PostgreSQL + Supabase auth.users FK (see ADR-002 D105).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserProfileStatus {
+  ACTIVE
+  DISABLED
+  PENDING
+}
+
+enum PlatformRole {
+  SUPER_ADMIN
+  SUPPORT
+  BILLING_ADMIN
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum BranchStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  BILLING_CONTACT
+}
+
+enum BranchScopeType {
+  ALL_BRANCHES
+  SELECTED
+  NONE
+}
+
+enum CatalogStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum PlanVersionStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+  MANUAL
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+enum OverrideEffect {
+  GRANT
+  REVOKE
+  LIMIT
+}
+
+enum ProductMembershipStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+  DEAD
+}
+
+enum IdempotencyStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum MigrationStatus {
+  PENDING
+  LINKED
+  MIGRATED
+  FAILED
+  IGNORED
+}
+
+model UserProfile {
+  id             String            @id @default(uuid())
+  authUserId     String            @unique @map("auth_user_id")
+  email          String            @unique
+  displayName    String            @map("display_name")
+  status         UserProfileStatus @default(PENDING)
+  sessionVersion Int               @default(0) @map("session_version")
+  lastLoginAt    DateTime?         @map("last_login_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  deletedAt      DateTime?         @map("deleted_at")
+
+  platformRoles              PlatformRoleAssignment[]
+  memberships                OrganizationMembership[]
+  preference                 UserPreference?
+  organizationProductMembers OrganizationProductMembership[]
+
+  @@index([status])
+  @@map("user_profiles")
+}
+
+model UserPreference {
+  id                 String   @id @default(uuid())
+  userProfileId      String   @unique @map("user_profile_id")
+  lastOrganizationId String?  @map("last_organization_id")
+  lastBranchId       String?  @map("last_branch_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  userProfile UserProfile @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model PlatformRoleAssignment {
+  id                   String           @id @default(uuid())
+  userProfileId        String           @map("user_profile_id")
+  role                 PlatformRole
+  status               AssignmentStatus @default(ACTIVE)
+  assignedAt           DateTime         @default(now()) @map("assigned_at")
+  assignedByAuthUserId String?          @map("assigned_by_auth_user_id")
+  revokedAt            DateTime?        @map("revoked_at")
+
+  userProfile UserProfile @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+
+  @@index([userProfileId, status])
+  @@map("platform_role_assignments")
+}
+
+model Organization {
+  id           String             @id @default(uuid())
+  customerCode String             @unique @map("customer_code")
+  slug         String             @unique
+  legalName    String             @map("legal_name")
+  displayName  String             @map("display_name")
+  status       OrganizationStatus @default(ACTIVE)
+  taxId        String?            @map("tax_id")
+  timezone     String             @default("Asia/Bangkok")
+  currency     String             @default("THB")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  deletedAt    DateTime?          @map("deleted_at")
+
+  branches              Branch[]
+  memberships           OrganizationMembership[]
+  subscriptions         Subscription[]
+  productMemberships    OrganizationProductMembership[]
+  auditLogs             AuditLog[]
+  legacyIdentityMappings LegacyIdentityMapping[]
+
+  @@map("organizations")
+}
+
+model Branch {
+  id                      String       @id @default(uuid())
+  organizationId          String       @map("organization_id")
+  code                    String
+  name                    String
+  status                  BranchStatus @default(ACTIVE)
+  timezone                String       @default("Asia/Bangkok")
+  address                 String?
+  latitude                Float?
+  longitude               Float?
+  attendanceRadiusMeters  Int?         @map("attendance_radius_meters")
+  createdAt               DateTime     @default(now()) @map("created_at")
+  updatedAt               DateTime     @updatedAt @map("updated_at")
+  deletedAt               DateTime?    @map("deleted_at")
+
+  organization Organization                         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branchScopes OrganizationMembershipBranchScope[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("branches")
+}
+
+model OrganizationMembership {
+  id                    String           @id @default(uuid())
+  organizationId        String           @map("organization_id")
+  userProfileId         String           @map("user_profile_id")
+  status                MembershipStatus @default(INVITED)
+  joinedAt              DateTime?        @map("joined_at")
+  invitedByAuthUserId   String?          @map("invited_by_auth_user_id")
+  endedAt               DateTime?        @map("ended_at")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+
+  organization       Organization                        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userProfile        UserProfile                         @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  roles              OrganizationMembershipRole[]
+  branchScopes       OrganizationMembershipBranchScope[]
+  productMemberships OrganizationProductMembership[]
+
+  @@unique([organizationId, userProfileId])
+  @@index([userProfileId, status])
+  @@map("organization_memberships")
+}
+
+model OrganizationMembershipRole {
+  id           String           @id @default(uuid())
+  membershipId String           @map("membership_id")
+  role         OrganizationRole
+  status       AssignmentStatus @default(ACTIVE)
+  assignedAt   DateTime         @default(now()) @map("assigned_at")
+  revokedAt    DateTime?        @map("revoked_at")
+
+  membership OrganizationMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@index([membershipId, status])
+  @@map("organization_membership_roles")
+}
+
+model OrganizationMembershipBranchScope {
+  id           String          @id @default(uuid())
+  membershipId String          @map("membership_id")
+  scopeType    BranchScopeType @map("scope_type")
+  branchId     String?         @map("branch_id")
+  status       AssignmentStatus @default(ACTIVE)
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  membership OrganizationMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  branch     Branch?                @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([membershipId, status])
+  @@map("organization_membership_branch_scopes")
+}
+
+model Product {
+  id        String        @id @default(uuid())
+  code      String        @unique
+  name      String
+  status    CatalogStatus @default(ACTIVE)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  features           Feature[]
+  plans              Plan[]
+  subscriptions      Subscription[]
+  productMemberships OrganizationProductMembership[]
+
+  @@map("products")
+}
+
+model Feature {
+  id          String        @id @default(uuid())
+  productId   String        @map("product_id")
+  code        String        @unique
+  name        String
+  description String?
+  status      CatalogStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  product               Product                      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  planVersionFeatures   PlanVersionFeature[]
+  subscriptionOverrides SubscriptionFeatureOverride[]
+
+  @@index([productId])
+  @@map("features")
+}
+
+model Plan {
+  id        String        @id @default(uuid())
+  productId String        @map("product_id")
+  code      String
+  name      String
+  status    CatalogStatus @default(ACTIVE)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  product       Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  versions      PlanVersion[]
+  subscriptions Subscription[]
+
+  @@unique([productId, code])
+  @@map("plans")
+}
+
+model PlanVersion {
+  id                  String            @id @default(uuid())
+  planId              String            @map("plan_id")
+  versionNumber       Int               @map("version_number")
+  status              PlanVersionStatus @default(DRAFT)
+  billingCycleDefault BillingCycle      @default(MONTHLY) @map("billing_cycle_default")
+  priceAmount         Float             @map("price_amount")
+  currency            String            @default("THB")
+  trialDays           Int?              @map("trial_days")
+  publishedAt         DateTime?         @map("published_at")
+  createdAt           DateTime          @default(now()) @map("created_at")
+
+  plan          Plan                 @relation(fields: [planId], references: [id], onDelete: Cascade)
+  features      PlanVersionFeature[]
+  subscriptions Subscription[]
+
+  @@unique([planId, versionNumber])
+  @@map("plan_versions")
+}
+
+model PlanVersionFeature {
+  id            String   @id @default(uuid())
+  planVersionId String   @map("plan_version_id")
+  featureId     String   @map("feature_id")
+  limitValue    String?  @map("limit_value")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  planVersion PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
+  feature     Feature     @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@unique([planVersionId, featureId])
+  @@map("plan_version_features")
+}
+
+model Subscription {
+  id                String             @id @default(uuid())
+  organizationId    String             @map("organization_id")
+  productId         String             @map("product_id")
+  planId            String             @map("plan_id")
+  planVersionId     String             @map("plan_version_id")
+  status            SubscriptionStatus @default(TRIAL)
+  billingCycle      BillingCycle       @map("billing_cycle")
+  planCode          String             @map("plan_code")
+  planVersionNumber Int                @map("plan_version_number")
+  priceAmount       Float              @map("price_amount")
+  currency          String
+  /// Immutable entitlement snapshot JSON (D102). Never mutate after activation.
+  snapshotJson      String             @map("snapshot_json")
+  startsAt          DateTime           @map("starts_at")
+  endsAt            DateTime?          @map("ends_at")
+  trialEndsAt       DateTime?          @map("trial_ends_at")
+  cancelledAt       DateTime?          @map("cancelled_at")
+  externalRef       String?            @map("external_ref")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  organization Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product                       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  plan         Plan                          @relation(fields: [planId], references: [id], onDelete: Restrict)
+  planVersion  PlanVersion                   @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  overrides    SubscriptionFeatureOverride[]
+  // Reserved (ADR-002 D103): subscription_items for base plan + add-ons — implement post-MVP.
+
+  @@index([organizationId, productId, status])
+  @@index([status, endsAt])
+  @@map("subscriptions")
+}
+
+model SubscriptionFeatureOverride {
+  id             String           @id @default(uuid())
+  subscriptionId String           @map("subscription_id")
+  featureId      String           @map("feature_id")
+  effect         OverrideEffect
+  limitValue     String?          @map("limit_value")
+  reason         String
+  approvedBy     String           @map("approved_by")
+  status         AssignmentStatus @default(ACTIVE)
+  startsAt       DateTime         @map("starts_at")
+  endsAt         DateTime?        @map("ends_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  feature      Feature      @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, status])
+  @@map("subscription_feature_overrides")
+}
+
+model OrganizationProductMembership {
+  id             String                  @id @default(uuid())
+  organizationId String                  @map("organization_id")
+  membershipId   String                  @map("membership_id")
+  userProfileId  String                  @map("user_profile_id")
+  productId      String                  @map("product_id")
+  status         ProductMembershipStatus @default(ACTIVE)
+  grantedAt      DateTime                @default(now()) @map("granted_at")
+  revokedAt      DateTime?               @map("revoked_at")
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  membership   OrganizationMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  userProfile  UserProfile            @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  product      Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userProfileId, productId])
+  @@map("organization_product_memberships")
+}
+
+model AuditLog {
+  id              String   @id @default(uuid())
+  organizationId  String?  @map("organization_id")
+  actorAuthUserId String?  @map("actor_auth_user_id")
+  action          String
+  entityType      String   @map("entity_type")
+  entityId        String   @map("entity_id")
+  beforeJson      String?  @map("before_json")
+  afterJson       String?  @map("after_json")
+  ip              String?
+  userAgent       String?  @map("user_agent")
+  createdAt       DateTime @default(now()) @map("created_at")
+  archivedAt      DateTime? @map("archived_at")
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@index([actorAuthUserId])
+  @@map("audit_logs")
+}
+
+model OutboxEvent {
+  id             String       @id @default(uuid())
+  aggregateType  String       @map("aggregate_type")
+  aggregateId    String       @map("aggregate_id")
+  eventType      String       @map("event_type")
+  payloadJson    String       @map("payload_json")
+  organizationId String?      @map("organization_id")
+  status         OutboxStatus @default(PENDING)
+  attempts       Int          @default(0)
+  availableAt    DateTime     @default(now()) @map("available_at")
+  processedAt    DateTime?    @map("processed_at")
+  lastError      String?      @map("last_error")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  idempotencyKey String?      @unique @map("idempotency_key")
+  archivedAt     DateTime?    @map("archived_at")
+
+  @@index([status, availableAt])
+  @@map("outbox_events")
+}
+
+model IdempotencyKey {
+  id           String            @id @default(uuid())
+  key          String
+  scope        String
+  requestHash  String            @map("request_hash")
+  responseJson String?           @map("response_json")
+  status       IdempotencyStatus @default(IN_PROGRESS)
+  createdAt    DateTime          @default(now()) @map("created_at")
+  expiresAt    DateTime          @map("expires_at")
+
+  @@unique([scope, key])
+  @@map("idempotency_keys")
+}
+
+model LegacyIdentityMapping {
+  id                String          @id @default(uuid())
+  organizationId    String          @map("organization_id")
+  legacyAuthUserId  String          @map("legacy_auth_user_id")
+  centralAuthUserId String          @map("central_auth_user_id")
+  legacyEmployeeId  String          @map("legacy_employee_id")
+  newEmployeeId     String?         @map("new_employee_id")
+  migrationStatus   MigrationStatus @default(PENDING) @map("migration_status")
+  notes             String?
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, legacyAuthUserId])
+  @@unique([organizationId, legacyEmployeeId])
+  @@map("legacy_identity_mappings")
+}
