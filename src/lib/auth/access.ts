@@ -1,4 +1,5 @@
 import { TH } from "@/lib/i18n/th";
+import { permissionsForRoles } from "@/lib/permissions/codes";
 
 export type MembershipSummary = {
   organizationId: string;
@@ -133,35 +134,101 @@ export type NavItem = {
   label: string;
   permission?: string;
   platformOnly?: boolean;
+  /** Roles allowed; empty/undefined = any authenticated with other filters. */
+  anyPlatformRoles?: string[];
+  anyOrgRoles?: string[];
 };
 
 export const PLATFORM_NAV: NavItem[] = [
   { href: "/", label: TH.nav.home },
-  { href: "/organizations", label: TH.nav.organizations },
-  { href: "/products", label: TH.nav.products },
-  { href: "/plans", label: TH.nav.plans },
-  { href: "/subscriptions", label: TH.nav.subscriptions },
+  {
+    href: "/organizations",
+    label: TH.nav.organizations,
+    permission: "platform.organization.read",
+  },
+  {
+    href: "/branches",
+    label: TH.nav.branches,
+    permission: "platform.branch.read",
+  },
+  {
+    href: "/users",
+    label: TH.nav.users,
+    permission: "platform.user.read",
+  },
+  {
+    href: "/roles",
+    label: TH.nav.roles,
+    permission: "platform.role.read",
+  },
+  {
+    href: "/products",
+    label: TH.nav.products,
+    permission: "platform.product.read",
+  },
+  {
+    href: "/plans",
+    label: TH.nav.plans,
+    anyPlatformRoles: ["SUPER_ADMIN", "BILLING_ADMIN"],
+    anyOrgRoles: ["OWNER", "BILLING_CONTACT"],
+  },
+  {
+    href: "/subscriptions",
+    label: TH.nav.subscriptions,
+    permission: "platform.subscription.read",
+  },
+  {
+    href: "/audit-logs",
+    label: TH.nav.auditLogs,
+    permission: "platform.audit.read",
+  },
+  {
+    href: "/settings",
+    label: TH.nav.settings,
+    anyPlatformRoles: ["SUPER_ADMIN"],
+  },
 ];
 
 export function filterNavForRoles(input: {
   platformRoles: string[];
   organizationRoles: string[];
+  permissions?: string[];
   items?: NavItem[];
 }): NavItem[] {
   const items = input.items ?? PLATFORM_NAV;
-  const isPlatform =
-    input.platformRoles.includes("SUPER_ADMIN") ||
-    input.platformRoles.includes("SUPPORT") ||
-    input.platformRoles.includes("BILLING_ADMIN");
-  const isOrgAdmin =
-    input.organizationRoles.includes("OWNER") ||
-    input.organizationRoles.includes("ADMIN");
+  const isSuper = input.platformRoles.includes("SUPER_ADMIN");
+  const permissions =
+    input.permissions ??
+    permissionsForRoles({
+      platformRoles: input.platformRoles,
+      organizationRoles: input.organizationRoles,
+    });
 
   return items.filter((item) => {
-    if (item.platformOnly && !isPlatform) return false;
-    if (item.href === "/subscriptions" && !isPlatform && !isOrgAdmin) {
+    if (isSuper) return true;
+
+    if (item.anyPlatformRoles?.length || item.anyOrgRoles?.length) {
+      const platformOk =
+        item.anyPlatformRoles?.some((r) => input.platformRoles.includes(r)) ??
+        false;
+      const orgOk =
+        item.anyOrgRoles?.some((r) => input.organizationRoles.includes(r)) ??
+        false;
+      if (!platformOk && !orgOk) return false;
+    }
+
+    if (item.permission && !permissions.includes(item.permission)) {
       return false;
     }
+
+    if (item.platformOnly) {
+      const isPlatform =
+        input.platformRoles.includes("SUPER_ADMIN") ||
+        input.platformRoles.includes("SUPPORT") ||
+        input.platformRoles.includes("BILLING_ADMIN");
+      if (!isPlatform) return false;
+    }
+
     return true;
   });
 }

@@ -55,19 +55,31 @@ export async function GET(request: NextRequest) {
           ? undefined
           : { in: memberOrgIds },
     },
-    include: {
-      product: true,
-      plan: true,
-      organization: true,
-      status: true,
-      billingCycle: true,
+    select: {
+      id: true,
+      organizationId: true,
+      createdAt: true,
+      snapshotJson: true,
+      product: { select: { id: true, code: true, name: true } },
+      plan: { select: { id: true, code: true, name: true } },
+      organization: {
+        select: { id: true, displayName: true, customerCode: true },
+      },
+      status: { select: { code: true } },
+      billingCycle: { select: { code: true } },
     },
     orderBy: { createdAt: "desc" },
   });
 
   return NextResponse.json({
     subscriptions: subscriptions.map((s) => ({
-      ...s,
+      id: s.id,
+      organizationId: s.organizationId,
+      createdAt: s.createdAt,
+      snapshotJson: s.snapshotJson,
+      product: s.product,
+      plan: s.plan,
+      organization: s.organization,
       status: s.status.code,
       billingCycle: s.billingCycle.code,
     })),

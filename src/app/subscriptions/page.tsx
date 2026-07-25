@@ -9,11 +9,14 @@ export const dynamic = "force-dynamic";
 export default async function SubscriptionsPage() {
   const ctx = await requirePlatformPage();
   const subscriptions = await prisma.subscription.findMany({
-    include: {
-      organization: true,
-      product: true,
-      plan: true,
-      status: true,
+    select: {
+      id: true,
+      createdAt: true,
+      snapshotJson: true,
+      organization: { select: { displayName: true, customerCode: true } },
+      product: { select: { code: true, name: true } },
+      plan: { select: { code: true, name: true } },
+      status: { select: { code: true } },
     },
     orderBy: { createdAt: "desc" },
   });

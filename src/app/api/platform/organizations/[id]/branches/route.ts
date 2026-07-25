@@ -52,6 +52,20 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   const branches = await prisma.branch.findMany({
     where: { organizationId: id, deletedAt: null },
+    select: {
+      id: true,
+      organizationId: true,
+      code: true,
+      name: true,
+      timezone: true,
+      address: true,
+      latitude: true,
+      longitude: true,
+      attendanceRadiusMeters: true,
+      createdAt: true,
+      updatedAt: true,
+      statusId: true,
+    },
     orderBy: { code: "asc" },
   });
 

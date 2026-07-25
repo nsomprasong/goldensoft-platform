@@ -14,17 +14,24 @@ export type PlatformUserBundle = {
   memberships: MembershipSummary[];
 };
 
+/**
+ * Load auth context without selecting Phase 5 columns that exist in Prisma
+ * schema / client but are not applied in DB until migration 0002 is approved.
+ */
 export async function loadPlatformUserBundle(
   authUserId: string,
 ): Promise<PlatformUserBundle> {
   const assignmentActive = await prisma.assignmentStatus.findUnique({
     where: { code: MASTER.assignmentStatus.ACTIVE },
+    select: { id: true },
   });
   const membershipActive = await prisma.membershipStatus.findUnique({
     where: { code: MASTER.membershipStatus.ACTIVE },
+    select: { id: true },
   });
   const branchActive = await prisma.branchStatus.findUnique({
     where: { code: MASTER.branchStatus.ACTIVE },
+    select: { id: true },
   });
 
   if (!assignmentActive || !membershipActive) {
@@ -38,25 +45,41 @@ export async function loadPlatformUserBundle(
 
   const profile = await prisma.userProfile.findUnique({
     where: { authUserId },
-    include: {
-      status: true,
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      status: { select: { code: true } },
       platformRoles: {
         where: { statusId: assignmentActive.id },
-        include: { role: true },
+        select: { role: { select: { code: true } } },
       },
       memberships: {
         where: { statusId: membershipActive.id },
-        include: {
-          organization: { include: { status: true } },
+        select: {
+          organizationId: true,
+          organization: {
+            select: {
+              displayName: true,
+              status: { select: { code: true } },
+            },
+          },
           roles: {
             where: { statusId: assignmentActive.id },
-            include: { role: true },
+            select: { role: { select: { code: true } } },
           },
           branchScopes: {
             where: { statusId: assignmentActive.id },
-            include: {
-              scopeType: true,
-              branch: { include: { status: true } },
+            select: {
+              scopeType: { select: { code: true } },
+              branch: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                  status: { select: { code: true } },
+                },
+              },
             },
           },
         },
@@ -89,6 +112,7 @@ export async function loadPlatformUserBundle(
           deletedAt: null,
           statusId: branchActive.id,
         },
+        select: { id: true, name: true, code: true },
         orderBy: { code: "asc" },
       });
       branches = orgBranches.map((b) => ({

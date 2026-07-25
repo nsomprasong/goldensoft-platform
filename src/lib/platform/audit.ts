@@ -1,0 +1,145 @@
+import type { Prisma, PrismaClient } from "@prisma/client";
+
+import { MASTER } from "@/lib/platform/master-codes";
+
+type Db = PrismaClient | Prisma.TransactionClient;
+
+const AUDIT_LABELS: Record<string, { nameTh: string; nameEn: string }> = {
+  [MASTER.auditActionType.ORGANIZATION_CREATE]: {
+    nameTh: "สร้างองค์กร",
+    nameEn: "Create organization",
+  },
+  [MASTER.auditActionType.ORGANIZATION_UPDATE]: {
+    nameTh: "แก้ไของค์กร",
+    nameEn: "Update organization",
+  },
+  [MASTER.auditActionType.ORGANIZATION_SUSPEND]: {
+    nameTh: "ระงับองค์กร",
+    nameEn: "Suspend organization",
+  },
+  [MASTER.auditActionType.BRANCH_CREATE]: {
+    nameTh: "สร้างสาขา",
+    nameEn: "Create branch",
+  },
+  [MASTER.auditActionType.BRANCH_UPDATE]: {
+    nameTh: "แก้ไขสาขา",
+    nameEn: "Update branch",
+  },
+  [MASTER.auditActionType.BRANCH_SUSPEND]: {
+    nameTh: "ระงับสาขา",
+    nameEn: "Suspend branch",
+  },
+  [MASTER.auditActionType.USER_INVITE]: {
+    nameTh: "เชิญผู้ใช้งาน",
+    nameEn: "Invite user",
+  },
+  [MASTER.auditActionType.USER_REINVITE]: {
+    nameTh: "ส่งคำเชิญอีกครั้ง",
+    nameEn: "Reinvite user",
+  },
+  [MASTER.auditActionType.USER_ACTIVATE]: {
+    nameTh: "เปิดใช้งานบัญชี",
+    nameEn: "Activate user",
+  },
+  [MASTER.auditActionType.USER_SUSPEND]: {
+    nameTh: "ระงับบัญชี",
+    nameEn: "Suspend user",
+  },
+  [MASTER.auditActionType.MEMBERSHIP_CREATE]: {
+    nameTh: "สร้างสมาชิกองค์กร",
+    nameEn: "Create membership",
+  },
+  [MASTER.auditActionType.MEMBERSHIP_UPDATE]: {
+    nameTh: "แก้ไขสมาชิกองค์กร",
+    nameEn: "Update membership",
+  },
+  [MASTER.auditActionType.ROLE_ASSIGN]: {
+    nameTh: "กำหนดบทบาท",
+    nameEn: "Assign role",
+  },
+  [MASTER.auditActionType.ROLE_REMOVE]: {
+    nameTh: "ยกเลิกบทบาท",
+    nameEn: "Remove role",
+  },
+  [MASTER.auditActionType.CONTEXT_SWITCH]: {
+    nameTh: "เปลี่ยนองค์กร/สาขา",
+    nameEn: "Switch context",
+  },
+};
+
+/** Keys that must never appear in audit JSON payloads. */
+const SENSITIVE_KEY_RE =
+  /(password|secret|token|authorization|apikey|api_key|connectionstring|database_url|direct_url)/i;
+
+export function sanitizeAuditJson(
+  value: unknown,
+): Prisma.InputJsonValue | undefined {
+  if (value === undefined) return undefined;
+  return scrub(value) as Prisma.InputJsonValue;
+}
+
+function scrub(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(scrub);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (SENSITIVE_KEY_RE.test(key)) continue;
+      out[key] = scrub(child);
+    }
+    return out;
+  }
+  return value;
+}
+
+export async function ensureAuditActionType(
+  db: Db,
+  code: string,
+): Promise<string> {
+  const labels = AUDIT_LABELS[code] ?? {
+    nameTh: code,
+    nameEn: code,
+  };
+  const row = await db.auditActionType.upsert({
+    where: { code },
+    create: {
+      code,
+      nameTh: labels.nameTh,
+      nameEn: labels.nameEn,
+      isSystem: true,
+      isActive: true,
+      sortOrder: 100,
+    },
+    update: {},
+  });
+  return row.id;
+}
+
+export async function writeAuditLog(
+  db: Db,
+  input: {
+    organizationId?: string | null;
+    actorAuthUserId: string;
+    actionCode: string;
+    entityType: string;
+    entityId: string;
+    before?: unknown;
+    after?: unknown;
+    ip?: string | null;
+    userAgent?: string | null;
+  },
+): Promise<void> {
+  const actionTypeId = await ensureAuditActionType(db, input.actionCode);
+  await db.auditLog.create({
+    data: {
+      organizationId: input.organizationId ?? null,
+      actorAuthUserId: input.actorAuthUserId,
+      actionTypeId,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      beforeJson: sanitizeAuditJson(input.before),
+      afterJson: sanitizeAuditJson(input.after),
+      ip: input.ip ?? null,
+      userAgent: input.userAgent ?? null,
+    },
+  });
+}

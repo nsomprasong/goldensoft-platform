@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { ContextSwitcher } from "@/components/context-switcher";
 import { LogoutButton } from "@/components/logout-button";
+import { ToastHost } from "@/components/ui/toast";
 import { filterNavForRoles } from "@/lib/auth/access";
 import { TH } from "@/lib/i18n/th";
 
@@ -19,10 +20,19 @@ export function PlatformShell(props: {
   const nav = filterNavForRoles({
     platformRoles: props.platformRoles,
     organizationRoles: props.organizationRoles,
+  }).map((item) => {
+    if (item.href === "/branches" && props.activeOrganization) {
+      return {
+        ...item,
+        href: `/organizations/${props.activeOrganization.id}/branches`,
+      };
+    }
+    return item;
   });
 
   return (
     <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-6">
+      <ToastHost />
       <header className="mb-6 rounded-2xl border border-[var(--border)] bg-white/90 p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

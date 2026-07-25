@@ -152,16 +152,16 @@ describe("Phase 4 access decisions", () => {
       organizationRoles: ["BILLING_CONTACT"],
     });
     assert.ok(limited.some((i) => i.href === "/organizations"));
-    assert.equal(
-      limited.some((i) => i.href === "/subscriptions"),
-      false,
-    );
+    assert.ok(limited.some((i) => i.href === "/subscriptions"));
+    assert.equal(limited.some((i) => i.href === "/users"), false);
 
     const admin = filterNavForRoles({
       platformRoles: ["SUPER_ADMIN"],
       organizationRoles: [],
     });
     assert.ok(admin.some((i) => i.href === "/subscriptions"));
+    assert.ok(admin.some((i) => i.href === "/users"));
+    assert.ok(admin.some((i) => i.href === "/roles"));
   });
 
   it("protects app paths but not login", () => {

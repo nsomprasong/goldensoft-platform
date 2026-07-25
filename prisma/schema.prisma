@@ -460,6 +460,10 @@ model Organization {
   slug         String    @unique
   legalName    String    @map("legal_name")
   displayName  String    @map("display_name")
+  nameEn       String?   @map("name_en")
+  email        String?
+  phone        String?
+  address      String?
   statusId     String    @map("status_id") @db.Uuid
   taxId        String?   @map("tax_id")
   timezone     String    @default("Asia/Bangkok")
@@ -486,12 +490,16 @@ model Branch {
   organizationId         String    @map("organization_id") @db.Uuid
   code                   String
   name                   String
+  nameEn                 String?   @map("name_en")
   statusId               String    @map("status_id") @db.Uuid
   timezone               String    @default("Asia/Bangkok")
   address                String?
+  email                  String?
+  phone                  String?
   latitude               Decimal?  @db.Decimal(10, 7)
   longitude              Decimal?  @db.Decimal(10, 7)
   attendanceRadiusMeters Int?      @map("attendance_radius_meters")
+  isPrimary              Boolean   @default(false) @map("is_primary")
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(6)

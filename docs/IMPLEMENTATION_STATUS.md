@@ -72,13 +72,23 @@ Additional masters (not former Prisma enums, but required as lookup): FeatureVal
 - Guard rejects SSL override params on `DATABASE_URL`; requires `sslmode=verify-full` + `sslrootcert` on `DIRECT_URL`
 - No insecure TLS workarounds
 
+### Phase 5 — Functional Admin (preview)
+- Thai sidebar: ภาพรวม / องค์กร / สาขา / ผู้ใช้งาน / บทบาทและสิทธิ์ / ผลิตภัณฑ์ / แพ็กเกจ / การสมัครใช้บริการ / บันทึกกิจกรรม / ตั้งค่าระบบ
+- Role-filtered nav via expanded `PLATFORM_PERMISSIONS`
+- Organization / branch admin services + pages (search, pagination, create/edit/suspend, primary branch rules)
+- User invite wizard + mock Auth adapter (no real invite email)
+- Roles permission matrix (Thai labels)
+- Audit log viewer + shared `writeAuditLog` with secret scrubbing
+- Last SUPER_ADMIN / last OWNER guards
+- Additive migration preview: `prisma/migrations/0002_phase5_admin_fields` (**not applied**)
+
 ## Not Implemented
 
-- Apply migration to Supabase
-- Live `db:preflight` หลังผู้ใช้ปรับ `.env.local` (TLS CA + DIRECT_URL query)
-- Real Supabase Auth login UI / user provisioning
-- FK จาก `platform.user_profiles.auth_user_id` → `auth.users` (เลี่ยงแตะ schema `auth` ใน initial migration)
-- Outbox workers, billing, QR device credentials, deploy
+- Apply migration `0002_phase5_admin_fields` to Supabase (รออนุมัติ)
+- Real Supabase Auth invite / reinvite (mock adapter only — รออนุมัติ)
+- FK จาก `platform.user_profiles.auth_user_id` → `auth.users`
+- Outbox workers, billing polish, QR device credentials, deploy
+- Phase 6 Visual Polish / Design System
 
 ## Known Risks
 
@@ -86,6 +96,7 @@ Additional masters (not former Prisma enums, but required as lookup): FeatureVal
 - Initial migration ยังไม่สร้าง FK เข้า `auth` โดยเจตนา (schema boundary)
 - Seed ต้องการ PostgreSQL หลัง migrate แล้วเท่านั้น
 - `DIRECT_URL` sslrootcert path `../certs/...` ถูก resolve จากโฟลเดอร์ `prisma/`
+- จนกว่าจะ apply `0002` คอลัมน์ `name_en` / contact / `is_primary` ยังไม่มีใน DB จริง — UI/API ที่เขียนฟิลด์เหล่านี้จะล้มเหลวตอน runtime
 
 ## Test Results
 
@@ -93,7 +104,7 @@ Additional masters (not former Prisma enums, but required as lookup): FeatureVal
 
 ## Next Recommended Step
 
-1. ผู้ใช้ปรับ `.env.local`: `SUPABASE_DB_CA_CERT_PATH`, `DATABASE_URL` (ไม่มี ssl*), `DIRECT_URL` (+ verify-full)
-2. รัน `npm run db:preflight`
-3. PM อนุมัติ → Apply `0001_platform_initial`
-4. เชื่อม Login UI กับ Supabase Auth
+1. PM อนุมัติ → Apply `0002_phase5_admin_fields`
+2. (ทางเลือก) รัน upsert audit action masters ใหม่ผ่าน seed หรือ runtime upsert
+3. PM อนุมัติ → เปิด real Auth invite adapter แทน mock
+4. ทดสอบ invite จริงกับ project `horyhrnqbeaivdztekfv`

@@ -1,32 +1,56 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { checkMigrationSql } from "../src/lib/db/migration-safety";
+import {
+  checkAdditiveMigrationSql,
+  checkMigrationSql,
+} from "../src/lib/db/migration-safety";
 
-const MIGRATION_PATH = path.resolve(
-  process.cwd(),
-  "prisma/migrations/0001_platform_initial/migration.sql",
-);
+const MIGRATIONS_DIR = path.resolve(process.cwd(), "prisma/migrations");
 
 function main() {
-  if (!fs.existsSync(MIGRATION_PATH)) {
-    console.error(`Missing migration file: ${MIGRATION_PATH}`);
+  const entries = fs
+    .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort();
+
+  if (entries.length === 0) {
+    console.error("No migration directories found");
     process.exit(1);
   }
 
-  const sql = fs.readFileSync(MIGRATION_PATH, "utf8");
-  const result = checkMigrationSql(sql);
-  console.log(
-    "Migration schemas touched:",
-    result.schemasTouched.join(", ") || "(none parsed)",
-  );
-  if (!result.ok) {
-    for (const error of result.errors) {
-      console.error(`- ${error}`);
+  let failed = false;
+  for (const name of entries) {
+    const migrationPath = path.join(MIGRATIONS_DIR, name, "migration.sql");
+    if (!fs.existsSync(migrationPath)) {
+      console.error(`Missing migration file: ${migrationPath}`);
+      failed = true;
+      continue;
     }
-    process.exit(1);
+
+    const sql = fs.readFileSync(migrationPath, "utf8");
+    const isInitial = name.startsWith("0001_");
+    const result = isInitial
+      ? checkMigrationSql(sql)
+      : checkAdditiveMigrationSql(sql);
+
+    console.log(
+      `${name}: schemas=${result.schemasTouched.join(", ") || "(none)"} kind=${isInitial ? "initial" : "additive"}`,
+    );
+    if (!result.ok) {
+      failed = true;
+      for (const error of result.errors) {
+        console.error(`  - ${error}`);
+      }
+    } else {
+      console.log(`  OK`);
+    }
   }
 
+  if (failed) {
+    process.exit(1);
+  }
   console.log("Migration SQL safety check OK (platform only)");
 }
 

@@ -28,14 +28,28 @@ export async function GET(request: NextRequest) {
 
   const profile = await prisma.userProfile.findUnique({
     where: { authUserId: user.id },
-    include: {
+    select: {
       platformRoles: {
         where: { statusId: assignmentActive.id },
-        include: { role: true },
+        select: { role: { select: { code: true } } },
       },
       memberships: {
         where: { statusId: membershipActive.id },
-        include: { organization: { include: { status: true } } },
+        select: {
+          organization: {
+            select: {
+              id: true,
+              customerCode: true,
+              slug: true,
+              displayName: true,
+              legalName: true,
+              taxId: true,
+              createdAt: true,
+              updatedAt: true,
+              status: { select: { code: true } },
+            },
+          },
+        },
       },
     },
   });
@@ -50,14 +64,31 @@ export async function GET(request: NextRequest) {
   const orgs = isSuper
     ? await prisma.organization.findMany({
         where: { deletedAt: null },
-        include: { status: true },
+        select: {
+          id: true,
+          customerCode: true,
+          slug: true,
+          displayName: true,
+          legalName: true,
+          taxId: true,
+          createdAt: true,
+          updatedAt: true,
+          status: { select: { code: true } },
+        },
         orderBy: { displayName: "asc" },
       })
     : profile.memberships.map((m) => m.organization);
 
   return NextResponse.json({
     organizations: orgs.map((o) => ({
-      ...o,
+      id: o.id,
+      customerCode: o.customerCode,
+      slug: o.slug,
+      displayName: o.displayName,
+      legalName: o.legalName,
+      taxId: o.taxId,
+      createdAt: o.createdAt,
+      updatedAt: o.updatedAt,
       status: o.status.code,
     })),
   });
