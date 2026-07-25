@@ -11,43 +11,78 @@ export type TrustedPgSsl = {
 };
 
 /**
- * Resolve SUPABASE_DB_CA_CERT_PATH relative to project root.
- * Rejects absolute paths outside the project and path traversal.
- * Never logs certificate contents.
+ * Normalize a path value from environment / config.
+ * Strips BOM, surrounding quotes, and trailing inline comments.
  */
-export function resolveCaCertAbsolutePath(
-  relativePath: string,
+export function normalizeConfiguredPath(configuredPath: string): string {
+  let raw = configuredPath.replace(/^\uFEFF/, "").trim();
+  if (
+    (raw.startsWith('"') && raw.endsWith('"')) ||
+    (raw.startsWith("'") && raw.endsWith("'"))
+  ) {
+    raw = raw.slice(1, -1).trim();
+  }
+  const hash = raw.search(/\s+#/);
+  if (hash >= 0) {
+    raw = raw.slice(0, hash).trim();
+  }
+  return raw.replace(/\\/g, "/");
+}
+
+/**
+ * Windows-safe containment check (path.relative, not string prefix alone).
+ */
+export function isPathInsideProjectRoot(
+  absolutePath: string,
+  projectRoot: string = process.cwd(),
+): boolean {
+  const root = path.resolve(projectRoot);
+  const target = path.resolve(absolutePath);
+  const relative = path.relative(root, target);
+  if (relative === "") return true;
+  if (path.isAbsolute(relative)) return false;
+  const segments = relative.split(/[/\\]/);
+  return !segments.includes("..");
+}
+
+/**
+ * Shared path resolver for Guard + CA utility.
+ * Relative paths always resolve as: path.resolve(process.cwd(), configuredPath)
+ * (or an explicit projectRoot that defaults to process.cwd()).
+ */
+export function resolveProjectRelativePath(
+  configuredPath: string,
   projectRoot: string = process.cwd(),
 ): string {
-  const raw = relativePath.trim();
-  if (!raw) {
-    throw new Error("CA certificate path is empty");
+  const configured = normalizeConfiguredPath(configuredPath);
+  if (!configured) {
+    throw new Error("Configured path is empty");
   }
 
-  if (path.isAbsolute(raw)) {
-    const absolute = path.normalize(raw);
-    const root = path.resolve(projectRoot);
-    if (absolute !== root && !absolute.startsWith(root + path.sep)) {
-      throw new Error("CA certificate absolute path is outside the project root");
-    }
-    return absolute;
+  const parts = configured.split("/").filter((part) => part.length > 0);
+  if (parts.includes("..")) {
+    throw new Error(`Path traversal is not allowed: ${configured}`);
   }
 
-  const normalized = path.normalize(raw);
-  if (
-    normalized === ".." ||
-    normalized.startsWith(`..${path.sep}`) ||
-    normalized.split(path.sep).includes("..")
-  ) {
-    throw new Error("CA certificate path must not contain path traversal");
-  }
-
-  const absolute = path.resolve(projectRoot, normalized);
   const root = path.resolve(projectRoot);
-  if (absolute !== root && !absolute.startsWith(root + path.sep)) {
-    throw new Error("CA certificate path resolves outside the project root");
+
+  const absolute = path.isAbsolute(configured)
+    ? path.resolve(configured)
+    : path.resolve(root, configured);
+
+  if (!isPathInsideProjectRoot(absolute, root)) {
+    throw new Error(`Resolved path is outside project root: ${absolute}`);
   }
+
   return absolute;
+}
+
+/** Alias used by CA loading — same shared resolver. */
+export function resolveCaCertAbsolutePath(
+  configuredPath: string,
+  projectRoot: string = process.cwd(),
+): string {
+  return resolveProjectRelativePath(configuredPath, projectRoot);
 }
 
 /** Resolve DIRECT_URL sslrootcert; `../certs/...` is resolved from the prisma/ directory. */
@@ -55,46 +90,68 @@ export function resolveDirectSslRootCertPath(
   sslrootcert: string,
   projectRoot: string = process.cwd(),
 ): string {
-  const raw = sslrootcert.trim();
+  const raw = normalizeConfiguredPath(sslrootcert);
   if (!raw) {
     throw new Error("DIRECT_URL sslrootcert is empty");
   }
 
+  const root = path.resolve(projectRoot);
   const base =
-    raw.startsWith("../") || raw.startsWith(`..${path.sep}`)
-      ? path.join(projectRoot, "prisma")
-      : projectRoot;
+    raw.startsWith("../") || raw.startsWith("..\\")
+      ? path.join(root, "prisma")
+      : root;
 
   const absolute = path.resolve(base, raw);
-  const root = path.resolve(projectRoot);
-  if (absolute !== root && !absolute.startsWith(root + path.sep)) {
-    throw new Error("DIRECT_URL sslrootcert resolves outside the project root");
+  if (!isPathInsideProjectRoot(absolute, root)) {
+    throw new Error(
+      `DIRECT_URL sslrootcert resolves outside the project root: ${absolute}`,
+    );
   }
   return absolute;
 }
 
-export function readCaCertificateFile(absolutePath: string): string {
-  if (!fs.existsSync(absolutePath)) {
-    throw new Error("CA certificate file not found");
+/** Fail-closed file checks: exists, is file, size > 0. Never logs PEM content. */
+export function assertCaCertificateFile(absolutePath: string): void {
+  let stats: fs.Stats;
+  try {
+    stats = fs.statSync(absolutePath);
+  } catch {
+    throw new Error(`CA certificate file does not exist: ${absolutePath}`);
   }
+
+  if (!stats.isFile()) {
+    throw new Error(`CA certificate path is not a file: ${absolutePath}`);
+  }
+
+  if (stats.size <= 0) {
+    throw new Error(`CA certificate file is empty: ${absolutePath}`);
+  }
+}
+
+export function readCaCertificateFile(absolutePath: string): string {
+  assertCaCertificateFile(absolutePath);
   const content = fs.readFileSync(absolutePath, "utf8").trim();
   if (!content) {
-    throw new Error("CA certificate file is empty");
+    throw new Error(`CA certificate file is empty: ${absolutePath}`);
   }
   if (!content.includes("BEGIN CERTIFICATE")) {
-    throw new Error("CA certificate file is not a PEM certificate");
+    throw new Error(
+      `CA certificate file is not a PEM certificate: ${absolutePath}`,
+    );
   }
   if (/PRIVATE KEY/i.test(content)) {
-    throw new Error("CA certificate file must not contain a private key");
+    throw new Error(
+      `CA certificate file must not contain a private key: ${absolutePath}`,
+    );
   }
   return content;
 }
 
 export function loadSupabaseDbCaCertificate(
-  relativePath: string = process.env.SUPABASE_DB_CA_CERT_PATH ?? "",
+  configuredPath: string = process.env.SUPABASE_DB_CA_CERT_PATH ?? "",
   projectRoot: string = process.cwd(),
 ): { absolutePath: string; content: string } {
-  const absolutePath = resolveCaCertAbsolutePath(relativePath, projectRoot);
+  const absolutePath = resolveProjectRelativePath(configuredPath, projectRoot);
   const content = readCaCertificateFile(absolutePath);
   return { absolutePath, content };
 }

@@ -1,4 +1,5 @@
 import { loadEnvConfig } from "@next/env";
+import path from "node:path";
 
 // Load .env.local / .env before any Environment Guard usage.
 loadEnvConfig(process.cwd());
@@ -12,15 +13,29 @@ async function main() {
   const {
     buildTrustedPgSsl,
     loadSupabaseDbCaCertificate,
+    resolveProjectRelativePath,
   } = await import("../src/lib/db/ca-certificate");
   const { Pool } = await import("pg");
 
-  const guard = assertSafeEnvironment();
+  const projectRoot = process.cwd();
+  const configuredCaPath = process.env.SUPABASE_DB_CA_CERT_PATH ?? "";
+
+  let resolvedCaPath = "";
+  try {
+    resolvedCaPath = resolveProjectRelativePath(configuredCaPath, projectRoot);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unable to resolve CA path";
+    console.error(`[ENV_GUARD] CA_CERT_INVALID: ${message}`);
+    process.exit(1);
+  }
+
+  const guard = assertSafeEnvironment({ projectRoot });
   if (!guard.ok) {
     console.error(`[ENV_GUARD] ${guard.code}: ${guard.reason}`);
     process.exit(1);
   }
-  requireSafeEnvironment();
+  requireSafeEnvironment({ projectRoot });
 
   const databaseUrl = process.env.DATABASE_URL;
   const directUrl = process.env.DIRECT_URL;
@@ -33,11 +48,18 @@ async function main() {
 
   const dbMeta = redactConnectionString(databaseUrl);
   const directMeta = redactConnectionString(directUrl);
-  const { content: caContent } = loadSupabaseDbCaCertificate();
+  const { content: caContent, absolutePath: caAbsolutePath } =
+    loadSupabaseDbCaCertificate(configuredCaPath, projectRoot);
   const ssl = buildTrustedPgSsl(caContent);
 
   console.log("APP_CODE:", process.env.APP_CODE ?? "(missing)");
+  console.log("Project root:", path.resolve(projectRoot));
   console.log("Project ref:", guard.projectRef);
+  console.log("CA certificate path:", caAbsolutePath);
+  console.log(
+    "CA path matches resolve(cwd, configured):",
+    caAbsolutePath === resolvedCaPath,
+  );
   console.log(
     "DATABASE_URL host/port/db:",
     dbMeta.host,
@@ -53,7 +75,6 @@ async function main() {
   console.log("SSL verification enabled:", ssl.rejectUnauthorized === true);
   console.log("Write operations: NONE");
 
-  // Read-only connectivity check via DIRECT_URL + trusted CA
   const pool = new Pool({
     connectionString: directUrl,
     ssl,
@@ -101,7 +122,6 @@ async function main() {
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : "preflight failed";
-  // Strip any accidental credential fragments; never log cert contents
   console.error(
     "db:preflight failed:",
     message

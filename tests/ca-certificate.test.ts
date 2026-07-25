@@ -5,13 +5,16 @@ import path from "node:path";
 import { describe, it } from "node:test";
 
 import {
+  assertCaCertificateFile,
   buildTrustedPgSsl,
+  isPathInsideProjectRoot,
   loadSupabaseDbCaCertificate,
   resolveCaCertAbsolutePath,
+  resolveProjectRelativePath,
 } from "../src/lib/db/ca-certificate";
 import { assertSafeEnvironment } from "../src/lib/env/guard";
 
-const PROJECT_ROOT = path.resolve(__dirname, "..");
+const PROJECT_ROOT = path.resolve(process.cwd());
 const CA_REL = "certs/prod-ca-2021.crt";
 const NEW_REF = "horyhrnqbeaivdztekfv";
 const LEGACY_REF = "invnwpyshxdadhocueeh";
@@ -21,6 +24,61 @@ const goodDb = `postgresql://postgres.${NEW_REF}:secret@aws-0-ap-southeast-1.poo
 const goodDirect = `postgresql://postgres.${NEW_REF}:secret@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=verify-full&sslrootcert=../certs/prod-ca-2021.crt`;
 
 describe("CA certificate + TLS guard", () => {
+  it("resolves relative CA path from process.cwd() / project root", () => {
+    const expected = path.resolve(process.cwd(), CA_REL);
+    const viaShared = resolveProjectRelativePath(CA_REL, process.cwd());
+    const viaAlias = resolveCaCertAbsolutePath(CA_REL, process.cwd());
+    assert.equal(viaShared, expected);
+    assert.equal(viaAlias, expected);
+    assert.equal(
+      viaShared,
+      path.resolve(PROJECT_ROOT, "certs", "prod-ca-2021.crt"),
+    );
+  });
+
+  it("does not resolve CA path into the parent of project root", () => {
+    const resolved = resolveProjectRelativePath(CA_REL, PROJECT_ROOT);
+    const parentCert = path.resolve(
+      PROJECT_ROOT,
+      "..",
+      "certs",
+      "prod-ca-2021.crt",
+    );
+    assert.notEqual(resolved, parentCert);
+    assert.equal(
+      resolved,
+      path.join(PROJECT_ROOT, "certs", "prod-ca-2021.crt"),
+    );
+    assert.ok(isPathInsideProjectRoot(resolved, PROJECT_ROOT));
+  });
+
+  it("supports Windows-style relative separators after normalize", () => {
+    const resolved = resolveProjectRelativePath(
+      "certs\\prod-ca-2021.crt",
+      PROJECT_ROOT,
+    );
+    assert.equal(resolved, path.resolve(PROJECT_ROOT, CA_REL));
+  });
+
+  it("does not report CA_CERT_MISSING when the certificate file exists", () => {
+    const result = assertSafeEnvironment({
+      appCode: "PLATFORM",
+      supabaseUrl: goodApi,
+      databaseUrl: goodDb,
+      directUrl: goodDirect,
+      caCertPath: CA_REL,
+      projectRoot: PROJECT_ROOT,
+      expectedProjectRef: NEW_REF,
+      blockedLegacyProjectRef: LEGACY_REF,
+    });
+    assert.equal(
+      result.ok,
+      true,
+      !result.ok ? `${result.code}: ${result.reason}` : "",
+    );
+    assertCaCertificateFile(path.resolve(PROJECT_ROOT, CA_REL));
+  });
+
   it("loads the committed public CA certificate", () => {
     const loaded = loadSupabaseDbCaCertificate(CA_REL, PROJECT_ROOT);
     assert.ok(loaded.content.includes("BEGIN CERTIFICATE"));
@@ -29,29 +87,59 @@ describe("CA certificate + TLS guard", () => {
 
   it("fails closed when CA file is missing", () => {
     assert.throws(
-      () => loadSupabaseDbCaCertificate("certs/does-not-exist.crt", PROJECT_ROOT),
-      /not found/i,
+      () =>
+        loadSupabaseDbCaCertificate("certs/does-not-exist.crt", PROJECT_ROOT),
+      /does not exist/i,
     );
+
+    const result = assertSafeEnvironment({
+      appCode: "PLATFORM",
+      supabaseUrl: goodApi,
+      databaseUrl: goodDb,
+      directUrl: goodDirect,
+      caCertPath: "certs/does-not-exist.crt",
+      projectRoot: PROJECT_ROOT,
+      expectedProjectRef: NEW_REF,
+      blockedLegacyProjectRef: LEGACY_REF,
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.code, "CA_CERT_MISSING");
   });
 
   it("rejects empty CA certificate files", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gs-ca-empty-"));
     try {
       const rel = "empty.crt";
-      // Use a nested temp project root
-      fs.writeFileSync(path.join(dir, rel), "   \n", "utf8");
-      assert.throws(
-        () => loadSupabaseDbCaCertificate(rel, dir),
-        /empty/i,
-      );
+      fs.writeFileSync(path.join(dir, rel), "", "utf8");
+      assert.throws(() => loadSupabaseDbCaCertificate(rel, dir), /empty/i);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
+  it("rejects a directory path as CA certificate", () => {
+    assert.throws(
+      () => assertCaCertificateFile(path.join(PROJECT_ROOT, "certs")),
+      /not a file/i,
+    );
+
+    const result = assertSafeEnvironment({
+      appCode: "PLATFORM",
+      supabaseUrl: goodApi,
+      databaseUrl: goodDb,
+      directUrl: goodDirect,
+      caCertPath: "certs",
+      projectRoot: PROJECT_ROOT,
+      expectedProjectRef: NEW_REF,
+      blockedLegacyProjectRef: LEGACY_REF,
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.code, "CA_CERT_INVALID");
+  });
+
   it("rejects path traversal in CA path", () => {
     assert.throws(
-      () => resolveCaCertAbsolutePath("../outside.crt", PROJECT_ROOT),
+      () => resolveProjectRelativePath("../certs/prod-ca-2021.crt", PROJECT_ROOT),
       /traversal|outside/i,
     );
   });
@@ -59,7 +147,7 @@ describe("CA certificate + TLS guard", () => {
   it("rejects absolute paths outside the project root", () => {
     const outside = path.join(os.tmpdir(), "outside-ca.crt");
     assert.throws(
-      () => resolveCaCertAbsolutePath(outside, PROJECT_ROOT),
+      () => resolveProjectRelativePath(outside, PROJECT_ROOT),
       /outside/i,
     );
   });
@@ -153,11 +241,7 @@ describe("CA certificate + TLS guard", () => {
     ];
     for (const file of files) {
       const src = fs.readFileSync(file, "utf8");
-      assert.equal(
-        /rejectUnauthorized\s*:\s*false/.test(src),
-        false,
-        file,
-      );
+      assert.equal(/rejectUnauthorized\s*:\s*false/.test(src), false, file);
       assert.equal(
         /NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*0/.test(src),
         false,

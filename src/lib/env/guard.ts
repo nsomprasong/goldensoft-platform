@@ -1,6 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import {
+  assertCaCertificateFile,
+  isPathInsideProjectRoot,
+  normalizeConfiguredPath,
+  resolveDirectSslRootCertPath,
+  resolveProjectRelativePath,
+} from "../db/ca-certificate";
+
 export type EnvGuardInput = {
   appCode?: string;
   nodeEnv?: string;
@@ -156,77 +164,12 @@ export function databaseUrlHasForbiddenSslParams(
   return null;
 }
 
-function resolveCaPathInsideProject(
-  relativePath: string,
-  projectRoot: string,
-): { ok: true; absolutePath: string } | { ok: false; reason: string } {
-  const raw = relativePath.trim();
-  if (!raw) {
-    return { ok: false, reason: "SUPABASE_DB_CA_CERT_PATH is empty" };
-  }
-  if (path.isAbsolute(raw)) {
-    const absolute = path.normalize(raw);
-    const root = path.resolve(projectRoot);
-    if (absolute !== root && !absolute.startsWith(root + path.sep)) {
-      return {
-        ok: false,
-        reason: "CA certificate path must stay inside the project root",
-      };
-    }
-    return { ok: true, absolutePath: absolute };
-  }
-
-  const normalized = path.normalize(raw);
-  if (
-    normalized === ".." ||
-    normalized.startsWith(`..${path.sep}`) ||
-    normalized.split(path.sep).includes("..")
-  ) {
-    return {
-      ok: false,
-      reason: "CA certificate path must not contain path traversal",
-    };
-  }
-
-  const absolute = path.resolve(projectRoot, normalized);
-  const root = path.resolve(projectRoot);
-  if (absolute !== root && !absolute.startsWith(root + path.sep)) {
-    return {
-      ok: false,
-      reason: "CA certificate path must stay inside the project root",
-    };
-  }
-  return { ok: true, absolutePath: absolute };
-}
-
-function resolveDirectSslRootCert(
-  sslrootcert: string,
-  projectRoot: string,
-): { ok: true; absolutePath: string } | { ok: false; reason: string } {
-  const raw = sslrootcert.trim();
-  if (!raw) {
-    return { ok: false, reason: "DIRECT_URL sslrootcert is empty" };
-  }
-  const base =
-    raw.startsWith("../") || raw.startsWith(`..${path.sep}`)
-      ? path.join(projectRoot, "prisma")
-      : projectRoot;
-  const absolute = path.resolve(base, raw);
-  const root = path.resolve(projectRoot);
-  if (absolute !== root && !absolute.startsWith(root + path.sep)) {
-    return {
-      ok: false,
-      reason: "DIRECT_URL sslrootcert must stay inside the project root",
-    };
-  }
-  return { ok: true, absolutePath: absolute };
-}
-
 function validateCaCertificateFile(
   caCertPath: string | undefined,
   projectRoot: string,
 ): EnvGuardResult | null {
-  if (!caCertPath?.trim()) {
+  const configured = caCertPath ? normalizeConfiguredPath(caCertPath) : "";
+  if (!configured) {
     return {
       ok: false,
       code: "CA_CERT_MISSING",
@@ -234,36 +177,41 @@ function validateCaCertificateFile(
     };
   }
 
-  const resolved = resolveCaPathInsideProject(caCertPath, projectRoot);
-  if (!resolved.ok) {
-    return { ok: false, code: "CA_CERT_INVALID", reason: resolved.reason };
-  }
-
-  if (!fs.existsSync(resolved.absolutePath)) {
-    return {
-      ok: false,
-      code: "CA_CERT_MISSING",
-      reason: "CA certificate file does not exist",
-    };
-  }
-
-  let content: string;
+  let absolutePath: string;
   try {
-    content = fs.readFileSync(resolved.absolutePath, "utf8").trim();
-  } catch {
+    // Same shared resolver as CA utility: path.resolve(cwd, configuredPath)
+    absolutePath = resolveProjectRelativePath(configured, projectRoot);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Invalid CA certificate path";
+    return { ok: false, code: "CA_CERT_INVALID", reason: message };
+  }
+
+  if (!isPathInsideProjectRoot(absolutePath, projectRoot)) {
     return {
       ok: false,
       code: "CA_CERT_INVALID",
-      reason: "Unable to read CA certificate file",
+      reason: `CA certificate path must stay inside the project root: ${absolutePath}`,
     };
   }
 
-  if (!content) {
-    return {
-      ok: false,
-      code: "CA_CERT_INVALID",
-      reason: "CA certificate file is empty",
-    };
+  try {
+    assertCaCertificateFile(absolutePath);
+    const content = fs.readFileSync(absolutePath, "utf8").trim();
+    if (!content) {
+      return {
+        ok: false,
+        code: "CA_CERT_INVALID",
+        reason: `CA certificate file is empty: ${absolutePath}`,
+      };
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Invalid CA certificate file";
+    if (/does not exist/i.test(message)) {
+      return { ok: false, code: "CA_CERT_MISSING", reason: message };
+    }
+    return { ok: false, code: "CA_CERT_INVALID", reason: message };
   }
 
   return null;
@@ -299,33 +247,37 @@ function validateDirectUrlTls(
     };
   }
 
-  const resolved = resolveDirectSslRootCert(sslrootcert, projectRoot);
-  if (!resolved.ok) {
-    return { ok: false, code: "DIRECT_URL_TLS", reason: resolved.reason };
+  let absolutePath: string;
+  try {
+    absolutePath = resolveDirectSslRootCertPath(sslrootcert, projectRoot);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Invalid DIRECT_URL sslrootcert";
+    return { ok: false, code: "DIRECT_URL_TLS", reason: message };
   }
 
-  if (!fs.existsSync(resolved.absolutePath)) {
+  if (!fs.existsSync(absolutePath)) {
     return {
       ok: false,
       code: "DIRECT_URL_TLS",
-      reason: "DIRECT_URL sslrootcert file does not exist",
+      reason: `DIRECT_URL sslrootcert file does not exist: ${absolutePath}`,
     };
   }
 
   try {
-    const content = fs.readFileSync(resolved.absolutePath, "utf8").trim();
+    const content = fs.readFileSync(absolutePath, "utf8").trim();
     if (!content) {
       return {
         ok: false,
         code: "DIRECT_URL_TLS",
-        reason: "DIRECT_URL sslrootcert file is empty",
+        reason: `DIRECT_URL sslrootcert file is empty: ${absolutePath}`,
       };
     }
   } catch {
     return {
       ok: false,
       code: "DIRECT_URL_TLS",
-      reason: "Unable to read DIRECT_URL sslrootcert file",
+      reason: `Unable to read DIRECT_URL sslrootcert file: ${absolutePath}`,
     };
   }
 
@@ -356,7 +308,8 @@ export function assertSafeEnvironment(
   const allowTestAuth = input.allowTestAuth ?? process.env.ALLOW_TEST_AUTH;
   const caCertPath =
     input.caCertPath ?? process.env.SUPABASE_DB_CA_CERT_PATH;
-  const projectRoot = input.projectRoot ?? process.cwd();
+  // Always resolve CA paths from process.cwd() unless tests inject projectRoot.
+  const projectRoot = path.resolve(input.projectRoot ?? process.cwd());
 
   if (appCode !== "PLATFORM") {
     return {
