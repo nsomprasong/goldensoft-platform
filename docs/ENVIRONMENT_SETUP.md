@@ -69,6 +69,11 @@ DIRECT_URL="postgresql://...@...pooler.supabase.com:5432/postgres?sslmode=verify
 - Production ต้องมี CA + Publishable Key และห้าม `ALLOW_TEST_AUTH=true`
 - Error ต้องไม่แสดง password / secret / certificate PEM
 
+## Real User Invitation
+
+ดูรายละเอียดการตั้งค่า URL Configuration, first-invite gate และ readiness ที่  
+[`docs/REAL_USER_INVITE.md`](./REAL_USER_INVITE.md)
+
 ## Migration preview
 
 ไฟล์: `prisma/migrations/0001_platform_initial/migration.sql`  

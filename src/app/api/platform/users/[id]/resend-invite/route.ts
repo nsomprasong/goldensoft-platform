@@ -5,8 +5,16 @@ import {
   createAuthInviteAdapter,
 } from "@/lib/auth/auth-invite-adapter";
 import { loadActorAccess } from "@/lib/auth/actor-access";
-import { resolveInviteEnvironment } from "@/lib/auth/invite-env";
+import {
+  InviteEnvironmentError,
+  resolveInviteEnvironment,
+} from "@/lib/auth/invite-env";
 import { isSameOriginMutation } from "@/lib/auth/mutation-security";
+import {
+  evaluateRealInviteSend,
+  maskInviteEmail,
+  resolveRealInviteGate,
+} from "@/lib/auth/real-invite-gate";
 import { requireAuthUser } from "@/lib/auth/request-auth";
 import { TH } from "@/lib/i18n/th";
 import {
@@ -30,9 +38,50 @@ export async function POST(
     const { id } = await params;
     const actor = await loadActorAccess(prisma, user.id);
     const environment = resolveInviteEnvironment();
-    const auth = createAuthInviteAdapter(environment, {
-      expectedProjectRef: process.env.EXPECTED_SUPABASE_PROJECT_REF,
+
+    // Peek invitation email for the first-real-invite gate before any Auth send.
+    const invitation = await prisma.userInvitation.findUnique({
+      where: { id },
+      select: { emailNormalized: true },
     });
+    if (!invitation) {
+      return NextResponse.json(
+        { message: TH.common.notFound, code: "NOT_FOUND" },
+        { status: 404 },
+      );
+    }
+
+    const gateDecision = evaluateRealInviteSend({
+      mode: environment.mode,
+      email: invitation.emailNormalized,
+      gate: resolveRealInviteGate(),
+    });
+    if (gateDecision.action === "preview") {
+      return NextResponse.json(
+        {
+          preview: true,
+          writeOperations: "NONE",
+          code: gateDecision.code,
+          message: gateDecision.message,
+          emailMasked: maskInviteEmail(gateDecision.email),
+          redirectTo: environment.redirectTo,
+          mode: environment.mode,
+        },
+        { status: 200 },
+      );
+    }
+    if (gateDecision.action === "reject") {
+      return NextResponse.json(
+        {
+          message: gateDecision.message,
+          code: gateDecision.code,
+          emailMasked: maskInviteEmail(gateDecision.email),
+        },
+        { status: 403 },
+      );
+    }
+
+    const auth = createAuthInviteAdapter(environment);
     const result = await resendOrganizationInvitation(
       prisma,
       actor,
@@ -53,10 +102,19 @@ export async function POST(
               : 409;
       return NextResponse.json({ message: error.message, code: error.code }, { status });
     }
-    if (error instanceof AuthInviteError) {
+    if (
+      error instanceof AuthInviteError ||
+      error instanceof InviteEnvironmentError
+    ) {
       return NextResponse.json(
         { message: error.message, code: error.code },
-        { status: error.code === "AUTH_INVITE_RATE_LIMITED" ? 429 : 502 },
+        {
+          status:
+            error instanceof AuthInviteError &&
+            error.code === "AUTH_INVITE_RATE_LIMITED"
+              ? 429
+              : 502,
+        },
       );
     }
     return NextResponse.json({ message: TH.common.failed }, { status: 500 });

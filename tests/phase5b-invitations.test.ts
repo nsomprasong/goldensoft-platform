@@ -45,8 +45,9 @@ describe("Phase 5B invitation environment", () => {
           NODE_ENV: "production",
           AUTH_INVITE_MODE: "real",
           NEXT_PUBLIC_APP_URL: "http://app.example.com",
-          NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
+          NEXT_PUBLIC_SUPABASE_URL: "https://horyhrnqbeaivdztekfv.supabase.co",
           SUPABASE_SECRET_KEY: "test-secret",
+          EXPECTED_SUPABASE_PROJECT_REF: "horyhrnqbeaivdztekfv",
         }),
       /HTTPS/,
     );
@@ -322,6 +323,7 @@ function createRealAdapter(
     supabaseUrl: "https://project.supabase.co",
     secretKey: "test-secret",
     expectedProjectRef: "project",
+    blockedLegacyProjectRef: "invnwpyshxdadhocueeh",
     fetchTransport,
   });
 }

@@ -164,21 +164,24 @@ export class SupabaseAuthInviteAdapter implements AuthInviteAdapter {
     private readonly config: {
       supabaseUrl: string;
       secretKey: string;
-      expectedProjectRef?: string;
+      expectedProjectRef: string;
+      blockedLegacyProjectRef: string;
       timeoutMs?: number;
       fetchTransport?: FetchTransport;
     },
   ) {
     let host: string;
     try {
-      host = new URL(config.supabaseUrl).hostname;
+      host = new URL(config.supabaseUrl).hostname.toLowerCase();
     } catch {
       throw new AuthInviteError("AUTH_INVITE_PROJECT_MISMATCH");
     }
-    if (
-      config.expectedProjectRef &&
-      host !== `${config.expectedProjectRef}.supabase.co`
-    ) {
+    const expected = config.expectedProjectRef.trim().toLowerCase();
+    const blocked = config.blockedLegacyProjectRef.trim().toLowerCase();
+    if (!expected || host === `${blocked}.supabase.co` || host.includes(blocked)) {
+      throw new AuthInviteError("AUTH_INVITE_PROJECT_MISMATCH");
+    }
+    if (host !== `${expected}.supabase.co`) {
       throw new AuthInviteError("AUTH_INVITE_PROJECT_MISMATCH");
     }
   }
@@ -303,13 +306,25 @@ export class SupabaseAuthInviteAdapter implements AuthInviteAdapter {
 }
 
 function validateRedirect(redirectTo: string): URL {
+  if (
+    redirectTo.startsWith("//") ||
+    /^(javascript|data):/i.test(redirectTo)
+  ) {
+    throw new AuthInviteError("AUTH_INVITE_REDIRECT_INVALID");
+  }
   let redirect: URL;
   try {
     redirect = new URL(redirectTo);
   } catch {
     throw new AuthInviteError("AUTH_INVITE_REDIRECT_INVALID");
   }
-  if (redirect.protocol !== "https:" && redirect.hostname !== "localhost") {
+  if (
+    redirect.protocol !== "https:" &&
+    !(redirect.protocol === "http:" && redirect.hostname === "localhost")
+  ) {
+    throw new AuthInviteError("AUTH_INVITE_REDIRECT_INVALID");
+  }
+  if (redirect.username || redirect.password) {
     throw new AuthInviteError("AUTH_INVITE_REDIRECT_INVALID");
   }
   return redirect;
@@ -336,15 +351,18 @@ function mapAuthHttpError(status: number, body: unknown): AuthInviteErrorCode {
 export function createAuthInviteAdapter(
   environment: InviteEnvironment,
   options: {
-    expectedProjectRef?: string;
     fetchTransport?: FetchTransport;
   } = {},
 ): AuthInviteAdapter {
   if (environment.mode === "mock") return new MockAuthInviteAdapter();
+  if (!environment.secretKey) {
+    throw new AuthInviteError("AUTH_INVITE_ADMIN_KEY_INVALID");
+  }
   return new SupabaseAuthInviteAdapter({
     supabaseUrl: environment.supabaseUrl,
-    secretKey: environment.secretKey!,
-    expectedProjectRef: options.expectedProjectRef,
+    secretKey: environment.secretKey,
+    expectedProjectRef: environment.expectedProjectRef,
+    blockedLegacyProjectRef: environment.blockedLegacyProjectRef,
     fetchTransport: options.fetchTransport,
   });
 }

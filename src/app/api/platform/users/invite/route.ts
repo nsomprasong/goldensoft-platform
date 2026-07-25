@@ -14,11 +14,17 @@ import {
   getIdempotencyKey,
   isSameOriginMutation,
 } from "@/lib/auth/mutation-security";
+import {
+  evaluateRealInviteSend,
+  maskInviteEmail,
+  resolveRealInviteGate,
+} from "@/lib/auth/real-invite-gate";
 import { requireAuthUser } from "@/lib/auth/request-auth";
 import { TH } from "@/lib/i18n/th";
 import {
   UserInvitationError,
   inviteOrganizationUserReal,
+  realInviteUserSchema,
 } from "@/lib/platform/user-invitations";
 import { prisma } from "@/lib/prisma";
 
@@ -41,13 +47,46 @@ export async function POST(request: NextRequest) {
     }
     const actor = await loadActorAccess(prisma, user.id);
     const environment = resolveInviteEnvironment();
-    const auth = createAuthInviteAdapter(environment, {
-      expectedProjectRef: process.env.EXPECTED_SUPABASE_PROJECT_REF,
+    const parsed = realInviteUserSchema.parse({
+      ...body,
+      idempotencyKey: headerKey,
     });
+
+    const gateDecision = evaluateRealInviteSend({
+      mode: environment.mode,
+      email: parsed.email,
+      gate: resolveRealInviteGate(),
+    });
+    if (gateDecision.action === "preview") {
+      return NextResponse.json(
+        {
+          preview: true,
+          writeOperations: "NONE",
+          code: gateDecision.code,
+          message: gateDecision.message,
+          emailMasked: maskInviteEmail(gateDecision.email),
+          redirectTo: environment.redirectTo,
+          mode: environment.mode,
+        },
+        { status: 200 },
+      );
+    }
+    if (gateDecision.action === "reject") {
+      return NextResponse.json(
+        {
+          message: gateDecision.message,
+          code: gateDecision.code,
+          emailMasked: maskInviteEmail(gateDecision.email),
+        },
+        { status: 403 },
+      );
+    }
+
+    const auth = createAuthInviteAdapter(environment);
     const result = await inviteOrganizationUserReal(
       prisma,
       actor,
-      { ...body, idempotencyKey: headerKey },
+      parsed,
       auth,
       environment.redirectTo,
     );
