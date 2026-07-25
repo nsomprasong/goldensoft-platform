@@ -6,23 +6,21 @@ loadEnv({ path: ".env.local" });
 loadEnv({ path: ".env" });
 
 /**
- * Prisma CLI uses DIRECT_URL (session pooler) for schema engine / migrations.
- * Runtime application code uses DATABASE_URL (transaction pooler) via @prisma/adapter-pg.
+ * Prisma CLI uses DIRECT_URL only (session pooler + sslmode=verify-full).
+ * Runtime uses DATABASE_URL (transaction pooler) via @prisma/adapter-pg + trusted CA.
  *
- * Connection strings must be copied from the Supabase Connect Panel — never invented.
+ * Never fall back to DATABASE_URL for migrations — that URL must not carry sslmode params.
  */
 const cliUrl =
   process.env.DIRECT_URL ||
-  process.env.DATABASE_URL ||
   // Placeholder allows `prisma validate/generate` without local secrets.
-  "postgresql://postgres.placeholder:placeholder@127.0.0.1:5432/postgres";
+  "postgresql://postgres.placeholder:placeholder@127.0.0.1:5432/postgres?sslmode=disable";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
   engine: "classic",
   datasource: {
     url: cliUrl,
-    directUrl: process.env.DIRECT_URL || undefined,
   },
   migrations: {
     path: "prisma/migrations",

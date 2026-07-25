@@ -51,10 +51,17 @@
 
 Additional masters (not former Prisma enums, but required as lookup): FeatureValueType (STRING, NUMBER, BOOLEAN), AuditActionType (action codes).
 
+### Phase 3C — Trusted Supabase TLS
+- Public CA: `certs/prod-ca-2021.crt` via `SUPABASE_DB_CA_CERT_PATH`
+- Shared server utility: `src/lib/db/ca-certificate.ts` (`rejectUnauthorized: true`)
+- Preflight + Prisma runtime use the same CA SSL config
+- Guard rejects SSL override params on `DATABASE_URL`; requires `sslmode=verify-full` + `sslrootcert` on `DIRECT_URL`
+- No insecure TLS workarounds
+
 ## Not Implemented
 
 - Apply migration to Supabase
-- Live `db:preflight` against real project (รอ credentials ใน `.env.local`)
+- Live `db:preflight` หลังผู้ใช้ปรับ `.env.local` (TLS CA + DIRECT_URL query)
 - Real Supabase Auth login UI / user provisioning
 - FK จาก `platform.user_profiles.auth_user_id` → `auth.users` (เลี่ยงแตะ schema `auth` ใน initial migration)
 - Outbox workers, billing, QR device credentials, deploy
@@ -64,6 +71,7 @@ Additional masters (not former Prisma enums, but required as lookup): FeatureVal
 - Pooler username format ต้องเป็น `postgres.<project_ref>` เพื่อให้ guard parse ได้
 - Initial migration ยังไม่สร้าง FK เข้า `auth` โดยเจตนา (schema boundary)
 - Seed ต้องการ PostgreSQL หลัง migrate แล้วเท่านั้น
+- `DIRECT_URL` sslrootcert path `../certs/...` ถูก resolve จากโฟลเดอร์ `prisma/`
 
 ## Test Results
 
@@ -71,7 +79,7 @@ Additional masters (not former Prisma enums, but required as lookup): FeatureVal
 
 ## Next Recommended Step
 
-1. ผู้ใช้ใส่ Connection Strings + Keys ใน `.env.local`
+1. ผู้ใช้ปรับ `.env.local`: `SUPABASE_DB_CA_CERT_PATH`, `DATABASE_URL` (ไม่มี ssl*), `DIRECT_URL` (+ verify-full)
 2. รัน `npm run db:preflight`
 3. PM อนุมัติ → Apply `0001_platform_initial`
 4. เชื่อม Login UI กับ Supabase Auth

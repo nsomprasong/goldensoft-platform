@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 export type EnvGuardInput = {
   appCode?: string;
   nodeEnv?: string;
@@ -9,6 +12,8 @@ export type EnvGuardInput = {
   publishableKey?: string;
   secretKey?: string;
   allowTestAuth?: string;
+  caCertPath?: string;
+  projectRoot?: string;
 };
 
 export type EnvGuardResult =
@@ -25,11 +30,21 @@ export type EnvGuardResult =
         | "MISSING_URLS"
         | "TEST_AUTH_IN_PRODUCTION"
         | "MISSING_PUBLISHABLE_KEY"
-        | "SECRET_EXPOSED";
+        | "SECRET_EXPOSED"
+        | "CA_CERT_MISSING"
+        | "CA_CERT_INVALID"
+        | "DATABASE_URL_SSL_PARAM"
+        | "DIRECT_URL_TLS";
     };
 
 const NEW_PROJECT_REF_DEFAULT = "horyhrnqbeaivdztekfv";
 const LEGACY_PROJECT_REF_DEFAULT = "invnwpyshxdadhocueeh";
+const FORBIDDEN_DATABASE_SSL_PARAMS = [
+  "sslmode",
+  "sslrootcert",
+  "sslcert",
+  "sslkey",
+] as const;
 
 export function isTestAuthEnabled(value?: string): boolean {
   const raw = (value ?? process.env.ALLOW_TEST_AUTH ?? "").trim().toLowerCase();
@@ -63,7 +78,6 @@ export function extractProjectRefFromConnectionString(
     const dbHost = url.hostname.match(/^db\.([a-z0-9]+)\.supabase\.co$/i);
     if (dbHost?.[1]) return dbHost[1].toLowerCase();
 
-    // Fallback: detect known refs in non-password parts only
     const hostAndUser = `${user}@${url.hostname}`.toLowerCase();
     return nullIfAmbiguousRef(hostAndUser);
   } catch {
@@ -119,6 +133,205 @@ export function redactConnectionString(connectionString: string): {
   }
 }
 
+function parsePgUrl(connectionString: string): URL | null {
+  try {
+    return new URL(
+      connectionString
+        .replace(/^postgresql:/i, "http:")
+        .replace(/^postgres:/i, "http:"),
+    );
+  } catch {
+    return null;
+  }
+}
+
+export function databaseUrlHasForbiddenSslParams(
+  databaseUrl: string,
+): string | null {
+  const url = parsePgUrl(databaseUrl);
+  if (!url) return null;
+  for (const key of FORBIDDEN_DATABASE_SSL_PARAMS) {
+    if (url.searchParams.has(key)) return key;
+  }
+  return null;
+}
+
+function resolveCaPathInsideProject(
+  relativePath: string,
+  projectRoot: string,
+): { ok: true; absolutePath: string } | { ok: false; reason: string } {
+  const raw = relativePath.trim();
+  if (!raw) {
+    return { ok: false, reason: "SUPABASE_DB_CA_CERT_PATH is empty" };
+  }
+  if (path.isAbsolute(raw)) {
+    const absolute = path.normalize(raw);
+    const root = path.resolve(projectRoot);
+    if (absolute !== root && !absolute.startsWith(root + path.sep)) {
+      return {
+        ok: false,
+        reason: "CA certificate path must stay inside the project root",
+      };
+    }
+    return { ok: true, absolutePath: absolute };
+  }
+
+  const normalized = path.normalize(raw);
+  if (
+    normalized === ".." ||
+    normalized.startsWith(`..${path.sep}`) ||
+    normalized.split(path.sep).includes("..")
+  ) {
+    return {
+      ok: false,
+      reason: "CA certificate path must not contain path traversal",
+    };
+  }
+
+  const absolute = path.resolve(projectRoot, normalized);
+  const root = path.resolve(projectRoot);
+  if (absolute !== root && !absolute.startsWith(root + path.sep)) {
+    return {
+      ok: false,
+      reason: "CA certificate path must stay inside the project root",
+    };
+  }
+  return { ok: true, absolutePath: absolute };
+}
+
+function resolveDirectSslRootCert(
+  sslrootcert: string,
+  projectRoot: string,
+): { ok: true; absolutePath: string } | { ok: false; reason: string } {
+  const raw = sslrootcert.trim();
+  if (!raw) {
+    return { ok: false, reason: "DIRECT_URL sslrootcert is empty" };
+  }
+  const base =
+    raw.startsWith("../") || raw.startsWith(`..${path.sep}`)
+      ? path.join(projectRoot, "prisma")
+      : projectRoot;
+  const absolute = path.resolve(base, raw);
+  const root = path.resolve(projectRoot);
+  if (absolute !== root && !absolute.startsWith(root + path.sep)) {
+    return {
+      ok: false,
+      reason: "DIRECT_URL sslrootcert must stay inside the project root",
+    };
+  }
+  return { ok: true, absolutePath: absolute };
+}
+
+function validateCaCertificateFile(
+  caCertPath: string | undefined,
+  projectRoot: string,
+): EnvGuardResult | null {
+  if (!caCertPath?.trim()) {
+    return {
+      ok: false,
+      code: "CA_CERT_MISSING",
+      reason: "SUPABASE_DB_CA_CERT_PATH is required",
+    };
+  }
+
+  const resolved = resolveCaPathInsideProject(caCertPath, projectRoot);
+  if (!resolved.ok) {
+    return { ok: false, code: "CA_CERT_INVALID", reason: resolved.reason };
+  }
+
+  if (!fs.existsSync(resolved.absolutePath)) {
+    return {
+      ok: false,
+      code: "CA_CERT_MISSING",
+      reason: "CA certificate file does not exist",
+    };
+  }
+
+  let content: string;
+  try {
+    content = fs.readFileSync(resolved.absolutePath, "utf8").trim();
+  } catch {
+    return {
+      ok: false,
+      code: "CA_CERT_INVALID",
+      reason: "Unable to read CA certificate file",
+    };
+  }
+
+  if (!content) {
+    return {
+      ok: false,
+      code: "CA_CERT_INVALID",
+      reason: "CA certificate file is empty",
+    };
+  }
+
+  return null;
+}
+
+function validateDirectUrlTls(
+  directUrl: string,
+  projectRoot: string,
+): EnvGuardResult | null {
+  const url = parsePgUrl(directUrl);
+  if (!url) {
+    return {
+      ok: false,
+      code: "INVALID_URL",
+      reason: "Unable to parse DIRECT_URL",
+    };
+  }
+
+  if (url.searchParams.get("sslmode") !== "verify-full") {
+    return {
+      ok: false,
+      code: "DIRECT_URL_TLS",
+      reason: "DIRECT_URL must use sslmode=verify-full",
+    };
+  }
+
+  const sslrootcert = url.searchParams.get("sslrootcert");
+  if (!sslrootcert) {
+    return {
+      ok: false,
+      code: "DIRECT_URL_TLS",
+      reason: "DIRECT_URL must include sslrootcert",
+    };
+  }
+
+  const resolved = resolveDirectSslRootCert(sslrootcert, projectRoot);
+  if (!resolved.ok) {
+    return { ok: false, code: "DIRECT_URL_TLS", reason: resolved.reason };
+  }
+
+  if (!fs.existsSync(resolved.absolutePath)) {
+    return {
+      ok: false,
+      code: "DIRECT_URL_TLS",
+      reason: "DIRECT_URL sslrootcert file does not exist",
+    };
+  }
+
+  try {
+    const content = fs.readFileSync(resolved.absolutePath, "utf8").trim();
+    if (!content) {
+      return {
+        ok: false,
+        code: "DIRECT_URL_TLS",
+        reason: "DIRECT_URL sslrootcert file is empty",
+      };
+    }
+  } catch {
+    return {
+      ok: false,
+      code: "DIRECT_URL_TLS",
+      reason: "Unable to read DIRECT_URL sslrootcert file",
+    };
+  }
+
+  return null;
+}
+
 export function assertSafeEnvironment(
   input: EnvGuardInput = {},
 ): EnvGuardResult {
@@ -141,6 +354,9 @@ export function assertSafeEnvironment(
     input.publishableKey ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   const secretKey = input.secretKey ?? process.env.SUPABASE_SECRET_KEY;
   const allowTestAuth = input.allowTestAuth ?? process.env.ALLOW_TEST_AUTH;
+  const caCertPath =
+    input.caCertPath ?? process.env.SUPABASE_DB_CA_CERT_PATH;
+  const projectRoot = input.projectRoot ?? process.cwd();
 
   if (appCode !== "PLATFORM") {
     return {
@@ -150,7 +366,6 @@ export function assertSafeEnvironment(
     };
   }
 
-  // Secret must never be mirrored into a NEXT_PUBLIC_* variable
   for (const [key, value] of Object.entries(process.env)) {
     if (
       key.startsWith("NEXT_PUBLIC_") &&
@@ -182,8 +397,14 @@ export function assertSafeEnvironment(
     };
   }
 
+  const urlsPresent = Boolean(supabaseUrl || databaseUrl || directUrl);
+
   // Soft mode for local unit tests / generate when URLs are intentionally unset
-  if (!supabaseUrl && !databaseUrl && !directUrl) {
+  if (!urlsPresent) {
+    if (nodeEnv === "production") {
+      const caError = validateCaCertificateFile(caCertPath, projectRoot);
+      if (caError) return caError;
+    }
     return { ok: true, projectRef: expected };
   }
 
@@ -195,6 +416,21 @@ export function assertSafeEnvironment(
         "NEXT_PUBLIC_SUPABASE_URL, DATABASE_URL, and DIRECT_URL are all required together",
     };
   }
+
+  const caError = validateCaCertificateFile(caCertPath, projectRoot);
+  if (caError) return caError;
+
+  const forbiddenSsl = databaseUrlHasForbiddenSslParams(databaseUrl);
+  if (forbiddenSsl) {
+    return {
+      ok: false,
+      code: "DATABASE_URL_SSL_PARAM",
+      reason: `DATABASE_URL must not include ${forbiddenSsl}; runtime supplies trusted SSL via pg`,
+    };
+  }
+
+  const directTlsError = validateDirectUrlTls(directUrl, projectRoot);
+  if (directTlsError) return directTlsError;
 
   const refs = [
     extractSupabaseProjectRef(supabaseUrl),
@@ -254,7 +490,6 @@ export function assertSafeEnvironment(
 export function requireSafeEnvironment(input?: EnvGuardInput): void {
   const result = assertSafeEnvironment(input);
   if (!result.ok) {
-    // Never include connection strings or secrets in the thrown message
     throw new Error(`[ENV_GUARD] ${result.code}: ${result.reason}`);
   }
 }

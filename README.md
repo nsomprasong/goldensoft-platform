@@ -44,10 +44,13 @@ npm run build
 ## Safety
 
 - Environment Guard บล็อก Legacy project ref ใน URL / DATABASE_URL / DIRECT_URL
+- Trusted TLS: `SUPABASE_DB_CA_CERT_PATH=certs/prod-ca-2021.crt` + `rejectUnauthorized: true` (ห้าม insecure TLS workaround)
+- `DATABASE_URL` ห้ามใส่ `sslmode`/`sslrootcert`; `DIRECT_URL` ต้อง `sslmode=verify-full` + `sslrootcert=../certs/prod-ca-2021.crt`
 - Production ห้าม `ALLOW_TEST_AUTH=true`
 - Secret key อยู่เฉพาะ server (`SUPABASE_SECRET_KEY`)
-- ห้าม commit `.env*` (ยกเว้น `.env.example`)
+- ห้าม commit `.env*` (ยกเว้น `.env.example`); ห้าม commit private key / client cert
 - Migration ต้องไม่มี `CREATE TYPE` / `AS ENUM` และแตะเฉพาะ schema `platform` (`npm run db:migration:check`)
+- รอ PM อนุมัติก่อน Apply Migration
 
 ## Docs
 

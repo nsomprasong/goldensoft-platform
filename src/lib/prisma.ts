@@ -1,7 +1,13 @@
+import "server-only";
+
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
 
+import {
+  buildTrustedPgSsl,
+  loadSupabaseDbCaCertificate,
+} from "@/lib/db/ca-certificate";
 import { requireSafeEnvironment } from "@/lib/env/guard";
 
 const globalForPrisma = globalThis as unknown as {
@@ -10,21 +16,33 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient(): PrismaClient {
-  if (process.env.APP_CODE) {
-    requireSafeEnvironment();
-  }
-
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     // Allow prisma generate / build imports without opening a pool.
     return new PrismaClient();
   }
 
+  if (process.env.APP_CODE) {
+    try {
+      requireSafeEnvironment();
+    } catch (error) {
+      // Next production build may load incomplete .env.local before DIRECT_URL TLS is set.
+      // Runtime requests and db:preflight still fail closed via the same guard.
+      const building = process.env.NEXT_PHASE === "phase-production-build";
+      if (!building) {
+        throw error;
+      }
+    }
+  }
+
+  const { content } = loadSupabaseDbCaCertificate();
+  const ssl = buildTrustedPgSsl(content);
+
   const pool =
     globalForPrisma.pgPool ??
     new Pool({
       connectionString,
-      // Never log the connection string
+      ssl,
       max: 10,
     });
 
