@@ -12,6 +12,8 @@ import {
   MASTER_TABLES,
   PHASE7_MIGRATION_NAME,
   PHASE7_TABLES,
+  PHASE7B_HISTORY_MIGRATION_NAME,
+  PHASE7B_HISTORY_TABLES,
   verifyPlatformDatabase,
 } from "../scripts/db-verify";
 
@@ -29,10 +31,12 @@ describe("db:verify read-only checks", () => {
     migration0001?: MigrationAttemptCounts;
     migration0003?: MigrationAttemptCounts;
     migration0004?: MigrationAttemptCounts;
+    migration0005?: MigrationAttemptCounts;
     migrationsTableMissing?: boolean;
     platformTableCount?: number;
     invitationTableCount?: number;
     phase7TableCount?: number;
+    phase7bTableCount?: number;
     invitationStatusCount?: number;
     masterCounts?: Record<string, number>;
     organizationCount?: number;
@@ -44,6 +48,8 @@ describe("db:verify read-only checks", () => {
       options.invitationTableCount ?? INVITATION_TABLES.length;
     const phase7TableCount =
       options.phase7TableCount ?? PHASE7_TABLES.length;
+    const phase7bTableCount =
+      options.phase7bTableCount ?? PHASE7B_HISTORY_TABLES.length;
     const invitationStatusCount =
       options.invitationStatusCount ?? EXPECTED_INVITATION_STATUS_CODES.length;
     const organizationCount = options.organizationCount ?? 2;
@@ -61,6 +67,11 @@ describe("db:verify read-only checks", () => {
       unresolved_count: 0,
     };
     const migration0004 = options.migration0004 ?? {
+      applied_count: 1,
+      rolled_back_count: 0,
+      unresolved_count: 0,
+    };
+    const migration0005 = options.migration0005 ?? {
       applied_count: 1,
       rolled_back_count: 0,
       unresolved_count: 0,
@@ -87,11 +98,13 @@ describe("db:verify read-only checks", () => {
       if (text.includes("applied_count") && text.includes("WHERE migration_name = $1")) {
         const migrationName = String(values?.[0] ?? "");
         const counts =
-          migrationName === PHASE7_MIGRATION_NAME
-            ? migration0004
-            : migrationName === INVITATION_MIGRATION_NAME
-              ? migration0003
-              : migration0001;
+          migrationName === PHASE7B_HISTORY_MIGRATION_NAME
+            ? migration0005
+            : migrationName === PHASE7_MIGRATION_NAME
+              ? migration0004
+              : migrationName === INVITATION_MIGRATION_NAME
+                ? migration0003
+                : migration0001;
         return {
           rows: [
             {
@@ -111,9 +124,11 @@ describe("db:verify read-only checks", () => {
         text.includes("table_name = ANY($1::text[])")
       ) {
         const names = (values?.[0] as string[] | undefined) ?? [];
-        const count = names.includes(PHASE7_TABLES[0])
-          ? phase7TableCount
-          : invitationTableCount;
+        const count = names.includes(PHASE7B_HISTORY_TABLES[0])
+          ? phase7bTableCount
+          : names.includes(PHASE7_TABLES[0])
+            ? phase7TableCount
+            : invitationTableCount;
         return {
           rows: [{ count }],
           rowCount: 1,
@@ -159,16 +174,18 @@ describe("db:verify read-only checks", () => {
     };
   }
 
-  it("expects platform table count 49 after migration 0004", () => {
-    assert.equal(EXPECTED_PLATFORM_TABLE_COUNT, 49);
+  it("expects platform table count 51 after migration 0005", () => {
+    assert.equal(EXPECTED_PLATFORM_TABLE_COUNT, 51);
     assert.ok(MASTER_TABLES.includes("user_invitation_statuses"));
     assert.ok(MASTER_TABLES.includes("entitlement_statuses"));
     assert.ok(MASTER_TABLES.includes("organization_onboarding_statuses"));
+    assert.ok(MASTER_TABLES.includes("subscription_change_types"));
     assert.deepEqual([...INVITATION_TABLES], [
       "user_invitation_statuses",
       "user_invitations",
     ]);
     assert.equal(PHASE7_TABLES.length, 6);
+    assert.equal(PHASE7B_HISTORY_TABLES.length, 2);
     assert.equal(EXPECTED_INVITATION_STATUS_CODES.length, 7);
   });
 
@@ -276,7 +293,7 @@ describe("db:verify read-only checks", () => {
     assert.equal(result.ok, true);
     assert.equal(result.checks.every((c) => c.ok), true);
     const tables = result.checks.find((c) => c.name === "platform_tables");
-    assert.equal(tables?.count, 49);
+    assert.equal(tables?.count, 51);
     assert.equal(tables?.ok, true);
     assert.equal(
       result.checks.find((c) => c.name === "invitation_statuses")?.count,
@@ -292,9 +309,9 @@ describe("db:verify read-only checks", () => {
     );
   });
 
-  it("passes when platform table count is 49", async () => {
+  it("passes when platform table count is 51", async () => {
     const result = await verifyPlatformDatabase(
-      mockQuery({ platformTableCount: 49 }),
+      mockQuery({ platformTableCount: 51 }),
     );
     assert.equal(result.ok, true);
     assert.equal(
@@ -303,14 +320,14 @@ describe("db:verify read-only checks", () => {
     );
   });
 
-  it("fails when platform table count is still 43", async () => {
+  it("fails when platform table count is still 49", async () => {
     const result = await verifyPlatformDatabase(
-      mockQuery({ platformTableCount: 43 }),
+      mockQuery({ platformTableCount: 49 }),
     );
     assert.equal(result.ok, false);
     const tables = result.checks.find((c) => c.name === "platform_tables");
     assert.equal(tables?.ok, false);
-    assert.equal(tables?.count, 43);
+    assert.equal(tables?.count, 49);
   });
 
   it("passes when all 7 invitation statuses are present", async () => {
@@ -422,9 +439,10 @@ describe("db:verify read-only checks", () => {
     assert.equal(/INSERT\s+|UPDATE\s+|DELETE\s+|DROP\s+/i.test(src), false);
     assert.equal(/connectionString:\s*directUrl/.test(src), false);
     assert.equal(/DIRECT_URL/.test(src), false);
-    assert.equal(EXPECTED_PLATFORM_TABLE_COUNT, 49);
+    assert.equal(EXPECTED_PLATFORM_TABLE_COUNT, 51);
     assert.match(src, /0003_user_invitations/);
     assert.match(src, /0004_phase7_operations/);
+    assert.match(src, /0005_phase7b_subscription_history/);
     assert.equal(/ยังไม่ apply|not yet apply/i.test(src), false);
   });
 });

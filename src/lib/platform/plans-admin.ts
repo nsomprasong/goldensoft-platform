@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 
+import { ensureProductFeatureCatalog } from "@/lib/platform/entitlements";
 import { TH } from "@/lib/i18n/th";
 import { MASTER } from "@/lib/platform/master-codes";
 import { requireActiveMasterId } from "@/lib/platform/master-data";
@@ -238,6 +239,7 @@ export async function createPlan(
       },
     });
 
+    await ensureProductFeatureCatalog(tx, product.id, product.code);
     for (const feature of input.features) {
       const featureRow = await tx.feature.findUnique({
         where: { code: feature.featureCode },
@@ -461,6 +463,7 @@ export async function duplicatePlanVersion(
           limitValue: f.limitValue,
         }));
 
+    await ensureProductFeatureCatalog(tx, plan.productId, plan.product.code);
     for (const feature of features) {
       const featureRow = await tx.feature.findUnique({
         where: { code: feature.featureCode },

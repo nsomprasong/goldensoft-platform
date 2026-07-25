@@ -191,8 +191,8 @@ describe("Phase 7B APIs and pages surface", () => {
   });
 });
 
-describe("Phase 7B migration 0005 preview", () => {
-  it("ships additive subscription history preview without applying", () => {
+describe("Phase 7B migration 0005 subscription history", () => {
+  it("keeps additive subscription history migration SQL", () => {
     const rel = "prisma/migrations/0005_phase7b_subscription_history/migration.sql";
     assert.ok(exists(rel));
     const sql = read(rel);
@@ -201,7 +201,6 @@ describe("Phase 7B migration 0005 preview", () => {
     assert.equal(/\bCREATE\s+TYPE\b|\bAS\s+ENUM\b/i.test(sql), false);
     assert.equal(/\bDROP\s+TABLE\b/i.test(sql), false);
     assert.match(sql, /subscription_histories/);
-    assert.match(sql, /Do NOT apply without explicit approval/i);
     assert.doesNotMatch(read("package.json"), /migrate deploy/);
   });
 });

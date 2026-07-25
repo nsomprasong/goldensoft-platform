@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { cache } from "react";
 
 import { isTestAuthEnabled } from "@/lib/env/test-auth";
@@ -60,10 +60,24 @@ export async function getAuthUser(options?: {
   testAuthUserId?: string | null;
   testEmail?: string | null;
 }): Promise<AuthSessionUser | null> {
-  return resolveAuthUser(
-    options?.testAuthUserId ?? null,
-    options?.testEmail ?? null,
-  );
+  let testAuthUserId = options?.testAuthUserId ?? null;
+  let testEmail = options?.testEmail ?? null;
+
+  // When ALLOW_TEST_AUTH is on, also accept headers on RSC/pages (not only API).
+  if (isTestAuthEnabled() && (testAuthUserId == null || testAuthUserId === "")) {
+    try {
+      const headerList = await headers();
+      const fromHeaders = readTestAuthFromHeaders(headerList);
+      if (fromHeaders.testAuthUserId) {
+        testAuthUserId = fromHeaders.testAuthUserId;
+        testEmail = testEmail ?? fromHeaders.testEmail;
+      }
+    } catch {
+      // headers() is unavailable outside a request scope
+    }
+  }
+
+  return resolveAuthUser(testAuthUserId, testEmail);
 }
 
 export function readTestAuthFromHeaders(headers: Headers): {

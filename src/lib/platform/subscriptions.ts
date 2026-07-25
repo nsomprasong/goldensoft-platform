@@ -10,6 +10,11 @@ import type { ActorAccess } from "@/lib/platform/organizations-admin";
 import { buildSubscriptionSnapshot } from "@/lib/platform/snapshot";
 import { withIdempotency } from "@/lib/platform/idempotency";
 import {
+  recordSubscriptionHistory,
+  SUBSCRIPTION_HISTORY_CHANGE,
+  listSubscriptionHistories,
+} from "@/lib/platform/subscription-history";
+import {
   PLATFORM_PERMISSIONS,
   permissionsForRoles,
 } from "@/lib/permissions/codes";
@@ -276,6 +281,23 @@ export async function createSubscription(
           },
         });
 
+        await recordSubscriptionHistory(tx, {
+          subscriptionId: subscription.id,
+          organizationId: input.organizationId,
+          changeTypeCode:
+            statusCode === MASTER.subscriptionStatus.TRIAL
+              ? SUBSCRIPTION_HISTORY_CHANGE.TRIAL
+              : SUBSCRIPTION_HISTORY_CHANGE.CREATE,
+          fromStatusCode: null,
+          toStatusCode: statusCode,
+          fromPlanCode: null,
+          toPlanCode: plan.code,
+          fromPlanVersionNumber: null,
+          toPlanVersionNumber: planVersion.versionNumber,
+          snapshotJson: snapshot as Prisma.InputJsonValue,
+          actorAuthUserId: input.actorAuthUserId,
+        });
+
         await tx.outboxEvent.create({
           data: {
             aggregateType: "Subscription",
@@ -391,6 +413,12 @@ async function transitionStatus(
     auditNameTh: string;
     auditNameEn: string;
     auditSort: number;
+    historyChangeType:
+      | typeof SUBSCRIPTION_HISTORY_CHANGE.ACTIVATE
+      | typeof SUBSCRIPTION_HISTORY_CHANGE.SUSPEND
+      | typeof SUBSCRIPTION_HISTORY_CHANGE.RESUME
+      | typeof SUBSCRIPTION_HISTORY_CHANGE.CANCEL
+      | typeof SUBSCRIPTION_HISTORY_CHANGE.EXPIRE;
     allowedFrom: string[];
     onAfter?: (tx: Prisma.TransactionClient, subId: string) => Promise<void>;
     extraUpdate?: Prisma.SubscriptionUpdateInput;
@@ -445,6 +473,19 @@ async function transitionStatus(
         afterJson: { status: input.toStatus },
       },
     });
+    await recordSubscriptionHistory(tx, {
+      subscriptionId: sub.id,
+      organizationId: sub.organizationId,
+      changeTypeCode: input.historyChangeType,
+      fromStatusCode: sub.status.code,
+      toStatusCode: input.toStatus,
+      fromPlanCode: sub.planCode,
+      toPlanCode: sub.planCode,
+      fromPlanVersionNumber: sub.planVersionNumber,
+      toPlanVersionNumber: sub.planVersionNumber,
+      snapshotJson: sub.snapshotJson as Prisma.InputJsonValue,
+      actorAuthUserId: input.actor.authUserId,
+    });
     return updated;
   });
 }
@@ -462,6 +503,7 @@ export async function activateSubscription(
     auditNameTh: "เปิดใช้งานการสมัคร",
     auditNameEn: "Activate subscription",
     auditSort: 89,
+    historyChangeType: SUBSCRIPTION_HISTORY_CHANGE.ACTIVATE,
     allowedFrom: [
       MASTER.subscriptionStatus.TRIAL,
       MASTER.subscriptionStatus.SUSPENDED,
@@ -489,6 +531,7 @@ export async function suspendSubscription(
     auditNameTh: "ระงับการสมัคร",
     auditNameEn: "Suspend subscription",
     auditSort: 91,
+    historyChangeType: SUBSCRIPTION_HISTORY_CHANGE.SUSPEND,
     allowedFrom: [
       MASTER.subscriptionStatus.ACTIVE,
       MASTER.subscriptionStatus.TRIAL,
@@ -517,6 +560,7 @@ export async function resumeSubscription(
     auditNameTh: "กลับมาใช้งานการสมัคร",
     auditNameEn: "Resume subscription",
     auditSort: 97,
+    historyChangeType: SUBSCRIPTION_HISTORY_CHANGE.RESUME,
     allowedFrom: [MASTER.subscriptionStatus.SUSPENDED],
     onAfter: async (tx, subId) => {
       const { generateEntitlementsForSubscription } = await import(
@@ -540,6 +584,7 @@ export async function cancelSubscription(
     auditNameTh: "ยกเลิกการสมัคร",
     auditNameEn: "Cancel subscription",
     auditSort: 92,
+    historyChangeType: SUBSCRIPTION_HISTORY_CHANGE.CANCEL,
     allowedFrom: [
       MASTER.subscriptionStatus.ACTIVE,
       MASTER.subscriptionStatus.TRIAL,
@@ -570,6 +615,7 @@ export async function expireSubscription(
     auditNameTh: "หมดอายุการสมัคร",
     auditNameEn: "Expire subscription",
     auditSort: 98,
+    historyChangeType: SUBSCRIPTION_HISTORY_CHANGE.EXPIRE,
     allowedFrom: [
       MASTER.subscriptionStatus.ACTIVE,
       MASTER.subscriptionStatus.TRIAL,
@@ -621,31 +667,51 @@ export async function extendSubscriptionEndDate(
       "วันสิ้นสุดต้องเป็นอนาคต",
     );
   }
-  const updated = await db.subscription.update({
-    where: { id: sub.id },
-    data: { endsAt: input.endsAt },
-  });
-  await db.entitlement.updateMany({
-    where: { subscriptionId: sub.id },
-    data: { endsAt: input.endsAt },
-  });
-  const audit = await ensureAuditAction(
-    db,
-    "subscription.extend",
-    "ขยายวันสิ้นสุดการสมัคร",
-    "Extend subscription",
-    99,
-  );
-  await db.auditLog.create({
-    data: {
+  const updated = await db.$transaction(async (tx) => {
+    const row = await tx.subscription.update({
+      where: { id: sub.id },
+      data: { endsAt: input.endsAt },
+    });
+    await tx.entitlement.updateMany({
+      where: { subscriptionId: sub.id },
+      data: { endsAt: input.endsAt },
+    });
+    const audit = await ensureAuditAction(
+      tx,
+      "subscription.extend",
+      "ขยายวันสิ้นสุดการสมัคร",
+      "Extend subscription",
+      99,
+    );
+    await tx.auditLog.create({
+      data: {
+        organizationId: sub.organizationId,
+        actorAuthUserId: actor.authUserId,
+        actionTypeId: audit.id,
+        entityType: "Subscription",
+        entityId: sub.id,
+        beforeJson: { endsAt: sub.endsAt },
+        afterJson: { endsAt: input.endsAt },
+      },
+    });
+    await recordSubscriptionHistory(tx, {
+      subscriptionId: sub.id,
       organizationId: sub.organizationId,
+      changeTypeCode: SUBSCRIPTION_HISTORY_CHANGE.EXTEND,
+      fromStatusCode: sub.status.code,
+      toStatusCode: sub.status.code,
+      fromPlanCode: sub.planCode,
+      toPlanCode: sub.planCode,
+      fromPlanVersionNumber: sub.planVersionNumber,
+      toPlanVersionNumber: sub.planVersionNumber,
+      snapshotJson: {
+        previousEndsAt: sub.endsAt,
+        endsAt: input.endsAt,
+      },
+      reason: "extend_end_date",
       actorAuthUserId: actor.authUserId,
-      actionTypeId: audit.id,
-      entityType: "Subscription",
-      entityId: sub.id,
-      beforeJson: { endsAt: sub.endsAt },
-      afterJson: { endsAt: input.endsAt },
-    },
+    });
+    return row;
   });
   return updated;
 }
@@ -808,6 +874,21 @@ export async function changePlan(
           },
         });
 
+        await recordSubscriptionHistory(tx, {
+          subscriptionId: sub.id,
+          organizationId: sub.organizationId,
+          changeTypeCode: SUBSCRIPTION_HISTORY_CHANGE.CHANGE_PLAN,
+          fromStatusCode: sub.status.code,
+          toStatusCode: sub.status.code,
+          fromPlanCode: sub.planCode,
+          toPlanCode: plan.code,
+          fromPlanVersionNumber: sub.planVersionNumber,
+          toPlanVersionNumber: planVersion.versionNumber,
+          snapshotJson: snapshot as Prisma.InputJsonValue,
+          reason: "change_plan",
+          actorAuthUserId: actor.authUserId,
+        });
+
         return { subscriptionId: updated.id, snapshot };
       });
     },
@@ -818,6 +899,42 @@ export async function listSubscriptionHistoryFromAudit(
   db: PrismaClient,
   subscriptionId: string,
 ) {
+  const domain = await listSubscriptionHistories(db, subscriptionId, {
+    take: 100,
+  });
+  if (domain.total > 0) {
+    return domain.rows.map((row) => ({
+      id: row.id,
+      createdAt: row.createdAt,
+      actionType: {
+        code: row.changeType.code,
+        nameTh: row.changeType.nameTh,
+      },
+      beforeJson: {
+        status: row.fromStatusCode,
+        planCode: row.fromPlanCode,
+        planVersion: row.fromPlanVersionNumber,
+      },
+      afterJson: {
+        status: row.toStatusCode,
+        planCode: row.toPlanCode,
+        planVersion: row.toPlanVersionNumber,
+        snapshot: row.snapshotJson,
+        reason: row.reason,
+        actorAuthUserId: row.actorAuthUserId,
+      },
+      domainHistory: true as const,
+      changeType: row.changeType,
+      fromStatusCode: row.fromStatusCode,
+      toStatusCode: row.toStatusCode,
+      fromPlanCode: row.fromPlanCode,
+      toPlanCode: row.toPlanCode,
+      reason: row.reason,
+      actorAuthUserId: row.actorAuthUserId,
+      snapshotJson: row.snapshotJson,
+    }));
+  }
+
   return db.auditLog.findMany({
     where: {
       entityId: subscriptionId,

@@ -45,30 +45,136 @@ function featuresFromSnapshot(snapshotJson: unknown): SnapshotFeature[] {
 }
 
 function defaultEntitlementsForProduct(productCode: string): SnapshotFeature[] {
+  return catalogFeaturesForProduct(productCode).map((f) => ({
+    code: f.code,
+    name: f.nameTh,
+    limitValue: f.defaultLimitValue,
+  }));
+}
+
+export type FeatureCatalogEntry = {
+  code: string;
+  nameTh: string;
+  valueKind: "boolean" | "numeric" | "text";
+  defaultLimitValue: string | null;
+};
+
+export function catalogFeaturesForProduct(
+  productCode: string,
+): FeatureCatalogEntry[] {
   const code = productCode.toUpperCase();
   if (code === "RESIDENT_V2" || code === "RESIDENT") {
     return [
-      { code: "resident_v2.access", name: "เข้าถึง Resident V2" },
-      { code: "resident_v2.branch_limit", name: "จำนวนสาขา", limitValue: "3" },
-      { code: "resident_v2.user_limit", name: "จำนวนผู้ใช้", limitValue: "25" },
+      {
+        code: "resident_v2.access",
+        nameTh: "เข้าถึง Resident V2",
+        valueKind: "boolean",
+        defaultLimitValue: "true",
+      },
+      {
+        code: "resident_v2.branch_limit",
+        nameTh: "จำนวนสาขา",
+        valueKind: "numeric",
+        defaultLimitValue: "3",
+      },
+      {
+        code: "resident_v2.user_limit",
+        nameTh: "จำนวนผู้ใช้",
+        valueKind: "numeric",
+        defaultLimitValue: "20",
+      },
     ];
   }
   if (code === "GOLDENSOFT_HR" || code === "HR") {
     return [
-      { code: "hr.access", name: "เข้าถึง GoldenSoft HR" },
-      { code: "hr.employee_limit", name: "จำนวนพนักงาน", limitValue: "50" },
+      {
+        code: "hr.access",
+        nameTh: "เข้าถึง GoldenSoft HR",
+        valueKind: "boolean",
+        defaultLimitValue: "true",
+      },
+      {
+        code: "hr.employee_limit",
+        nameTh: "จำนวนพนักงาน",
+        valueKind: "numeric",
+        defaultLimitValue: "50",
+      },
     ];
   }
   if (code === "QRSTATION") {
     return [
-      { code: "qrstation.access", name: "เข้าถึง QR Station" },
-      { code: "qrstation.device_limit", name: "จำนวนอุปกรณ์", limitValue: "10" },
+      {
+        code: "qrstation.access",
+        nameTh: "เข้าถึง QR Station",
+        valueKind: "boolean",
+        defaultLimitValue: "true",
+      },
+      {
+        code: "qrstation.device_limit",
+        nameTh: "จำนวนอุปกรณ์",
+        valueKind: "numeric",
+        defaultLimitValue: "5",
+      },
     ];
   }
   if (code === "PLATFORM") {
-    return [{ code: "platform.access", name: "เข้าถึงศูนย์บริหาร" }];
+    return [
+      {
+        code: "platform.access",
+        nameTh: "เข้าถึงศูนย์บริหาร",
+        valueKind: "boolean",
+        defaultLimitValue: "true",
+      },
+    ];
   }
-  return [{ code: `${code.toLowerCase()}.access`, name: `เข้าถึง ${code}` }];
+  return [
+    {
+      code: `${code.toLowerCase()}.access`,
+      nameTh: `เข้าถึง ${code}`,
+      valueKind: "boolean",
+      defaultLimitValue: "true",
+    },
+  ];
+}
+
+export async function ensureProductFeatureCatalog(
+  db: Prisma.TransactionClient | PrismaClient,
+  productId: string,
+  productCode: string,
+) {
+  const activeStatus = await db.featureStatus.findUnique({
+    where: { code: MASTER.featureStatus.ACTIVE },
+    select: { id: true },
+  });
+  if (!activeStatus) {
+    throw new Error("FEATURE_STATUS_MISSING");
+  }
+  const catalog = catalogFeaturesForProduct(productCode);
+  const ensured = [];
+  for (const item of catalog) {
+    const row = await db.feature.upsert({
+      where: { code: item.code },
+      create: {
+        productId,
+        code: item.code,
+        name: item.nameTh,
+        statusId: activeStatus.id,
+      },
+      update: {
+        name: item.nameTh,
+        statusId: activeStatus.id,
+        productId,
+      },
+    });
+    ensured.push({
+      id: row.id,
+      code: row.code,
+      name: row.name,
+      valueKind: item.valueKind,
+      defaultLimitValue: item.defaultLimitValue,
+    });
+  }
+  return ensured;
 }
 
 export async function generateEntitlementsForSubscription(

@@ -552,6 +552,7 @@ model Organization {
   organizationRoles      OrganizationRole[]
   entitlements           Entitlement[]
   onboardings            OrganizationOnboarding[]
+  subscriptionHistories  SubscriptionHistory[]
 
   @@index([statusId])
   @@map("organizations")
@@ -823,10 +824,55 @@ model Subscription {
   billingCycle BillingCycle                  @relation("SubscriptionBillingCycle", fields: [billingCycleId], references: [id])
   overrides    SubscriptionFeatureOverride[]
   entitlements Entitlement[]
+  histories    SubscriptionHistory[]
 
   @@index([organizationId, productId, statusId])
   @@index([statusId, endsAt])
   @@map("subscriptions")
+  @@schema("platform")
+}
+
+model SubscriptionChangeType {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  nameTh      String   @map("name_th")
+  nameEn      String   @map("name_en")
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  isSystem    Boolean  @default(true) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  histories SubscriptionHistory[]
+
+  @@map("subscription_change_types")
+  @@schema("platform")
+}
+
+model SubscriptionHistory {
+  id                     String   @id @default(uuid()) @db.Uuid
+  subscriptionId         String   @map("subscription_id") @db.Uuid
+  organizationId         String   @map("organization_id") @db.Uuid
+  changeTypeId           String   @map("change_type_id") @db.Uuid
+  fromStatusCode         String?  @map("from_status_code")
+  toStatusCode           String?  @map("to_status_code")
+  fromPlanCode           String?  @map("from_plan_code")
+  toPlanCode             String?  @map("to_plan_code")
+  fromPlanVersionNumber  Int?     @map("from_plan_version_number")
+  toPlanVersionNumber    Int?     @map("to_plan_version_number")
+  snapshotJson           Json     @default("{}") @map("snapshot_json") @db.JsonB
+  reason                 String?
+  actorAuthUserId        String?  @map("actor_auth_user_id") @db.Uuid
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  subscription Subscription           @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  changeType   SubscriptionChangeType @relation(fields: [changeTypeId], references: [id])
+
+  @@index([subscriptionId, createdAt(sort: Desc)])
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("subscription_histories")
   @@schema("platform")
 }
 

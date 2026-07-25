@@ -6,6 +6,7 @@ import { AccessDenied, PageHeader } from "@/components/ui/admin-ui";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
+import { catalogFeaturesForProduct } from "@/lib/platform/entitlements";
 import { MASTER } from "@/lib/platform/master-codes";
 import {
   PLATFORM_PERMISSIONS,
@@ -53,6 +54,25 @@ export default async function NewPlanPage() {
       orderBy: { sortOrder: "asc" },
     }),
   ]);
+  const featureCatalogByProductId: Record<
+    string,
+    Array<{
+      code: string;
+      name: string;
+      valueKind: "boolean" | "numeric" | "text";
+      defaultLimitValue: string | null;
+    }>
+  > = {};
+  for (const product of products) {
+    featureCatalogByProductId[product.id] = catalogFeaturesForProduct(
+      product.code,
+    ).map((f) => ({
+      code: f.code,
+      name: f.nameTh,
+      valueKind: f.valueKind,
+      defaultLimitValue: f.defaultLimitValue,
+    }));
+  }
   return (
     <PlatformShell {...shellProps}>
       <PageHeader
@@ -63,11 +83,12 @@ export default async function NewPlanPage() {
           </Link>
         }
       />
-      <section className="card max-w-2xl">
+      <section className="card max-w-3xl">
         <PlanForm
           mode="create"
           products={products}
           billingCycles={billingCycles}
+          featureCatalogByProductId={featureCatalogByProductId}
         />
       </section>
     </PlatformShell>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { BranchScopeForm } from "@/components/branch-scope-form";
 import {
   MembershipRoleAssignForm,
   RoleRevokeButton,
@@ -85,7 +86,7 @@ export default async function UserProfileAdminPage({
           branchScopes: {
             include: {
               scopeType: true,
-              branch: { select: { code: true, name: true } },
+              branch: { select: { id: true, code: true, name: true } },
             },
           },
         },
@@ -111,6 +112,9 @@ export default async function UserProfileAdminPage({
   }
 
   const canAssign = permissions.includes(PLATFORM_PERMISSIONS.roleAssign);
+  const canManageBranchScope =
+    permissions.includes(PLATFORM_PERMISSIONS.userManage) ||
+    permissions.includes(PLATFORM_PERMISSIONS.roleAssign);
   const effective = await resolveEffectivePermissions(prisma, {
     authUserId: profile.authUserId,
     organizationId: ctx.activeOrganization?.id ?? null,
@@ -126,29 +130,51 @@ export default async function UserProfileAdminPage({
     string,
     Array<{ id: string; code: string; nameTh: string; isSystem: boolean }>
   > = {};
+  const branchesByOrg: Record<
+    string,
+    Array<{ id: string; code: string; name: string }>
+  > = {};
   const orgIdsForRoles = membershipsVisible.map((m) => m.organizationId);
   if (orgIdsForRoles.length > 0) {
-    const roles = await prisma.organizationRole.findMany({
-      where: {
-        isActive: true,
-        OR: [
-          { organizationId: null, isSystem: true },
-          { organizationId: { in: orgIdsForRoles } },
-        ],
-      },
-      select: {
-        id: true,
-        code: true,
-        nameTh: true,
-        isSystem: true,
-        organizationId: true,
-      },
-      orderBy: [{ isSystem: "desc" }, { sortOrder: "asc" }],
-    });
+    const [roles, branches] = await Promise.all([
+      prisma.organizationRole.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { organizationId: null, isSystem: true },
+            { organizationId: { in: orgIdsForRoles } },
+          ],
+        },
+        select: {
+          id: true,
+          code: true,
+          nameTh: true,
+          isSystem: true,
+          organizationId: true,
+        },
+        orderBy: [{ isSystem: "desc" }, { sortOrder: "asc" }],
+      }),
+      prisma.branch.findMany({
+        where: {
+          organizationId: { in: orgIdsForRoles },
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          organizationId: true,
+        },
+        orderBy: { code: "asc" },
+      }),
+    ]);
     for (const orgId of orgIdsForRoles) {
       roleOptionsByOrg[orgId] = roles.filter(
         (r) => r.organizationId === null || r.organizationId === orgId,
       );
+      branchesByOrg[orgId] = branches
+        .filter((b) => b.organizationId === orgId)
+        .map((b) => ({ id: b.id, code: b.code, name: b.name }));
     }
   }
 
@@ -219,7 +245,7 @@ export default async function UserProfileAdminPage({
               ))}
             </ul>
             <p className="text-sm text-[var(--text-secondary)]">
-              ขอบเขตสาขา:{" "}
+              ขอบเขตสาขาปัจจุบัน:{" "}
               {m.branchScopes
                 .map(
                   (s) =>
@@ -227,6 +253,18 @@ export default async function UserProfileAdminPage({
                 )
                 .join(", ") || "—"}
             </p>
+            {canManageBranchScope ? (
+              <BranchScopeForm
+                membershipId={m.id}
+                branches={branchesByOrg[m.organizationId] ?? []}
+                initialScopeType={
+                  m.branchScopes[0]?.scopeType.code ?? "NONE"
+                }
+                initialBranchIds={m.branchScopes
+                  .map((s) => s.branch?.id)
+                  .filter((id): id is string => Boolean(id))}
+              />
+            ) : null}
             {canAssign ? (
               <MembershipRoleAssignForm
                 membershipId={m.id}

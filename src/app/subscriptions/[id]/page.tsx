@@ -165,19 +165,91 @@ export default async function SubscriptionDetailPage({
               </li>
             ))}
           </ul>
-          <h3 className="text-sm font-semibold">ประวัติ</h3>
-          <ul className="space-y-2 text-sm">
-            {history.length === 0 ? (
-              <li className="text-[var(--text-secondary)]">ยังไม่มีประวัติ</li>
-            ) : (
-              history.map((h) => (
-                <li key={h.id}>
-                  {h.actionType.nameTh} ·{" "}
-                  {h.createdAt.toLocaleString("th-TH")}
-                </li>
-              ))
-            )}
-          </ul>
+          <h3 className="text-sm font-semibold">ประวัติการเปลี่ยนแปลง</h3>
+          {history.length === 0 ? (
+            <p className="text-sm text-[var(--text-secondary)]">
+              ยังไม่มีประวัติการเปลี่ยนแปลง
+            </p>
+          ) : (
+            <ul className="space-y-3 text-sm">
+              {history.map((h) => {
+                const domain = "domainHistory" in h && h.domainHistory;
+                const fromStatus = domain
+                  ? (h as { fromStatusCode?: string | null }).fromStatusCode
+                  : null;
+                const toStatus = domain
+                  ? (h as { toStatusCode?: string | null }).toStatusCode
+                  : null;
+                const fromPlan = domain
+                  ? (h as { fromPlanCode?: string | null }).fromPlanCode
+                  : null;
+                const toPlan = domain
+                  ? (h as { toPlanCode?: string | null }).toPlanCode
+                  : null;
+                const reason = domain
+                  ? (h as { reason?: string | null }).reason
+                  : null;
+                const snap =
+                  domain &&
+                  (h as { snapshotJson?: unknown }).snapshotJson &&
+                  typeof (h as { snapshotJson?: unknown }).snapshotJson ===
+                    "object"
+                    ? ((h as { snapshotJson: Record<string, unknown> })
+                        .snapshotJson as Record<string, unknown>)
+                    : null;
+                return (
+                  <li
+                    key={h.id}
+                    className="rounded border border-[var(--border)] p-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <strong>{h.actionType.nameTh}</strong>
+                      <span className="text-[var(--text-secondary)]">
+                        {h.createdAt.toLocaleString("th-TH")}
+                      </span>
+                    </div>
+                    {(fromStatus || toStatus) && (
+                      <p>
+                        สถานะ: {fromStatus ?? "—"} → {toStatus ?? "—"}
+                      </p>
+                    )}
+                    {(fromPlan || toPlan) && (
+                      <p>
+                        แพ็กเกจ: {fromPlan ?? "—"} → {toPlan ?? "—"}
+                      </p>
+                    )}
+                    {reason ? <p>หมายเหตุ: {reason}</p> : null}
+                    {snap &&
+                    (typeof snap.basePrice === "number" ||
+                      typeof snap.currency === "string") ? (
+                      <p>
+                        Snapshot:{" "}
+                        {typeof snap.basePrice === "number"
+                          ? Number(snap.basePrice).toLocaleString("th-TH")
+                          : ""}{" "}
+                        {typeof snap.currency === "string" ? snap.currency : ""}
+                      </p>
+                    ) : null}
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-[var(--text-secondary)]">
+                        รายละเอียดเพิ่มเติม
+                      </summary>
+                      <pre className="mt-1 overflow-auto rounded bg-[var(--surface-muted)] p-2 text-xs">
+                        {JSON.stringify(
+                          {
+                            before: h.beforeJson,
+                            after: h.afterJson,
+                          },
+                          null,
+                          2,
+                        )}
+                      </pre>
+                    </details>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
       </div>
     </PlatformShell>

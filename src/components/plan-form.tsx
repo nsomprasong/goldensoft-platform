@@ -1,8 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import {
+  featuresPayload,
+  PlanFeatureMatrix,
+  type PlanFeatureOption,
+  type PlanFeatureSelection,
+} from "@/components/plan-feature-matrix";
 import { FormField } from "@/components/ui/admin-ui";
 import { pushToast } from "@/components/ui/toast";
 import { TH } from "@/lib/i18n/th";
@@ -12,6 +18,7 @@ export function PlanForm(props: {
   planId?: string;
   products: Array<{ id: string; code: string; name: string }>;
   billingCycles: Array<{ code: string; nameTh: string }>;
+  featureCatalogByProductId?: Record<string, PlanFeatureOption[]>;
   initial?: {
     productId: string;
     code: string;
@@ -22,18 +29,29 @@ export function PlanForm(props: {
     basePrice?: number;
     currency?: string;
     trialDays?: number;
+    features?: PlanFeatureSelection[];
   };
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [productId, setProductId] = useState(props.initial?.productId ?? "");
+  const [features, setFeatures] = useState<PlanFeatureSelection[]>(
+    props.initial?.features ?? [],
+  );
+
+  const catalog = useMemo(() => {
+    if (!productId || !props.featureCatalogByProductId) return [];
+    return props.featureCatalogByProductId[productId] ?? [];
+  }, [productId, props.featureCatalogByProductId]);
 
   async function onSubmit(formData: FormData) {
     setPending(true);
     setError(null);
     if (props.mode === "create") {
+      const selectedProductId = String(formData.get("productId") ?? productId);
       const payload = {
-        productId: String(formData.get("productId") ?? ""),
+        productId: selectedProductId,
         code: String(formData.get("code") ?? "")
           .trim()
           .toUpperCase(),
@@ -44,8 +62,19 @@ export function PlanForm(props: {
         currency: String(formData.get("currency") ?? "THB"),
         trialDays: Number(formData.get("trialDays") ?? 0),
         sortOrder: Number(formData.get("sortOrder") ?? 0) || 0,
-        features: [],
+        features: featuresPayload(features),
       };
+      if (payload.features.length === 0) {
+        setPending(false);
+        setError("ต้องเลือกอย่างน้อยหนึ่งคุณสมบัติ");
+        return;
+      }
+      const codes = new Set(payload.features.map((f) => f.featureCode));
+      if (codes.size !== payload.features.length) {
+        setPending(false);
+        setError("พบรหัสคุณสมบัติซ้ำ");
+        return;
+      }
       const res = await fetch("/api/platform/plans", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -100,7 +129,11 @@ export function PlanForm(props: {
             id="productId"
             name="productId"
             required
-            defaultValue={props.initial?.productId ?? ""}
+            value={productId}
+            onChange={(e) => {
+              setProductId(e.target.value);
+              setFeatures([]);
+            }}
             className="input"
           >
             <option value="">เลือกผลิตภัณฑ์</option>
@@ -199,6 +232,13 @@ export function PlanForm(props: {
           className="input"
         />
       </FormField>
+      {props.mode === "create" ? (
+        <PlanFeatureMatrix
+          catalog={catalog}
+          value={features}
+          onChange={setFeatures}
+        />
+      ) : null}
       <div className="flex gap-2">
         <button type="submit" className="btn-primary" disabled={pending}>
           {pending ? TH.common.loading : TH.common.save}
