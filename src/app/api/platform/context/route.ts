@@ -22,6 +22,7 @@ import { prisma } from "@/lib/prisma";
 const switchSchema = z.object({
   organizationId: z.string().uuid(),
   branchId: z.string().uuid().nullable().optional(),
+  mode: z.enum(["membership", "platform_admin"]).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -186,13 +187,20 @@ export async function POST(request: NextRequest) {
 
   const { organizationId, branchId = null } = parsed.data;
   const isSuper = bundle.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN);
+  const requestedPlatformAdmin = parsed.data.mode === "platform_admin";
+  if (requestedPlatformAdmin && !isSuper) {
+    return NextResponse.json(
+      { code: "FORBIDDEN", message: TH.access.forbidden },
+      { status: 403 },
+    );
+  }
   const membership = bundle.memberships.find(
     (m) => m.organizationId === organizationId,
   );
   const memberAccess = canAccessOrganization(bundle.memberships, organizationId);
   const platformAdminAccess =
-    !memberAccess &&
     isSuper &&
+    (requestedPlatformAdmin || !memberAccess) &&
     canAccessOrganization(bundle.memberships, organizationId, {
       platformRoles: bundle.platformRoles,
       allowPlatformAdmin: true,

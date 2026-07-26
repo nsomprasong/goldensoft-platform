@@ -239,6 +239,7 @@ describe("CA certificate + TLS guard", () => {
       nodeEnv: "production",
       publishableKey: "pub",
       allowTestAuth: "false",
+      appUrl: "https://platform.goldensoft.cloud",
       caCertPath: "",
       projectRoot: PROJECT_ROOT,
     });

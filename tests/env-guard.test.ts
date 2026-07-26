@@ -126,6 +126,7 @@ describe("Environment Guard", () => {
       blockedLegacyProjectRef: LEGACY_REF,
       allowTestAuth: "false",
       publishableKey: "",
+      appUrl: "https://platform.goldensoft.cloud",
     });
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.code, "MISSING_PUBLISHABLE_KEY");
