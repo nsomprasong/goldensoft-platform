@@ -3,10 +3,39 @@ import type { PrismaClient } from "@prisma/client";
 import { BillingError } from "@/lib/billing/codes";
 import { writeAuditLog } from "@/lib/platform/audit";
 
-type ContactInput = { name: string; email: string; phone?: string | null; title?: string | null; isPrimary?: boolean };
+type ContactInput = {
+  name: string;
+  email: string;
+  phone?: string | null;
+  title?: string | null;
+  isPrimary?: boolean;
+};
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_RE = /^[0-9+\-\s()]{6,20}$/;
+
 function clean(input: ContactInput) {
-  if (!input.name.trim() || !input.email.trim()) throw new BillingError("CONTACT_REQUIRED", "ต้องระบุชื่อและอีเมลผู้ติดต่อ");
-  return { name: input.name.trim(), email: input.email.trim().toLowerCase(), phone: input.phone?.trim() || null, title: input.title?.trim() || null, isPrimary: Boolean(input.isPrimary) };
+  if (!input.name.trim() || !input.email.trim()) {
+    throw new BillingError(
+      "CONTACT_REQUIRED",
+      "ต้องระบุชื่อและอีเมลผู้ติดต่อ",
+    );
+  }
+  const email = input.email.trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) {
+    throw new BillingError("INVALID_EMAIL", "รูปแบบอีเมลไม่ถูกต้อง");
+  }
+  const phone = input.phone?.trim() || null;
+  if (phone && !PHONE_RE.test(phone)) {
+    throw new BillingError("INVALID_PHONE", "รูปแบบเบอร์โทรไม่ถูกต้อง");
+  }
+  return {
+    name: input.name.trim(),
+    email,
+    phone,
+    title: input.title?.trim() || null,
+    isPrimary: Boolean(input.isPrimary),
+  };
 }
 export async function listBillingContacts(db: PrismaClient, organizationId: string) {
   return db.billingContact.findMany({ where: { organizationId }, orderBy: [{ isPrimary: "desc" }, { name: "asc" }] });

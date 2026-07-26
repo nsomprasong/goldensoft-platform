@@ -6,13 +6,15 @@ import {
 
 // Env is loaded by the db-preflight import (project files win over ambient stubs).
 
-export const EXPECTED_PLATFORM_TABLE_COUNT = 51;
+export const EXPECTED_PLATFORM_TABLE_COUNT = 64;
 
 export const INVITATION_MIGRATION_NAME = "0003_user_invitations";
 
 export const PHASE7_MIGRATION_NAME = "0004_phase7_operations";
 
 export const PHASE7B_HISTORY_MIGRATION_NAME = "0005_phase7b_subscription_history";
+
+export const BILLING_MIGRATION_NAME = "0006_billing_credit_foundation";
 
 export const INVITATION_TABLES = [
   "user_invitation_statuses",
@@ -31,6 +33,22 @@ export const PHASE7_TABLES = [
 export const PHASE7B_HISTORY_TABLES = [
   "subscription_change_types",
   "subscription_histories",
+] as const;
+
+export const BILLING_TABLES = [
+  "billing_account_statuses",
+  "credit_transaction_types",
+  "credit_directions",
+  "invoice_statuses",
+  "payment_statuses",
+  "payment_methods",
+  "billing_accounts",
+  "credit_transactions",
+  "invoices",
+  "invoice_items",
+  "payments",
+  "payment_allocations",
+  "billing_contacts",
 ] as const;
 
 export const EXPECTED_INVITATION_STATUS_CODES = [
@@ -70,6 +88,12 @@ export const MASTER_TABLES = [
   "entitlement_statuses",
   "organization_onboarding_statuses",
   "subscription_change_types",
+  "billing_account_statuses",
+  "credit_transaction_types",
+  "credit_directions",
+  "invoice_statuses",
+  "payment_statuses",
+  "payment_methods",
 ] as const;
 
 const SAFE_IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -132,6 +156,10 @@ async function countPhase7Tables(query: SqlQuery): Promise<number> {
 
 async function countPhase7bHistoryTables(query: SqlQuery): Promise<number> {
   return countNamedPlatformTables(query, PHASE7B_HISTORY_TABLES);
+}
+
+async function countBillingTables(query: SqlQuery): Promise<number> {
+  return countNamedPlatformTables(query, BILLING_TABLES);
 }
 
 async function countInvitationStatuses(query: SqlQuery): Promise<number> {
@@ -252,6 +280,26 @@ export async function verifyPlatformDatabase(
     detail: migration0005Detail,
   });
 
+  const migration0006 = await checkPlatformMigrationApplied(
+    query,
+    BILLING_MIGRATION_NAME,
+  );
+  const billingTableCount = await countBillingTables(query);
+  const migration0006SchemaOk =
+    !migration0006.applied || billingTableCount === BILLING_TABLES.length;
+  const migration0006Ok = migration0006.applied && migration0006SchemaOk;
+  const migration0006Detail = migration0006Ok
+    ? `successful=${migration0006.appliedCount};rolled_back=${migration0006.rolledBackCount};unresolved=${migration0006.unresolvedCount}`
+    : !migration0006SchemaOk
+      ? "schema_inconsistent"
+      : migration0006.reason;
+  checks.push({
+    name: `migration_${BILLING_MIGRATION_NAME}`,
+    ok: migration0006Ok,
+    count: migration0006.appliedCount,
+    detail: migration0006Detail,
+  });
+
   const tableCount = await countPlatformTables(query);
   checks.push({
     name: "platform_tables",
@@ -275,6 +323,12 @@ export async function verifyPlatformDatabase(
     name: "phase7b_history_tables",
     ok: phase7bTableCount === PHASE7B_HISTORY_TABLES.length,
     count: phase7bTableCount,
+  });
+
+  checks.push({
+    name: "billing_tables",
+    ok: billingTableCount === BILLING_TABLES.length,
+    count: billingTableCount,
   });
 
   const invitationStatusCount = await countInvitationStatuses(query);

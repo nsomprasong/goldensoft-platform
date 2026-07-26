@@ -33,26 +33,125 @@ export async function recordManualPayment(db: PrismaClient, input: {
 }
 
 export async function confirmPayment(db: PrismaClient, paymentId: string, actorAuthUserId: string) {
-  const payment = await db.payment.findUnique({ where: { id: paymentId }, include: { status: true } });
+  const payment = await db.payment.findUnique({
+    where: { id: paymentId },
+    include: { status: true, paymentMethod: true },
+  });
   if (!payment) throw new BillingError("NOT_FOUND", "ไม่พบรายการชำระเงิน", 404);
-  if (payment.status.code !== "PENDING") throw new BillingError("INVALID_STATE", "ยืนยันได้เฉพาะรายการรอดำเนินการ");
-  const updated = await db.payment.update({ where: { id: paymentId }, data: { statusId: await idByCode(db, "paymentStatus", "CONFIRMED"), confirmedBy: actorAuthUserId, confirmedAt: new Date() }, include: { status: true, paymentMethod: true } });
-  await writeAuditLog(db, { organizationId: payment.organizationId, actorAuthUserId, actionCode: "billing.payment.confirm", entityType: "payment", entityId: paymentId, after: { status: "CONFIRMED" } });
-  return updated;
+  if (payment.status.code === "CONFIRMED") {
+    return { payment, idempotent: true as const };
+  }
+  if (payment.status.code !== "PENDING") {
+    throw new BillingError("INVALID_STATE", "ยืนยันได้เฉพาะรายการรอดำเนินการ");
+  }
+  const updated = await db.payment.update({
+    where: { id: paymentId },
+    data: {
+      statusId: await idByCode(db, "paymentStatus", "CONFIRMED"),
+      confirmedBy: actorAuthUserId,
+      confirmedAt: new Date(),
+    },
+    include: { status: true, paymentMethod: true },
+  });
+  await writeAuditLog(db, {
+    organizationId: payment.organizationId,
+    actorAuthUserId,
+    actionCode: "billing.payment.confirm",
+    entityType: "payment",
+    entityId: paymentId,
+    after: { status: "CONFIRMED" },
+  });
+  return { payment: updated, idempotent: false as const };
 }
 
-export async function allocatePayment(db: PrismaClient, input: { paymentId: string; invoiceId: string; amount: unknown; actorAuthUserId: string }) {
-  const [payment, invoice] = await Promise.all([db.payment.findUnique({ where: { id: input.paymentId }, include: { status: true, allocations: true } }), db.invoice.findUnique({ where: { id: input.invoiceId }, include: { status: true } })]);
-  if (!payment || !invoice) throw new BillingError("NOT_FOUND", "ไม่พบรายการชำระเงินหรือใบแจ้งหนี้", 404);
-  if (payment.organizationId !== invoice.organizationId) throw new BillingError("ORG_MISMATCH", "ข้อมูลอยู่คนละองค์กร");
-  if (payment.status.code !== "CONFIRMED") throw new BillingError("INVALID_STATE", "ต้องยืนยันรายการชำระเงินก่อนจัดสรร");
+export async function allocatePayment(
+  db: PrismaClient,
+  input: {
+    paymentId: string;
+    invoiceId: string;
+    amount: unknown;
+    actorAuthUserId: string;
+  },
+) {
   const amount = parsePositiveAmount(input.amount);
-  const allocated = payment.allocations.reduce((sum, row) => sum.plus(row.amount), amount.minus(amount));
-  if (allocated.plus(amount).gt(payment.amount) || amount.gt(invoice.outstandingTotal)) throw new BillingError("ALLOCATION_EXCEEDS_AVAILABLE", "จำนวนจัดสรรเกินยอดคงเหลือ");
-  const allocation = await db.paymentAllocation.create({ data: { paymentId: payment.id, invoiceId: invoice.id, amount } });
-  await reconcileInvoiceStatus(db, invoice.id);
-  await writeAuditLog(db, { organizationId: payment.organizationId, actorAuthUserId: input.actorAuthUserId, actionCode: "billing.payment.allocate", entityType: "payment_allocation", entityId: allocation.id, after: { paymentId: payment.id, invoiceId: invoice.id, amount: amount.toFixed(2) } });
-  return allocation;
+  return db.$transaction(async (tx) => {
+    const lockedPayments = await tx.$queryRaw<
+      Array<{ id: string; organization_id: string; amount: unknown; status_code: string }>
+    >`
+      SELECT p.id, p.organization_id, p.amount, ps.code AS status_code
+      FROM platform.payments p
+      JOIN platform.payment_statuses ps ON ps.id = p.status_id
+      WHERE p.id = ${input.paymentId}::uuid
+      FOR UPDATE OF p
+    `;
+    const lockedInvoices = await tx.$queryRaw<
+      Array<{
+        id: string;
+        organization_id: string;
+        outstanding_total: unknown;
+      }>
+    >`
+      SELECT id, organization_id, outstanding_total
+      FROM platform.invoices
+      WHERE id = ${input.invoiceId}::uuid
+      FOR UPDATE
+    `;
+    const paymentRow = lockedPayments[0];
+    const invoiceRow = lockedInvoices[0];
+    if (!paymentRow || !invoiceRow) {
+      throw new BillingError("NOT_FOUND", "ไม่พบรายการชำระเงินหรือใบแจ้งหนี้", 404);
+    }
+    if (paymentRow.organization_id !== invoiceRow.organization_id) {
+      throw new BillingError("ORG_MISMATCH", "ข้อมูลอยู่คนละองค์กร");
+    }
+    if (paymentRow.status_code !== "CONFIRMED") {
+      throw new BillingError(
+        "INVALID_STATE",
+        "ต้องยืนยันรายการชำระเงินก่อนจัดสรร",
+      );
+    }
+    const payment = await tx.payment.findUniqueOrThrow({
+      where: { id: input.paymentId },
+      include: { allocations: true },
+    });
+    const invoice = await tx.invoice.findUniqueOrThrow({
+      where: { id: input.invoiceId },
+    });
+    const allocated = payment.allocations.reduce(
+      (sum, row) => sum.plus(row.amount),
+      amount.minus(amount),
+    );
+    if (
+      allocated.plus(amount).gt(payment.amount) ||
+      amount.gt(invoice.outstandingTotal)
+    ) {
+      throw new BillingError(
+        "ALLOCATION_EXCEEDS_AVAILABLE",
+        "จำนวนจัดสรรเกินยอดคงเหลือ",
+      );
+    }
+    const allocation = await tx.paymentAllocation.create({
+      data: {
+        paymentId: payment.id,
+        invoiceId: invoice.id,
+        amount,
+      },
+    });
+    await reconcileInvoiceStatus(tx, invoice.id);
+    await writeAuditLog(tx, {
+      organizationId: payment.organizationId,
+      actorAuthUserId: input.actorAuthUserId,
+      actionCode: "billing.payment.allocate",
+      entityType: "payment_allocation",
+      entityId: allocation.id,
+      after: {
+        paymentId: payment.id,
+        invoiceId: invoice.id,
+        amount: amount.toFixed(2),
+      },
+    });
+    return allocation;
+  });
 }
 
 export async function listPayments(db: PrismaClient, organizationId: string) {

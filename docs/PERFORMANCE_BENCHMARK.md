@@ -38,9 +38,30 @@ Notes:
 - Subscription history query limited (`take` ≤ 100) with indexes from migration 0005
 - Profile role/branch options batched per page
 
-## Classification legend
+## Phase 8B.4 Billing (measured)
 
-- **Planned** — design intent only
-- **Automated test** — unit/integration asserts
-- **Browser verified** — agent ran real timings
-- **Manually unverified** — not measured yet
+Measured 2026-07-26 with `scripts/phase8b4-perf.ts` against local turbopack `next dev` using test-auth headers (SUPER_ADMIN) and `COMPANY-DEMO` context. Warm = best of 3 samples after a prime navigation.
+
+| Route | Warm ms | Under 2s |
+|---|---:|:---:|
+| platform `/billing` | 771 | yes |
+| platform `/billing/[org]` | 991 | yes |
+| customer `/account` | 673 | yes |
+| customer `/account/products` | 682 | yes |
+| customer `/account/credit` | 661 | yes |
+| customer `/account/invoices` | 729 | yes |
+| customer `/account/payments` | 656 | yes |
+| customer invoice detail | 669 | yes |
+| customer payment detail | 734 | yes |
+
+Design notes:
+
+- Customer bootstrap does not load full invoice/payment detail trees
+- Credit/invoice/payment lists are bounded (`take` ≤ 100; admin org page `take` 20)
+- Balance uses snapshot column (not full ledger sum per request)
+- Org billing page loads summary/ledger/invoices/payments/contacts via `Promise.all`
+- Reconciliation is CLI-only (`billing:reconcile`), not page request
+- Ledger/invoice/payment indexes from migration 0006
+
+Classification: **Browser verified**
+

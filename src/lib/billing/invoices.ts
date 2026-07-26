@@ -43,24 +43,109 @@ function totals(items: ReturnType<typeof calculate>) {
   return { subtotal, discountTotal, taxTotal, grandTotal: subtotal.minus(discountTotal).plus(taxTotal) };
 }
 
-export async function createDraftInvoice(db: PrismaClient, input: {
-  organizationId: string; actorAuthUserId: string; invoiceNumber: string; dueDate?: Date | null;
-  notes?: string | null; items: ItemInput[];
-}) {
-  const account = await getBillingAccount(db, input.organizationId);
-  if (!account) throw new BillingError("ACCOUNT_MISSING", "ยังไม่มีบัญชีการเงินสำหรับองค์กรนี้", 404);
-  const rows = calculate(input.items); const total = totals(rows);
-  const invoice = await db.invoice.create({
-    data: {
-      organizationId: input.organizationId, billingAccountId: account.id, invoiceNumber: input.invoiceNumber.trim(),
-      currency: account.currency, statusId: await statusId(db, BILLING_CODES.invoiceStatus.DRAFT),
-      dueDate: input.dueDate ?? null, notes: input.notes?.trim() || null, createdBy: input.actorAuthUserId,
-      ...total, outstandingTotal: total.grandTotal,
-      items: { create: rows.map((row) => ({ description: row.description.trim(), itemType: row.itemType ?? "MANUAL", quantity: row.quantity, unitPrice: row.unitPrice, discountAmount: row.discountAmount, taxAmount: row.taxAmount, lineTotal: row.lineTotal, sortOrder: row.sortOrder })) },
-    }, include: { status: true, items: true },
+/** Deterministic, concurrency-safe invoice number: INV-{customerCode}-{yyyyMM}-{seq}. */
+export async function nextInvoiceNumber(
+  db: Db,
+  organizationId: string,
+): Promise<string> {
+  const org = await db.organization.findUnique({
+    where: { id: organizationId },
+    select: { customerCode: true },
   });
-  await writeAuditLog(db, { organizationId: input.organizationId, actorAuthUserId: input.actorAuthUserId, actionCode: "billing.invoice.create", entityType: "invoice", entityId: invoice.id, after: { invoiceNumber: invoice.invoiceNumber, grandTotal: serializeMoney(invoice.grandTotal) } });
-  return invoice;
+  if (!org?.customerCode) {
+    throw new BillingError("ORG_NOT_FOUND", "ไม่พบองค์กร", 404);
+  }
+  const now = new Date();
+  const yyyymm = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  const prefix = `INV-${org.customerCode}-${yyyymm}-`;
+  const latest = await db.invoice.findFirst({
+    where: { invoiceNumber: { startsWith: prefix } },
+    orderBy: { invoiceNumber: "desc" },
+    select: { invoiceNumber: true },
+  });
+  const lastSeq = latest
+    ? Number(latest.invoiceNumber.slice(prefix.length)) || 0
+    : 0;
+  return `${prefix}${String(lastSeq + 1).padStart(4, "0")}`;
+}
+
+export async function createDraftInvoice(
+  db: PrismaClient,
+  input: {
+    organizationId: string;
+    actorAuthUserId: string;
+    invoiceNumber?: string;
+    dueDate?: Date | null;
+    notes?: string | null;
+    items: ItemInput[];
+  },
+) {
+  const account = await getBillingAccount(db, input.organizationId);
+  if (!account) {
+    throw new BillingError(
+      "ACCOUNT_MISSING",
+      "ยังไม่มีบัญชีการเงินสำหรับองค์กรนี้",
+      404,
+    );
+  }
+  const rows = calculate(input.items);
+  const total = totals(rows);
+  const fixedNumber = input.invoiceNumber?.trim() || null;
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const invoiceNumber =
+      fixedNumber ?? (await nextInvoiceNumber(db, input.organizationId));
+    try {
+      const invoice = await db.invoice.create({
+        data: {
+          organizationId: input.organizationId,
+          billingAccountId: account.id,
+          invoiceNumber,
+          currency: account.currency,
+          statusId: await statusId(db, BILLING_CODES.invoiceStatus.DRAFT),
+          dueDate: input.dueDate ?? null,
+          notes: input.notes?.trim() || null,
+          createdBy: input.actorAuthUserId,
+          ...total,
+          outstandingTotal: total.grandTotal,
+          items: {
+            create: rows.map((row) => ({
+              description: row.description.trim(),
+              itemType: row.itemType ?? "MANUAL",
+              quantity: row.quantity,
+              unitPrice: row.unitPrice,
+              discountAmount: row.discountAmount,
+              taxAmount: row.taxAmount,
+              lineTotal: row.lineTotal,
+              sortOrder: row.sortOrder,
+            })),
+          },
+        },
+        include: { status: true, items: true },
+      });
+      await writeAuditLog(db, {
+        organizationId: input.organizationId,
+        actorAuthUserId: input.actorAuthUserId,
+        actionCode: "billing.invoice.create",
+        entityType: "invoice",
+        entityId: invoice.id,
+        after: {
+          invoiceNumber: invoice.invoiceNumber,
+          grandTotal: serializeMoney(invoice.grandTotal),
+        },
+      });
+      return invoice;
+    } catch (error) {
+      const isUnique =
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002";
+      if (!isUnique || fixedNumber) throw error;
+    }
+  }
+  throw new BillingError(
+    "INVOICE_NUMBER_COLLISION",
+    "ไม่สามารถสร้างเลขใบแจ้งหนี้ที่ไม่ซ้ำได้",
+  );
 }
 
 export async function updateDraftInvoice(db: PrismaClient, invoiceId: string, input: Omit<Parameters<typeof createDraftInvoice>[1], "organizationId" | "actorAuthUserId" | "invoiceNumber"> & { actorAuthUserId: string }) {
