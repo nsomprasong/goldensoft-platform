@@ -120,6 +120,7 @@ describe("Phase 5B permission rules", () => {
       authUserId: USER_ID,
       platformRoles: [],
       membershipOrganizationIds: ["org-a", "org-b"],
+      managedOrganizationIds: [],
       organizationRoles: ["OWNER", "BILLING_CONTACT"],
       organizationRolesByOrganization: {
         "org-a": ["OWNER"],

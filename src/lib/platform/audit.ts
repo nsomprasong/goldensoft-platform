@@ -108,6 +108,14 @@ const AUDIT_LABELS: Record<string, { nameTh: string; nameEn: string }> = {
     nameTh: "สลับโหมดผู้ดูแลแพลตฟอร์ม",
     nameEn: "Switch platform admin context",
   },
+  [MASTER.auditActionType.STAFF_PORTFOLIO_ASSIGN]: {
+    nameTh: "กำหนดองค์กรลูกค้าให้พนักงาน",
+    nameEn: "Assign customer organization to staff",
+  },
+  [MASTER.auditActionType.STAFF_PORTFOLIO_REVOKE]: {
+    nameTh: "ถอดองค์กรลูกค้าจากพนักงาน",
+    nameEn: "Revoke customer organization from staff",
+  },
 };
 
 /** Keys that must never appear in audit JSON payloads. */

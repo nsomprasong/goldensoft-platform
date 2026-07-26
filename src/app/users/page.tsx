@@ -59,6 +59,8 @@ export default async function UsersPage({
     branches: ctx.branches,
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,
+    contextMode: ctx.contextMode,
+    canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
   };
 
   if (!perms.includes(PLATFORM_PERMISSIONS.userRead)) {
@@ -73,7 +75,16 @@ export default async function UsersPage({
     actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN) ||
     actor.platformRoles.includes(MASTER.platformRole.SUPPORT)
       ? undefined
-      : { organizationId: { in: actor.membershipOrganizationIds } };
+      : {
+          organizationId: {
+            in: [
+              ...new Set([
+                ...actor.membershipOrganizationIds,
+                ...actor.managedOrganizationIds,
+              ]),
+            ],
+          },
+        };
 
   const q = params.q?.trim();
   const [memberships, invitations] = await measure("data", () =>

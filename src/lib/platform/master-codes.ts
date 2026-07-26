@@ -10,6 +10,8 @@ export const MASTER = {
     SUPER_ADMIN: "SUPER_ADMIN",
     SUPPORT: "SUPPORT",
     BILLING_ADMIN: "BILLING_ADMIN",
+    SALES: "SALES",
+    ACCOUNT_MANAGER: "ACCOUNT_MANAGER",
   },
   assignmentStatus: {
     ACTIVE: "ACTIVE",
@@ -158,6 +160,8 @@ export const MASTER = {
     PLAN_UPDATE: "plan.update",
     ENTITLEMENT_GENERATE: "entitlement.generate",
     ORGANIZATION_ONBOARD: "organization.onboard",
+    STAFF_PORTFOLIO_ASSIGN: "staff_portfolio.assign",
+    STAFF_PORTFOLIO_REVOKE: "staff_portfolio.revoke",
   },
   entitlementStatus: {
     ACTIVE: "ACTIVE",

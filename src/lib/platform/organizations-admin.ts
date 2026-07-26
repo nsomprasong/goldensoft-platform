@@ -50,6 +50,8 @@ export type ActorAccess = {
   authUserId: string;
   platformRoles: string[];
   membershipOrganizationIds: string[];
+  /** Customer organizations assigned to this actor via the staff portfolio (Phase 1). */
+  managedOrganizationIds: string[];
 };
 
 export function canManageOrganization(

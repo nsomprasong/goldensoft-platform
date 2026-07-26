@@ -53,7 +53,8 @@ export async function GET(
     actor.platformRoles.includes(MASTER.platformRole.SUPPORT);
   if (
     !canReadAll &&
-    !actor.membershipOrganizationIds.includes(invitation.organization.id)
+    !actor.membershipOrganizationIds.includes(invitation.organization.id) &&
+    !actor.managedOrganizationIds.includes(invitation.organization.id)
   ) {
     return NextResponse.json({ message: TH.common.forbidden }, { status: 403 });
   }

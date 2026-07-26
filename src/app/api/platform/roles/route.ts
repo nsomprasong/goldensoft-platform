@@ -39,7 +39,8 @@ export async function GET(request: NextRequest) {
   const roles = await listOrganizationRoles(prisma, organizationId);
   const visible =
     actor.platformRoles.includes("SUPER_ADMIN") ||
-    actor.membershipOrganizationIds.includes(organizationId)
+    actor.membershipOrganizationIds.includes(organizationId) ||
+    actor.managedOrganizationIds.includes(organizationId)
       ? roles
       : [];
   return NextResponse.json({ roles: visible });

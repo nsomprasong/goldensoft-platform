@@ -92,6 +92,8 @@ export async function seedAllMasters(prisma: PrismaClient) {
         { code: "SUPER_ADMIN", nameTh: "ผู้ดูแลสูงสุด", nameEn: "Super Admin", sortOrder: 1 },
         { code: "SUPPORT", nameTh: "ฝ่ายสนับสนุน", nameEn: "Support", sortOrder: 2 },
         { code: "BILLING_ADMIN", nameTh: "ผู้ดูแลการเรียกเก็บเงิน", nameEn: "Billing Admin", sortOrder: 3 },
+        { code: "SALES", nameTh: "ฝ่ายขาย", nameEn: "Sales", sortOrder: 4 },
+        { code: "ACCOUNT_MANAGER", nameTh: "ผู้ดูแลบัญชีลูกค้า", nameEn: "Account Manager", sortOrder: 5 },
       ],
     ],
     [
@@ -370,6 +372,8 @@ export async function seedAllMasters(prisma: PrismaClient) {
         { code: "user.invite.accepted", nameTh: "ยอมรับคำเชิญ", nameEn: "User invite accepted", sortOrder: 25 },
         { code: "user.platform_setup.completed", nameTh: "จัดเตรียมสิทธิ์สำเร็จ", nameEn: "User platform setup completed", sortOrder: 26 },
         { code: "user.platform_setup.failed", nameTh: "จัดเตรียมสิทธิ์ไม่สำเร็จ", nameEn: "User platform setup failed", sortOrder: 27 },
+        { code: "staff_portfolio.assign", nameTh: "กำหนดองค์กรลูกค้าให้พนักงาน", nameEn: "Assign customer organization to staff", sortOrder: 28 },
+        { code: "staff_portfolio.revoke", nameTh: "ถอดองค์กรลูกค้าจากพนักงาน", nameEn: "Revoke customer organization from staff", sortOrder: 29 },
       ],
     ],
   ];

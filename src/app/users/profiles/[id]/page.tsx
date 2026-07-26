@@ -50,6 +50,8 @@ export default async function UserProfileAdminPage({
     branches: ctx.branches,
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,
+    contextMode: ctx.contextMode,
+    canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
   };
   if (!permissions.includes(PLATFORM_PERMISSIONS.userRead)) {
     return (
@@ -102,8 +104,10 @@ export default async function UserProfileAdminPage({
     actor.platformRoles.includes(MASTER.platformRole.SUPPORT);
   if (
     !isSuper &&
-    !profile.memberships.some((m) =>
-      actor.membershipOrganizationIds.includes(m.organizationId),
+    !profile.memberships.some(
+      (m) =>
+        actor.membershipOrganizationIds.includes(m.organizationId) ||
+        actor.managedOrganizationIds.includes(m.organizationId),
     )
   ) {
     return (
@@ -124,8 +128,10 @@ export default async function UserProfileAdminPage({
 
   const membershipsVisible = isSuper
     ? profile.memberships
-    : profile.memberships.filter((m) =>
-        actor.membershipOrganizationIds.includes(m.organizationId),
+    : profile.memberships.filter(
+        (m) =>
+          actor.membershipOrganizationIds.includes(m.organizationId) ||
+          actor.managedOrganizationIds.includes(m.organizationId),
       );
 
   const roleOptionsByOrg: Record<

@@ -16,10 +16,11 @@ type BranchOption = { id: string; name: string; code: string };
 export function ContextSwitcher(props: {
   organizations: OrgOption[];
   platformAdminOrganizations?: OrgOption[];
+  managedOrganizations?: OrgOption[];
   branches: BranchOption[];
   activeOrganizationId: string | null;
   activeBranchId: string | null;
-  contextMode?: "membership" | "platform_admin";
+  contextMode?: "membership" | "platform_admin" | "managed_org";
   canUsePlatformAdminMode?: boolean;
 }) {
   const router = useRouter();
@@ -27,19 +28,27 @@ export function ContextSwitcher(props: {
   const [error, setError] = useState<string | null>(null);
 
   const adminOrgs = props.platformAdminOrganizations ?? [];
+  const managedOrgs = props.managedOrganizations ?? [];
   const membershipIds = new Set(props.organizations.map((o) => o.id));
   const adminOnly = props.canUsePlatformAdminMode
     ? adminOrgs.filter((o) => !membershipIds.has(o.id))
     : [];
-  const allOptions = [...props.organizations, ...adminOnly];
+  const managedOnly = managedOrgs.filter(
+    (o) => !membershipIds.has(o.id) && !adminOnly.some((a) => a.id === o.id),
+  );
+  const allOptions = [...props.organizations, ...adminOnly, ...managedOnly];
 
-  async function switchContext(organizationId: string, branchId: string | null) {
+  async function switchContext(
+    organizationId: string,
+    branchId: string | null,
+    mode?: "managed_org",
+  ) {
     setError(null);
     signalNavigationPending();
     const res = await fetch("/api/platform/context", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ organizationId, branchId }),
+      body: JSON.stringify({ organizationId, branchId, mode }),
     });
     if (!res.ok) {
       setError(TH.access.forbidden);
@@ -54,6 +63,11 @@ export function ContextSwitcher(props: {
       {props.contextMode === "platform_admin" ? (
         <span className="inline-flex items-center rounded-full border border-[var(--page-header-border)] bg-gradient-to-r from-[var(--primary-soft)] to-[#fff7ed] px-2.5 py-1 text-[length:var(--text-caption)] font-semibold text-[var(--primary)] shadow-[var(--shadow-xs)]">
           โหมดผู้ดูแลแพลตฟอร์ม
+        </span>
+      ) : null}
+      {props.contextMode === "managed_org" ? (
+        <span className="inline-flex items-center rounded-full border border-[var(--page-header-border)] bg-gradient-to-r from-[var(--primary-soft)] to-[#fff7ed] px-2.5 py-1 text-[length:var(--text-caption)] font-semibold text-[var(--primary)] shadow-[var(--shadow-xs)]">
+          {TH.staffPortfolio.managedOrgModeBadge}
         </span>
       ) : null}
 
@@ -71,7 +85,10 @@ export function ContextSwitcher(props: {
             suppressHydrationWarning
             onChange={(e) => {
               const orgId = e.target.value;
-              start(() => switchContext(orgId, null));
+              const mode = managedOnly.some((o) => o.id === orgId)
+                ? "managed_org"
+                : undefined;
+              start(() => switchContext(orgId, null, mode));
             }}
           >
             {props.organizations.length > 0 ? (
@@ -87,6 +104,15 @@ export function ContextSwitcher(props: {
               <optgroup label="โหมดผู้ดูแลแพลตฟอร์ม">
                 {adminOnly.map((org) => (
                   <option key={`admin-${org.id}`} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            {managedOnly.length > 0 ? (
+              <optgroup label={TH.staffPortfolio.managedOrgGroupLabel}>
+                {managedOnly.map((org) => (
+                  <option key={`managed-${org.id}`} value={org.id}>
                     {org.name}
                   </option>
                 ))}

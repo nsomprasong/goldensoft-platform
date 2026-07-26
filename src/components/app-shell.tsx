@@ -19,7 +19,10 @@ import { ToastHost } from "@/components/ui/toast";
 import { isNavigationItemActive } from "@/lib/navigation/active";
 import { TH, labelRole } from "@/lib/i18n/th";
 import { signalNavigationDone } from "@/lib/navigation-pending";
-import { loadPlatformAdminOrganizations } from "@/lib/platform/admin-organizations-client";
+import {
+  loadManagedOrganizations,
+  loadPlatformAdminOrganizations,
+} from "@/lib/platform/admin-organizations-client";
 
 export type ShellNavItem = {
   href: string;
@@ -194,11 +197,13 @@ export function AppShell(props: {
   navItems: Array<{ href: string; label: string }>;
   organizations: Array<{ id: string; name: string }>;
   platformAdminOrganizations?: Array<{ id: string; name: string }>;
+  managedOrganizations?: Array<{ id: string; name: string }>;
   branches: Array<{ id: string; name: string; code: string }>;
   activeOrganization: { id: string; name: string } | null;
   activeBranch: { id: string; name: string; code: string } | null;
-  contextMode?: "membership" | "platform_admin";
+  contextMode?: "membership" | "platform_admin" | "managed_org";
   canUsePlatformAdminMode?: boolean;
+  canUseManagedOrgMode?: boolean;
   pageTitle?: string;
 }) {
   const pathname = usePathname() ?? "/";
@@ -206,6 +211,9 @@ export function AppShell(props: {
   const [collapsed, setCollapsed] = useState(false);
   const [adminOrganizations, setAdminOrganizations] = useState(
     props.platformAdminOrganizations ?? [],
+  );
+  const [managedOrganizations, setManagedOrganizations] = useState(
+    props.managedOrganizations ?? [],
   );
   const drawerId = useId();
 
@@ -233,6 +241,21 @@ export function AppShell(props: {
       cancelled = true;
     };
   }, [props.canUsePlatformAdminMode, props.platformAdminOrganizations]);
+
+  useEffect(() => {
+    if (!props.canUseManagedOrgMode) return;
+    if ((props.managedOrganizations?.length ?? 0) > 0) {
+      setManagedOrganizations(props.managedOrganizations ?? []);
+      return;
+    }
+    let cancelled = false;
+    void loadManagedOrganizations().then((rows) => {
+      if (!cancelled) setManagedOrganizations(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.canUseManagedOrgMode, props.managedOrganizations]);
 
   const roleLabels = props.roles.map((code) => labelRole(code)).filter(Boolean);
   const sidebarWidth = collapsed ? "var(--sidebar-collapsed)" : "var(--sidebar-width)";
@@ -339,6 +362,7 @@ export function AppShell(props: {
                   <ContextSwitcher
                     organizations={props.organizations}
                     platformAdminOrganizations={adminOrganizations}
+                    managedOrganizations={managedOrganizations}
                     branches={props.branches}
                     activeOrganizationId={props.activeOrganization?.id ?? null}
                     activeBranchId={props.activeBranch?.id ?? null}
@@ -376,6 +400,7 @@ export function AppShell(props: {
                 <ContextSwitcher
                   organizations={props.organizations}
                   platformAdminOrganizations={adminOrganizations}
+                  managedOrganizations={managedOrganizations}
                   branches={props.branches}
                   activeOrganizationId={props.activeOrganization?.id ?? null}
                   activeBranchId={props.activeBranch?.id ?? null}

@@ -15,6 +15,7 @@ import {
 } from "@/lib/context/cookie";
 import { TH } from "@/lib/i18n/th";
 import { writeAuditLog } from "@/lib/platform/audit";
+import { listActiveManagedOrganizationIds } from "@/lib/platform/customer-portfolio";
 import { MASTER } from "@/lib/platform/master-codes";
 import { permissionsForRoles } from "@/lib/permissions/codes";
 import { prisma } from "@/lib/prisma";
@@ -22,7 +23,7 @@ import { prisma } from "@/lib/prisma";
 const switchSchema = z.object({
   organizationId: z.string().uuid(),
   branchId: z.string().uuid().nullable().optional(),
-  mode: z.enum(["membership", "platform_admin"]).optional(),
+  mode: z.enum(["membership", "platform_admin", "managed_org"]).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -50,13 +51,20 @@ export async function GET(request: NextRequest) {
 
   const cookie = decodeContextCookie(request.cookies.get(COOKIE_NAME)?.value);
   const isSuper = bundle.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN);
+  const managedOrganizationIds = await listActiveManagedOrganizationIds(
+    prisma,
+    bundle.profile.id,
+  );
   const activeMembership = cookie
     ? bundle.memberships.find((m) => m.organizationId === cookie.organizationId)
     : null;
 
   let platformAdminOrganization: { id: string; name: string } | null = null;
   if (cookie && !activeMembership) {
-    if (!(isSuper && cookie.mode === "platform_admin")) {
+    const isManagedOrgClaim =
+      cookie.mode === "managed_org" &&
+      managedOrganizationIds.includes(cookie.organizationId);
+    if (!(isSuper && cookie.mode === "platform_admin") && !isManagedOrgClaim) {
       return NextResponse.json(
         {
           code: "ORG_FORBIDDEN",
@@ -113,6 +121,20 @@ export async function GET(request: NextRequest) {
       })
     : [];
 
+  const managedOrganizations =
+    managedOrganizationIds.length > 0
+      ? await prisma.organization.findMany({
+          where: {
+            id: { in: managedOrganizationIds },
+            deletedAt: null,
+            status: { code: MASTER.organizationStatus.ACTIVE },
+          },
+          select: { id: true, displayName: true },
+          orderBy: { displayName: "asc" },
+          take: 200,
+        })
+      : [];
+
   return NextResponse.json({
     user: { id: user.id, email: user.email },
     profile: {
@@ -129,6 +151,10 @@ export async function GET(request: NextRequest) {
       branchCount: m.branches.length,
     })),
     platformAdminOrganizations: adminOrganizations.map((o) => ({
+      id: o.id,
+      name: o.displayName,
+    })),
+    managedOrganizations: managedOrganizations.map((o) => ({
       id: o.id,
       name: o.displayName,
     })),
@@ -206,7 +232,15 @@ export async function POST(request: NextRequest) {
       allowPlatformAdmin: true,
     });
 
-  if (!memberAccess && !platformAdminAccess) {
+  const managedOrganizationIds = !memberAccess
+    ? await listActiveManagedOrganizationIds(prisma, bundle.profile.id)
+    : [];
+  const managedOrgAccess =
+    !memberAccess &&
+    !platformAdminAccess &&
+    managedOrganizationIds.includes(organizationId);
+
+  if (!memberAccess && !platformAdminAccess && !managedOrgAccess) {
     return NextResponse.json(
       { code: "ORG_FORBIDDEN", message: TH.access.forbidden },
       { status: 403 },
@@ -219,7 +253,7 @@ export async function POST(request: NextRequest) {
       ? (membership.branches.find((b) => b.id === branchId) ?? null)
       : null;
 
-  if (platformAdminAccess) {
+  if (platformAdminAccess || managedOrgAccess) {
     const org = await prisma.organization.findFirst({
       where: {
         id: organizationId,
@@ -264,7 +298,11 @@ export async function POST(request: NextRequest) {
     request.cookies.get(COOKIE_NAME)?.value,
   );
 
-  const mode = platformAdminAccess ? "platform_admin" : "membership";
+  const mode = platformAdminAccess
+    ? "platform_admin"
+    : managedOrgAccess
+      ? "managed_org"
+      : "membership";
   const encoded = encodeContextCookie({
     organizationId,
     branchId,

@@ -31,6 +31,7 @@ export default async function NewCustomRolePage() {
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,
     contextMode: ctx.contextMode,
+    canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
   };
 
   if (!perms.includes(PLATFORM_PERMISSIONS.roleManage) || !ctx.activeOrganization) {

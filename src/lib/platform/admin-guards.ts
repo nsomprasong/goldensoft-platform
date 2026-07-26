@@ -150,7 +150,20 @@ export async function assertCanRemoveOwner(
   }
 }
 
-/** ADMIN must not assign OWNER. BILLING_CONTACT must not invite. */
+/** True if the actor holds a staff customer-portfolio role (sales / account manager). */
+function isPortfolioStaffRole(actorPlatformRoles: string[]): boolean {
+  return (
+    actorPlatformRoles.includes(MASTER.platformRole.SALES) ||
+    actorPlatformRoles.includes(MASTER.platformRole.ACCOUNT_MANAGER)
+  );
+}
+
+/**
+ * ADMIN must not assign OWNER. BILLING_CONTACT must not invite. Staff
+ * (SALES / ACCOUNT_MANAGER) managing a customer's assigned portfolio can
+ * assign ADMIN / BILLING_CONTACT but never OWNER — the caller must also
+ * verify the organization is in the actor's managed portfolio.
+ */
 export function canAssignOrganizationRole(input: {
   actorPlatformRoles: string[];
   actorOrganizationRoles: string[];
@@ -165,9 +178,17 @@ export function canAssignOrganizationRole(input: {
   if (input.actorOrganizationRoles.includes(MASTER.organizationRole.ADMIN)) {
     return ["ADMIN", "BILLING_CONTACT"].includes(input.targetRole);
   }
+  if (isPortfolioStaffRole(input.actorPlatformRoles)) {
+    return ["ADMIN", "BILLING_CONTACT"].includes(input.targetRole);
+  }
   return false;
 }
 
+/**
+ * Caller must additionally verify the organization is either a membership
+ * org (OWNER/ADMIN) or an actively assigned portfolio org for staff
+ * (SALES / ACCOUNT_MANAGER) — see canInviteOrganizationUser.
+ */
 export function canInviteUsers(input: {
   actorPlatformRoles: string[];
   actorOrganizationRoles: string[];
@@ -182,6 +203,9 @@ export function canInviteUsers(input: {
     input.actorOrganizationRoles.includes(MASTER.organizationRole.OWNER) ||
     input.actorOrganizationRoles.includes(MASTER.organizationRole.ADMIN)
   ) {
+    return true;
+  }
+  if (isPortfolioStaffRole(input.actorPlatformRoles)) {
     return true;
   }
   return false;

@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
+import { canManageCustomerOrganization } from "@/lib/platform/customer-portfolio";
 import type { ActorAccess } from "@/lib/platform/organizations-admin";
 import { MASTER } from "@/lib/platform/master-codes";
 import {
@@ -42,7 +43,10 @@ export async function canManageCustomRoles(
   if (!perms.includes(PLATFORM_PERMISSIONS.roleManage)) {
     return false;
   }
-  return actor.membershipOrganizationIds.includes(organizationId);
+  return (
+    actor.membershipOrganizationIds.includes(organizationId) ||
+    canManageCustomerOrganization(actor, organizationId)
+  );
 }
 
 async function writeAudit(

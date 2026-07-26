@@ -74,7 +74,11 @@ export default async function RolesPage() {
   const canManage = perms.includes(PLATFORM_PERMISSIONS.roleManage);
 
   return (
-    <PlatformShell {...shellProps} contextMode={ctx.contextMode}>
+    <PlatformShell
+      {...shellProps}
+      contextMode={ctx.contextMode}
+      canUseManagedOrgMode={ctx.managedOrganizationIds.length > 0}
+    >
       <PageHeader
         title={TH.pages.rolesTitle}
         description={TH.pages.rolesBody}

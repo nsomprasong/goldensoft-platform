@@ -170,6 +170,7 @@ const NAV_ICON_BY_HREF: Record<string, NavIconKey> = {
   "/subscriptions": "subscription",
   "/audit-logs": "audit",
   "/settings": "settings",
+  "/staff-portfolio": "organization",
 };
 
 export function NavIcon(props: {

@@ -55,6 +55,8 @@ export default async function UserInvitationDetailPage({
     branches: ctx.branches,
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,
+    contextMode: ctx.contextMode,
+    canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
   };
   if (!permissions.includes(PLATFORM_PERMISSIONS.userRead)) {
     return (
@@ -88,7 +90,8 @@ export default async function UserInvitationDetailPage({
     actor.platformRoles.includes(MASTER.platformRole.SUPPORT);
   if (
     !canReadAll &&
-    !actor.membershipOrganizationIds.includes(invitation.organization.id)
+    !actor.membershipOrganizationIds.includes(invitation.organization.id) &&
+    !actor.managedOrganizationIds.includes(invitation.organization.id)
   ) {
     return (
       <PlatformShell {...shellProps}>

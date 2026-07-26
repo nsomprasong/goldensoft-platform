@@ -32,6 +32,8 @@ export default async function InviteUserPage() {
     branches: ctx.branches,
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,
+    contextMode: ctx.contextMode,
+    canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
   };
 
   if (!perms.includes(PLATFORM_PERMISSIONS.userInvite)) {
@@ -42,19 +44,29 @@ export default async function InviteUserPage() {
     );
   }
 
-  const orgIds =
-    actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN)
-      ? (
-          await prisma.organization.findMany({
-            where: { deletedAt: null },
-            select: { id: true, displayName: true },
-            orderBy: { displayName: "asc" },
-          })
-        ).map((o) => ({ id: o.id, name: o.displayName }))
-      : ctx.bundle.memberships.map((m) => ({
+  const orgIds = actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN)
+    ? (
+        await prisma.organization.findMany({
+          where: { deletedAt: null },
+          select: { id: true, displayName: true },
+          orderBy: { displayName: "asc" },
+        })
+      ).map((o) => ({ id: o.id, name: o.displayName }))
+    : [
+        ...ctx.bundle.memberships.map((m) => ({
           id: m.organizationId,
           name: m.organizationName,
-        }));
+        })),
+        ...(actor.managedOrganizationIds.length > 0
+          ? (
+              await prisma.organization.findMany({
+                where: { id: { in: actor.managedOrganizationIds }, deletedAt: null },
+                select: { id: true, displayName: true },
+                orderBy: { displayName: "asc" },
+              })
+            ).map((o) => ({ id: o.id, name: o.displayName }))
+          : []),
+      ];
 
   const branches = await prisma.branch.findMany({
     where: {

@@ -147,6 +147,8 @@ export default async function DashboardPage() {
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,
     pageTitle: TH.pages.dashboardTitle,
+    contextMode: ctx.contextMode,
+    canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
   };
 
   const primaryAction = canInvite

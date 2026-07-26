@@ -6,6 +6,7 @@ import { decideAccess } from "@/lib/auth/access";
 import { getAuthUser } from "@/lib/auth/session";
 import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
 import { COOKIE_NAME, decodeContextCookie } from "@/lib/context/cookie";
+import { listActiveManagedOrganizationIds } from "@/lib/platform/customer-portfolio";
 import { setServerTimingRoute } from "@/lib/perf/server-timing";
 
 function safeNextPath(raw: string | null | undefined): string {
@@ -34,6 +35,11 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
   );
   setServerTimingRoute(requestPath);
 
+  const { prisma } = await import("@/lib/prisma");
+  const managedOrganizationIds = bundle.profile
+    ? await listActiveManagedOrganizationIds(prisma, bundle.profile.id)
+    : [];
+
   const decision = decideAccess({
     authenticated: true,
     profile: bundle.profile
@@ -46,6 +52,7 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     memberships: bundle.memberships,
     claimedOrganizationId: cookie?.organizationId ?? null,
     platformRoles: bundle.platformRoles,
+    managedOrganizationIds,
     contextMode: cookie?.mode,
   });
 
@@ -77,7 +84,8 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     if (
       needsOrgBootstrap &&
       decision.autoSelected &&
-      cookie?.mode !== "platform_admin"
+      cookie?.mode !== "platform_admin" &&
+      cookie?.mode !== "managed_org"
     ) {
       const params = new URLSearchParams({
         organizationId: decision.organizationId,
@@ -102,13 +110,19 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
   }
 
   const isSuper = bundle.platformRoles.includes("SUPER_ADMIN");
+  const isManagedOrgMode =
+    cookie?.mode === "managed_org" &&
+    !!activeOrgId &&
+    managedOrganizationIds.includes(activeOrgId);
   let platformAdminOrganization: { id: string; name: string } | null = null;
 
   if (cookie && !membership) {
-    if (!(isSuper && cookie.mode === "platform_admin" && activeOrgId)) {
+    if (
+      !(isSuper && cookie.mode === "platform_admin" && activeOrgId) &&
+      !isManagedOrgMode
+    ) {
       redirect("/select-organization");
     }
-    const { prisma } = await import("@/lib/prisma");
     const org = await prisma.organization.findFirst({
       where: {
         id: activeOrgId,
@@ -136,11 +150,14 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     return {
       user,
       bundle,
+      managedOrganizationIds,
       activeOrganization: platformAdminOrganization,
       activeBranch: adminBranch,
       organizationRoles: [],
       branches: org.branches,
-      contextMode: "platform_admin" as const,
+      contextMode: isManagedOrgMode
+        ? ("managed_org" as const)
+        : ("platform_admin" as const),
     };
   }
 
@@ -163,6 +180,7 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
   return {
     user,
     bundle,
+    managedOrganizationIds,
     activeOrganization: membership
       ? { id: membership.organizationId, name: membership.organizationName }
       : null,
@@ -171,6 +189,7 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     branches: membership?.branches ?? [],
     contextMode: (cookie?.mode ?? "membership") as
       | "membership"
-      | "platform_admin",
+      | "platform_admin"
+      | "managed_org",
   };
 });

@@ -19,8 +19,10 @@ export type ProfileAccessInput = {
   memberships: MembershipSummary[];
   claimedOrganizationId?: string | null;
   platformRoles?: string[];
-  /** Cookie mode for SUPER_ADMIN managing without membership. */
-  contextMode?: "membership" | "platform_admin";
+  /** Customer organizations assigned to this staff member via the portfolio (Phase 1). */
+  managedOrganizationIds?: string[];
+  /** Cookie mode for SUPER_ADMIN managing without membership, or staff managing a portfolio org. */
+  contextMode?: "membership" | "platform_admin" | "managed_org";
 };
 
 export type AccessDecision =
@@ -65,6 +67,11 @@ export function decideAccess(input: ProfileAccessInput): AccessDecision {
     (m) => m.organizationStatus === "ACTIVE",
   );
   const isSuper = (input.platformRoles ?? []).includes("SUPER_ADMIN");
+  const managedOrganizationIds = input.managedOrganizationIds ?? [];
+  const isManagedOrgClaim =
+    input.contextMode === "managed_org" &&
+    !!input.claimedOrganizationId &&
+    managedOrganizationIds.includes(input.claimedOrganizationId);
 
   if (activeOrgs.length === 0) {
     if (
@@ -80,9 +87,19 @@ export function decideAccess(input: ProfileAccessInput): AccessDecision {
         autoBranchId: null,
       };
     }
-    if (isSuper) {
+    if (isManagedOrgClaim) {
+      return {
+        kind: "ready",
+        organizationId: input.claimedOrganizationId!,
+        autoSelected: false,
+        branches: [],
+        autoBranchId: null,
+      };
+    }
+    if (isSuper || managedOrganizationIds.length > 0) {
       // SUPER_ADMIN without memberships can still use the platform shell and
-      // pick an organization in platform-admin mode.
+      // pick an organization in platform-admin mode. Staff with a customer
+      // portfolio but no memberships can pick one of their assigned orgs.
       return {
         kind: "select_organization",
         organizations: [],
@@ -104,6 +121,19 @@ export function decideAccess(input: ProfileAccessInput): AccessDecision {
     return {
       kind: "ready",
       organizationId: input.claimedOrganizationId,
+      autoSelected: false,
+      branches: [],
+      autoBranchId: null,
+    };
+  }
+
+  if (
+    isManagedOrgClaim &&
+    !activeOrgs.some((o) => o.organizationId === input.claimedOrganizationId)
+  ) {
+    return {
+      kind: "ready",
+      organizationId: input.claimedOrganizationId!,
       autoSelected: false,
       branches: [],
       autoBranchId: null,
@@ -149,7 +179,11 @@ export function decideAccess(input: ProfileAccessInput): AccessDecision {
 export function canAccessOrganization(
   memberships: MembershipSummary[],
   organizationId: string,
-  options?: { platformRoles?: string[]; allowPlatformAdmin?: boolean },
+  options?: {
+    platformRoles?: string[];
+    allowPlatformAdmin?: boolean;
+    managedOrganizationIds?: string[];
+  },
 ): boolean {
   const memberOk = memberships.some(
     (m) =>
@@ -160,6 +194,9 @@ export function canAccessOrganization(
     options?.allowPlatformAdmin &&
     options.platformRoles?.includes("SUPER_ADMIN")
   ) {
+    return true;
+  }
+  if (options?.managedOrganizationIds?.includes(organizationId)) {
     return true;
   }
   return false;
@@ -235,6 +272,11 @@ export const PLATFORM_NAV: NavItem[] = [
     href: "/audit-logs",
     label: TH.nav.auditLogs,
     permission: "platform.audit.read",
+  },
+  {
+    href: "/staff-portfolio",
+    label: TH.nav.staffPortfolio,
+    anyPlatformRoles: ["SUPER_ADMIN"],
   },
   {
     href: "/settings",

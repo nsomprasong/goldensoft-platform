@@ -16,11 +16,14 @@ export function PlatformShell(props: {
   organizationRoles: string[];
   organizations: Array<{ id: string; name: string }>;
   platformAdminOrganizations?: Array<{ id: string; name: string }>;
+  managedOrganizations?: Array<{ id: string; name: string }>;
+  /** True if this actor has an active customer portfolio to switch into. */
+  canUseManagedOrgMode?: boolean;
   branches: Array<{ id: string; name: string; code: string }>;
   activeOrganization: { id: string; name: string } | null;
   activeBranch: { id: string; name: string; code: string } | null;
   pageTitle?: string;
-  contextMode?: "membership" | "platform_admin";
+  contextMode?: "membership" | "platform_admin" | "managed_org";
 }) {
   const nav = filterNavForRoles({
     platformRoles: props.platformRoles,
@@ -42,12 +45,14 @@ export function PlatformShell(props: {
       navItems={nav.map((item) => ({ href: item.href, label: item.label }))}
       organizations={props.organizations}
       platformAdminOrganizations={props.platformAdminOrganizations}
+      managedOrganizations={props.managedOrganizations}
       branches={props.branches}
       activeOrganization={props.activeOrganization}
       activeBranch={props.activeBranch}
       contextMode={props.contextMode ?? "membership"}
       pageTitle={props.pageTitle}
       canUsePlatformAdminMode={props.platformRoles.includes("SUPER_ADMIN")}
+      canUseManagedOrgMode={props.canUseManagedOrgMode}
     >
       {props.children}
     </AppShell>

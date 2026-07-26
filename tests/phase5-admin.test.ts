@@ -48,6 +48,7 @@ function actor(overrides: Partial<ActorAccess> = {}): ActorAccess {
     authUserId: randomUUID(),
     platformRoles: [],
     membershipOrganizationIds: [ORG_A],
+    managedOrganizationIds: [],
     ...overrides,
   };
 }

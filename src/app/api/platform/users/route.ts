@@ -26,11 +26,17 @@ export async function GET(request: NextRequest) {
   const canReadAll =
     actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN) ||
     actor.platformRoles.includes(MASTER.platformRole.SUPPORT);
+  const visibleOrganizationIds = [
+    ...new Set([
+      ...actor.membershipOrganizationIds,
+      ...actor.managedOrganizationIds,
+    ]),
+  ];
   const organizationId = request.nextUrl.searchParams.get("organizationId");
   if (
     organizationId &&
     !canReadAll &&
-    !actor.membershipOrganizationIds.includes(organizationId)
+    !visibleOrganizationIds.includes(organizationId)
   ) {
     return NextResponse.json({ message: TH.common.forbidden }, { status: 403 });
   }
@@ -40,7 +46,7 @@ export async function GET(request: NextRequest) {
         ? organizationId
         : canReadAll
           ? undefined
-          : { in: actor.membershipOrganizationIds },
+          : { in: visibleOrganizationIds },
     },
     select: {
       id: true,

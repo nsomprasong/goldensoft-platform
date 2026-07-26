@@ -3,8 +3,13 @@ import { createHmac, timingSafeEqual } from "crypto";
 export type PlatformContextCookie = {
   organizationId: string;
   branchId: string | null;
-  /** SUPER_ADMIN managing an org without membership. */
-  mode?: "membership" | "platform_admin";
+  /**
+   * membership: normal org membership.
+   * platform_admin: SUPER_ADMIN managing an org without membership.
+   * managed_org: staff (SALES/ACCOUNT_MANAGER, etc.) managing a customer
+   * organization assigned to them via the staff portfolio (Phase 1).
+   */
+  mode?: "membership" | "platform_admin" | "managed_org";
 };
 
 const COOKIE_NAME = "gs_platform_ctx";
@@ -53,7 +58,9 @@ export function decodeContextCookie(
           ? parsed.branchId
           : null,
       mode:
-        parsed.mode === "platform_admin" || parsed.mode === "membership"
+        parsed.mode === "platform_admin" ||
+        parsed.mode === "membership" ||
+        parsed.mode === "managed_org"
           ? parsed.mode
           : undefined,
     };

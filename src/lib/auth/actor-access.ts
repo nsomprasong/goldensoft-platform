@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { cache } from "react";
 
 import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
+import { listActiveManagedOrganizationIds } from "@/lib/platform/customer-portfolio";
 import type { ActorAccess } from "@/lib/platform/organizations-admin";
 
 export type ResolvedActorAccess = ActorAccess & {
@@ -15,6 +16,7 @@ function emptyAccess(authUserId: string): ResolvedActorAccess {
     authUserId,
     platformRoles: [],
     membershipOrganizationIds: [],
+    managedOrganizationIds: [],
     organizationRoles: [],
     organizationRolesByOrganization: {},
     profileId: null,
@@ -28,7 +30,7 @@ function emptyAccess(authUserId: string): ResolvedActorAccess {
  * round-trip after requirePlatformPage.
  */
 export const loadActorAccess = cache(async function loadActorAccess(
-  _db: PrismaClient,
+  db: PrismaClient,
   authUserId: string,
 ): Promise<ResolvedActorAccess> {
   const bundle = await loadPlatformUserBundle(authUserId);
@@ -36,11 +38,17 @@ export const loadActorAccess = cache(async function loadActorAccess(
     return emptyAccess(authUserId);
   }
 
+  const managedOrganizationIds = await listActiveManagedOrganizationIds(
+    db,
+    bundle.profile.id,
+  );
+
   return {
     authUserId,
     profileId: bundle.profile.id,
     platformRoles: bundle.platformRoles,
     membershipOrganizationIds: bundle.memberships.map((m) => m.organizationId),
+    managedOrganizationIds,
     organizationRoles: bundle.memberships.flatMap((m) => m.roles),
     organizationRolesByOrganization: Object.fromEntries(
       bundle.memberships.map((membership) => [

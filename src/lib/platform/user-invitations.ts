@@ -13,6 +13,7 @@ import {
   canInviteUsers,
 } from "@/lib/platform/admin-guards";
 import { writeAuditLog } from "@/lib/platform/audit";
+import { canManageCustomerOrganization } from "@/lib/platform/customer-portfolio";
 import { MASTER } from "@/lib/platform/master-codes";
 import type { ActorAccess } from "@/lib/platform/organizations-admin";
 
@@ -104,7 +105,8 @@ export function canInviteOrganizationUser(
   }
   if (
     !actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN) &&
-    !actor.membershipOrganizationIds.includes(organizationId)
+    !actor.membershipOrganizationIds.includes(organizationId) &&
+    !canManageCustomerOrganization(actor, organizationId)
   ) {
     return false;
   }

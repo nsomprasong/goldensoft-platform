@@ -44,6 +44,7 @@ export default async function RoleDetailPage({ params }: Props) {
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,
     contextMode: ctx.contextMode,
+    canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
   };
 
   if (!perms.includes(PLATFORM_PERMISSIONS.roleRead)) {

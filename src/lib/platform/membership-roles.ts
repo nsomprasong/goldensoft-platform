@@ -4,6 +4,7 @@ import {
   countActiveOwners,
   wouldRemoveLastOwner,
 } from "@/lib/platform/admin-guards";
+import { canManageCustomerOrganization } from "@/lib/platform/customer-portfolio";
 import type { ActorAccess } from "@/lib/platform/organizations-admin";
 import { MASTER } from "@/lib/platform/master-codes";
 import {
@@ -33,7 +34,9 @@ async function assertCanAssign(
   if (!perms.includes(PLATFORM_PERMISSIONS.roleAssign)) {
     throw new RoleAssignmentError("FORBIDDEN", "ไม่มีสิทธิ์กำหนดบทบาท");
   }
-  if (!actor.membershipOrganizationIds.includes(organizationId)) {
+  const hasMembership = actor.membershipOrganizationIds.includes(organizationId);
+  const hasManagedAccess = canManageCustomerOrganization(actor, organizationId);
+  if (!hasMembership && !hasManagedAccess) {
     throw new RoleAssignmentError("FORBIDDEN", "ไม่มีสิทธิ์กำหนดบทบาท");
   }
 }

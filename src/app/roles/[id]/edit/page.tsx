@@ -35,6 +35,7 @@ export default async function EditCustomRolePage({ params }: Props) {
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,
     contextMode: ctx.contextMode,
+    canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
   };
 
   const role = await prisma.organizationRole.findUnique({

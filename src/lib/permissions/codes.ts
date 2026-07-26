@@ -31,6 +31,7 @@ export const PLATFORM_PERMISSIONS = {
   billingContactManage: "billing.contact.manage",
   billingSubscriptionRead: "billing.subscription.read",
   billingSubscriptionManage: "billing.subscription.manage",
+  customerPortfolioManage: "platform.customer_portfolio.manage",
 } as const;
 
 export type PlatformPermission =
@@ -70,6 +71,7 @@ export const PLATFORM_PERMISSION_LABELS: Record<PlatformPermission, string> = {
   [PLATFORM_PERMISSIONS.billingContactManage]: "จัดการผู้ติดต่อการเงิน",
   [PLATFORM_PERMISSIONS.billingSubscriptionRead]: "ดูสรุปแพ็กเกจ/การสมัคร",
   [PLATFORM_PERMISSIONS.billingSubscriptionManage]: "จัดการแพ็กเกจด้านการเงิน",
+  [PLATFORM_PERMISSIONS.customerPortfolioManage]: "จัดการพอร์ตโฟลิโอลูกค้า",
 };
 
 export const PLATFORM_PERMISSION_DESCRIPTIONS: Record<
@@ -112,6 +114,8 @@ export const PLATFORM_PERMISSION_DESCRIPTIONS: Record<
     "ดูสรุปแพ็กเกจและวันหมดอายุ",
   [PLATFORM_PERMISSIONS.billingSubscriptionManage]:
     "จัดการมุมมองแพ็กเกจด้านการเงิน",
+  [PLATFORM_PERMISSIONS.customerPortfolioManage]:
+    "กำหนดหรือถอดองค์กรลูกค้าให้พนักงานขาย/ผู้ดูแลบัญชีลูกค้า",
 };
 
 const ALL_BILLING_PERMISSIONS: PlatformPermission[] = [
@@ -165,6 +169,25 @@ export function permissionsForRoles(input: {
     set.add(PLATFORM_PERMISSIONS.auditRead);
     set.add(PLATFORM_PERMISSIONS.billingAccountRead);
     set.add(PLATFORM_PERMISSIONS.billingSubscriptionRead);
+  }
+
+  // SALES / ACCOUNT_MANAGER: static, read-mostly access scoped at runtime to
+  // their assigned customer-portfolio organizations (see
+  // src/lib/platform/customer-portfolio.ts). No billing/commission access —
+  // commission is out of scope for this phase.
+  if (
+    input.platformRoles.includes("SALES") ||
+    input.platformRoles.includes("ACCOUNT_MANAGER")
+  ) {
+    set.add(PLATFORM_PERMISSIONS.organizationRead);
+    set.add(PLATFORM_PERMISSIONS.branchRead);
+    set.add(PLATFORM_PERMISSIONS.userRead);
+    set.add(PLATFORM_PERMISSIONS.userInvite);
+    set.add(PLATFORM_PERMISSIONS.userManage);
+    set.add(PLATFORM_PERMISSIONS.roleRead);
+    set.add(PLATFORM_PERMISSIONS.roleManage);
+    set.add(PLATFORM_PERMISSIONS.roleAssign);
+    set.add(PLATFORM_PERMISSIONS.productRead);
   }
 
   if (input.organizationRoles.includes("OWNER")) {
