@@ -181,3 +181,20 @@ Product apps should map these codes to Thai UX. HTTP status is normative for API
 - Contract id: `platform-integration-contract-v1`
 - Breaking changes require a new major contract document and coordinated product release
 - Additive entitlement codes may be appended without a major bump when defaults remain fail-closed
+
+---
+
+## 10. Customer App (Phase 8B.1)
+
+| Concern | Contract |
+|--------|----------|
+| Customer host | `goldensoft-app` (`app.goldensoft.cloud`) |
+| Admin host | `goldensoft-platform` (`platform.goldensoft.cloud`) — Admin shell only |
+| Bootstrap | `GET /api/customer/bootstrap` — session + org/branch + product cards + effective permissions |
+| Central Login return | Allowlisted absolute `next` via `CUSTOMER_APP_ORIGINS` (plus relative paths) |
+| Cookie | Still **only** `gs_platform_ctx` |
+| Product paths | `/hr/*`, `/resident/*`, `/qrstation/*` under Customer App (path-based / reverse-proxy) |
+
+Customer App context details: `goldensoft-app/docs/customer-app-context-contract-v1.md`.
+
+Platform Admin Sidebar must not be shown to ordinary customer users as their product UI.

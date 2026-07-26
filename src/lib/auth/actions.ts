@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { resolvePostLoginRedirect } from "@/lib/auth/post-login-redirect";
 import { TH } from "@/lib/i18n/th";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { COOKIE_NAME } from "@/lib/context/cookie";
@@ -18,7 +19,7 @@ export async function signInWithPassword(
 ): Promise<LoginActionState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const next = String(formData.get("next") ?? "/").trim() || "/";
+  const next = resolvePostLoginRedirect(String(formData.get("next") ?? "/"));
 
   if (!email || !password) {
     return { error: TH.login.invalid };
@@ -38,7 +39,7 @@ export async function signInWithPassword(
   }
 
   revalidatePath("/", "layout");
-  redirect(next.startsWith("/") ? next : "/");
+  redirect(next);
 }
 
 export async function signOutAction(): Promise<void> {

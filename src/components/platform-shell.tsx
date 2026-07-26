@@ -4,6 +4,11 @@ import { AppShell } from "@/components/app-shell";
 import { filterNavForRoles } from "@/lib/auth/access";
 import { TH } from "@/lib/i18n/th";
 
+/**
+ * Platform Admin shell only (“ศูนย์บริหาร GoldenSoft”).
+ * Customer product navigation belongs in goldensoft-app — do not reuse this
+ * shell for customer IA without an explicit customer role mode.
+ */
 export function PlatformShell(props: {
   children: ReactNode;
   displayName: string;
