@@ -38,6 +38,11 @@ npm run build
 | `npm run db:migration:check` | Safety-check migration SQL (platform only) |
 | `npm run db:preflight` | Env guard + read-only DB ping (**needs real `.env.local`**) |
 | `npm run db:seed` | Seed (after migration applied + approval) |
+| `npm run seed:hr-permissions` | Upsert HR (`GOLDENSOFT_HR`) permission catalog — `SEED_MODE=system` only, ไม่ต้อง migration |
+
+Permission catalog เป็นข้อมูล ไม่ใช่ schema: เพิ่ม/แก้สิทธิ์ HR ด้วย `npm run seed:hr-permissions`
+(upsert by `code`, idempotent) — ห้ามสร้าง migration ที่มีแต่ `INSERT` เพราะ additive migration check
+ต้องการ `ALTER TABLE` / `CREATE INDEX`
 
 **ห้าม** รัน `prisma migrate deploy` / `db push` จนกว่า Project Manager จะอนุมัติ
 
