@@ -100,7 +100,8 @@ function groupForHref(href: string): ShellNavItem["group"] {
   if (
     href.startsWith("/products") ||
     href.startsWith("/plans") ||
-    href.startsWith("/subscriptions")
+    href.startsWith("/subscriptions") ||
+    href.startsWith("/billing")
   ) {
     return "services";
   }

@@ -26,6 +26,7 @@ export const TH = {
     products: "ผลิตภัณฑ์",
     plans: "แพ็กเกจ",
     subscriptions: "การสมัครใช้บริการ",
+    billing: "การเงินและการเรียกเก็บเงิน",
     auditLogs: "บันทึกกิจกรรม",
     settings: "ตั้งค่าระบบ",
     logout: "ออกจากระบบ",

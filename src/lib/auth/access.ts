@@ -227,6 +227,11 @@ export const PLATFORM_NAV: NavItem[] = [
     permission: "platform.subscription.read",
   },
   {
+    href: "/billing",
+    label: TH.nav.billing,
+    permission: "billing.account.read",
+  },
+  {
     href: "/audit-logs",
     label: TH.nav.auditLogs,
     permission: "platform.audit.read",

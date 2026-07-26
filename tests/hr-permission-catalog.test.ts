@@ -141,6 +141,7 @@ describe("HR permission catalog seed script", () => {
       "0003_user_invitations",
       "0004_phase7_operations",
       "0005_phase7b_subscription_history",
+      "0006_billing_credit_foundation",
     ]);
 
     for (const dir of dirs) {

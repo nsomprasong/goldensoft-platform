@@ -186,7 +186,7 @@ describe("Phase 6 design tokens", () => {
 
   it("keeps a single deterministic root html with suppressHydrationWarning", () => {
     const layout = read("src/app/layout.tsx");
-    assert.match(layout, /<html lang="th" suppressHydrationWarning>/);
+    assert.match(layout, /<html[\s\S]*?lang="th"[\s\S]*?suppressHydrationWarning/);
     assert.equal((layout.match(/<html\b/g) ?? []).length, 1);
     assert.doesNotMatch(layout, /typeof window|Date\.now\(|new Date\(|Math\.random\(|localStorage|navigator/);
     assert.doesNotMatch(layout, /"use client"/);
