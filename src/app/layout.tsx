@@ -39,8 +39,12 @@ export default function RootLayout({
   return (
     // Chrome/iPad (and similar) may inject attrs like __gcrremoteframetoken
     // onto the root html element before React hydrates.
-    <html lang="th" suppressHydrationWarning>
-      <body className={`${anuphan.variable} ${prompt.variable} antialiased`}>
+    <html
+      lang="th"
+      suppressHydrationWarning
+      className={`${anuphan.variable} ${prompt.variable}`}
+    >
+      <body className="antialiased">
         <Suspense fallback={null}>
           <NavigationPending />
         </Suspense>

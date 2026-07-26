@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/*
+ * Register the same next/font families as Customer App so Tailwind utilities
+ * (font-sans) and body text share one stack — Anuphan body / Prompt display.
+ */
+@theme inline {
+  --font-sans: var(--font-anuphan), "Anuphan", "Noto Sans Thai", Tahoma,
+    sans-serif;
+  --font-display: var(--font-prompt), "Prompt", var(--font-anuphan), "Anuphan",
+    sans-serif;
+}
+
 /* GoldenSoft Platform — Design Tokens (Phase 6) */
 :root {
   /* Safari-safe semantic sRGB colors */
@@ -143,11 +154,13 @@
   --space-6: 1.5rem;
   --space-8: 2rem;
 
-  /* Typography */
-  --font-sans:
-    var(--font-anuphan), "Anuphan", "Noto Sans Thai", "Tahoma", sans-serif;
-  --font-display:
-    var(--font-prompt), "Prompt", var(--font-anuphan), "Anuphan", sans-serif;
+  /* Typography — same families/fallbacks as Customer App design contract */
+  --font-family-sans: var(--font-anuphan, "Anuphan"), "Noto Sans Thai", Tahoma,
+    sans-serif;
+  --font-family-display: var(--font-prompt, "Prompt"),
+    var(--font-anuphan, "Anuphan"), sans-serif;
+  --font-sans: var(--font-family-sans);
+  --font-display: var(--font-family-display);
   --text-page: 1.5rem;
   --text-section: 1.125rem;
   --text-card: 1rem;
@@ -202,6 +215,12 @@ html {
 }
 
 body {
+  --font-family-sans: var(--font-anuphan, "Anuphan"), "Noto Sans Thai", Tahoma,
+    sans-serif;
+  --font-family-display: var(--font-prompt, "Prompt"),
+    var(--font-anuphan, "Anuphan"), sans-serif;
+  --font-sans: var(--font-family-sans);
+  --font-display: var(--font-family-display);
   margin: 0;
   min-height: 100vh;
   background-color: #f6f7f9;
@@ -212,10 +231,17 @@ body {
     linear-gradient(180deg, #f8f5f1 0%, #f6f7f9 42%, #f3f5f8 100%);
   color: #172033;
   color: var(--text-primary, #172033);
-  font-family: var(--font-sans);
+  font-family: var(--font-family-sans);
   font-size: var(--text-body);
   line-height: var(--leading-normal);
   letter-spacing: 0.005em;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 h1,
@@ -224,7 +250,7 @@ h3,
 .brand-mark,
 .page-header h1,
 .dashboard-hero h1 {
-  font-family: var(--font-display);
+  font-family: var(--font-family-display);
   letter-spacing: -0.015em;
 }
 
@@ -892,7 +918,7 @@ a {
   border-radius: 999px;
   background: linear-gradient(145deg, #f59e0b 0%, #b45309 100%);
   color: #fff;
-  font-family: var(--font-prompt), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-family-display);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -999,7 +1025,7 @@ a {
 
 .navigation-pending-title {
   margin: 0;
-  font-family: var(--font-prompt), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-family-display);
   font-size: 1.05rem;
   font-weight: 600;
   color: var(--text-primary);
