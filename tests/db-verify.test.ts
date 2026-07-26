@@ -7,6 +7,8 @@ import type { SqlQuery } from "../scripts/db-preflight";
 import {
   EXPECTED_INVITATION_STATUS_CODES,
   EXPECTED_PLATFORM_TABLE_COUNT,
+  BILLING_MIGRATION_NAME,
+  BILLING_TABLES,
   INVITATION_MIGRATION_NAME,
   INVITATION_TABLES,
   MASTER_TABLES,
@@ -32,11 +34,13 @@ describe("db:verify read-only checks", () => {
     migration0003?: MigrationAttemptCounts;
     migration0004?: MigrationAttemptCounts;
     migration0005?: MigrationAttemptCounts;
+    migration0006?: MigrationAttemptCounts;
     migrationsTableMissing?: boolean;
     platformTableCount?: number;
     invitationTableCount?: number;
     phase7TableCount?: number;
     phase7bTableCount?: number;
+    billingTableCount?: number;
     invitationStatusCount?: number;
     masterCounts?: Record<string, number>;
     organizationCount?: number;
@@ -50,6 +54,8 @@ describe("db:verify read-only checks", () => {
       options.phase7TableCount ?? PHASE7_TABLES.length;
     const phase7bTableCount =
       options.phase7bTableCount ?? PHASE7B_HISTORY_TABLES.length;
+    const billingTableCount =
+      options.billingTableCount ?? BILLING_TABLES.length;
     const invitationStatusCount =
       options.invitationStatusCount ?? EXPECTED_INVITATION_STATUS_CODES.length;
     const organizationCount = options.organizationCount ?? 2;
@@ -76,6 +82,11 @@ describe("db:verify read-only checks", () => {
       rolled_back_count: 0,
       unresolved_count: 0,
     };
+    const migration0006 = options.migration0006 ?? {
+      applied_count: 1,
+      rolled_back_count: 0,
+      unresolved_count: 0,
+    };
 
     return async (text, values) => {
       if (text.includes("SELECT 1::int")) {
@@ -98,7 +109,9 @@ describe("db:verify read-only checks", () => {
       if (text.includes("applied_count") && text.includes("WHERE migration_name = $1")) {
         const migrationName = String(values?.[0] ?? "");
         const counts =
-          migrationName === PHASE7B_HISTORY_MIGRATION_NAME
+          migrationName === BILLING_MIGRATION_NAME
+            ? migration0006
+            : migrationName === PHASE7B_HISTORY_MIGRATION_NAME
             ? migration0005
             : migrationName === PHASE7_MIGRATION_NAME
               ? migration0004
@@ -124,7 +137,9 @@ describe("db:verify read-only checks", () => {
         text.includes("table_name = ANY($1::text[])")
       ) {
         const names = (values?.[0] as string[] | undefined) ?? [];
-        const count = names.includes(PHASE7B_HISTORY_TABLES[0])
+        const count = names.includes(BILLING_TABLES[0])
+          ? billingTableCount
+          : names.includes(PHASE7B_HISTORY_TABLES[0])
           ? phase7bTableCount
           : names.includes(PHASE7_TABLES[0])
             ? phase7TableCount
