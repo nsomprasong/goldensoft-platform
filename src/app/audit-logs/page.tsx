@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { FilterX, ScrollText, Search } from "lucide-react";
 
 import { PlatformShell } from "@/components/platform-shell";
 import {
@@ -10,7 +10,10 @@ import {
   Pagination,
   SearchFilterBar,
 } from "@/components/ui/admin-ui";
-import { IconAudit } from "@/components/ui/icons";
+import {
+  IconTextButton,
+  IconTextLink,
+} from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
@@ -122,7 +125,7 @@ export default async function AuditLogsPage({
       <PageHeader
         title={TH.pages.auditTitle}
         description={TH.pages.auditBody}
-        icon={<IconAudit size={24} />}
+        icon={<ScrollText size={24} />}
       />
       <section className="card">
         <SearchFilterBar
@@ -162,13 +165,18 @@ export default async function AuditLogsPage({
                 className="input !w-auto"
               />
             </label>
-            <button className="btn" type="submit">
-              {TH.common.filter}
-            </button>
+            <IconTextButton
+              type="submit"
+              label={TH.common.filter}
+              icon={<Search className="size-5" />}
+            />
             {hasFilter ? (
-              <Link href="/audit-logs" className="btn btn-secondary">
-                {TH.common.clearFilter}
-              </Link>
+              <IconTextLink
+                href="/audit-logs"
+                variant="outline"
+                label={TH.common.clearFilter}
+                icon={<FilterX className="size-5" />}
+              />
             ) : null}
           </form>
         </SearchFilterBar>

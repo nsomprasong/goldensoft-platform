@@ -1,5 +1,6 @@
 "use client";
 
+import { Copy, Pause, Play, Save, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -10,6 +11,8 @@ import {
   type PlanFeatureSelection,
 } from "@/components/plan-feature-matrix";
 import { FormField } from "@/components/ui/admin-ui";
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 import { pushToast } from "@/components/ui/toast";
 import { TH } from "@/lib/i18n/th";
 
@@ -146,22 +149,21 @@ export function PlanForm(props: {
         </FormField>
       ) : null}
       <FormField label="รหัสแพ็กเกจ" htmlFor="code" required>
-        <input
+        <Input
           id="code"
           name="code"
           required={props.mode === "create"}
           disabled={props.mode === "edit"}
           defaultValue={props.initial?.code ?? ""}
-          className="input disabled:bg-[var(--surface-muted)]"
+          className="disabled:bg-[var(--surface-muted)]"
         />
       </FormField>
       <FormField label="ชื่อแพ็กเกจ" htmlFor="name" required>
-        <input
+        <Input
           id="name"
           name="name"
           required
           defaultValue={props.initial?.name ?? ""}
-          className="input"
         />
       </FormField>
       {props.mode === "create" ? (
@@ -182,7 +184,7 @@ export function PlanForm(props: {
             </select>
           </FormField>
           <FormField label="ราคา" htmlFor="basePrice" required>
-            <input
+            <Input
               id="basePrice"
               name="basePrice"
               type="number"
@@ -190,37 +192,33 @@ export function PlanForm(props: {
               step="0.01"
               required
               defaultValue={props.initial?.basePrice ?? 0}
-              className="input"
             />
           </FormField>
           <FormField label="สกุลเงิน" htmlFor="currency">
-            <input
+            <Input
               id="currency"
               name="currency"
               defaultValue={props.initial?.currency ?? "THB"}
-              className="input"
             />
           </FormField>
           <FormField label="วันทดลองใช้" htmlFor="trialDays">
-            <input
+            <Input
               id="trialDays"
               name="trialDays"
               type="number"
               min={0}
               defaultValue={props.initial?.trialDays ?? 0}
-              className="input"
             />
           </FormField>
         </div>
       ) : null}
       <FormField label="ลำดับการแสดง" htmlFor="sortOrder">
-        <input
+        <Input
           id="sortOrder"
           name="sortOrder"
           type="number"
           min={0}
           defaultValue={props.initial?.sortOrder ?? 0}
-          className="input"
         />
       </FormField>
       <FormField label="คำอธิบาย" htmlFor="description">
@@ -239,17 +237,25 @@ export function PlanForm(props: {
           onChange={setFeatures}
         />
       ) : null}
-      <div className="flex gap-2">
-        <button type="submit" className="btn-primary" disabled={pending}>
-          {pending ? TH.common.loading : TH.common.save}
-        </button>
-        <button
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <IconTextButton
+          type="submit"
+          disabled={pending}
+          icon={
+            <Save
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.common.loading : TH.common.save}
+        />
+        <IconTextButton
           type="button"
-          className="btn-secondary"
+          variant="outline"
           onClick={() => router.back()}
-        >
-          {TH.common.cancel}
-        </button>
+          icon={<X aria-hidden="true" />}
+          label={TH.common.cancel}
+        />
       </div>
     </form>
   );
@@ -280,34 +286,48 @@ export function PlanStatusActions(props: {
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {props.statusCode !== "ACTIVE" ? (
-        <button
+        <IconTextButton
           type="button"
-          className="btn-primary"
           disabled={pending}
           onClick={() => void run("activate")}
-        >
-          เปิดใช้งาน
-        </button>
+          icon={
+            <Play
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.common.loading : "เปิดใช้งาน"}
+        />
       ) : (
-        <button
+        <IconTextButton
           type="button"
-          className="btn-secondary"
+          variant="outline"
           disabled={pending}
           onClick={() => void run("deactivate")}
-        >
-          ปิดใช้งาน
-        </button>
+          icon={
+            <Pause
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.common.loading : "ปิดใช้งาน"}
+        />
       )}
-      <button
+      <IconTextButton
         type="button"
-        className="btn-secondary"
+        variant="outline"
         disabled={pending}
         onClick={() => void run("duplicate")}
-      >
-        สร้างเวอร์ชันใหม่
-      </button>
+        icon={
+          <Copy
+            className={pending ? "animate-pulse" : undefined}
+            aria-hidden="true"
+          />
+        }
+        label={pending ? TH.common.loading : "สร้างเวอร์ชันใหม่"}
+      />
     </div>
   );
 }

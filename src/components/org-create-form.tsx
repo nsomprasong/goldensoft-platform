@@ -3,7 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { Save, X } from "lucide-react";
+
 import { FormField } from "@/components/ui/admin-ui";
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 import { pushToast } from "@/components/ui/toast";
 import { TH } from "@/lib/i18n/th";
 
@@ -46,28 +50,28 @@ export function OrgCreateForm() {
     <form action={onSubmit} className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <FormField label={TH.org.code} htmlFor="customerCode" required>
-          <input id="customerCode" name="customerCode" required className="input" />
+          <Input id="customerCode" name="customerCode" required />
         </FormField>
         <FormField label="Slug" htmlFor="slug" required hint="ใช้ตัวอักษรภาษาอังกฤษพิมพ์เล็ก ตัวเลข และขีดกลาง">
-          <input id="slug" name="slug" required pattern="[a-z0-9-]+" className="input" />
+          <Input id="slug" name="slug" required pattern="[a-z0-9-]+" />
         </FormField>
         <FormField label={TH.org.nameTh} htmlFor="displayName" required>
-          <input id="displayName" name="displayName" required className="input" />
+          <Input id="displayName" name="displayName" required />
         </FormField>
         <FormField label={TH.org.legalName} htmlFor="legalName" required>
-          <input id="legalName" name="legalName" required className="input" />
+          <Input id="legalName" name="legalName" required />
         </FormField>
         <FormField label={TH.org.nameEn} htmlFor="nameEn">
-          <input id="nameEn" name="nameEn" className="input" />
+          <Input id="nameEn" name="nameEn" />
         </FormField>
         <FormField label={TH.org.taxId} htmlFor="taxId">
-          <input id="taxId" name="taxId" className="input" />
+          <Input id="taxId" name="taxId" />
         </FormField>
         <FormField label={TH.org.email} htmlFor="email">
-          <input id="email" name="email" type="email" className="input" />
+          <Input id="email" name="email" type="email" />
         </FormField>
         <FormField label={TH.org.phone} htmlFor="phone">
-          <input id="phone" name="phone" className="input" />
+          <Input id="phone" name="phone" />
         </FormField>
       </div>
       <FormField label={TH.org.address} htmlFor="address">
@@ -78,17 +82,25 @@ export function OrgCreateForm() {
           {error}
         </p>
       ) : null}
-      <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
-        <button
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--border)] pt-4">
+        <IconTextButton
           type="button"
-          className="btn btn-secondary btn-block-mobile"
+          variant="outline"
           onClick={() => router.back()}
-        >
-          {TH.common.cancel}
-        </button>
-        <button type="submit" className="btn btn-block-mobile" disabled={pending}>
-          {pending ? TH.common.loading : TH.org.add}
-        </button>
+          icon={<X aria-hidden="true" />}
+          label={TH.common.cancel}
+        />
+        <IconTextButton
+          type="submit"
+          disabled={pending}
+          icon={
+            <Save
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.common.loading : TH.org.add}
+        />
       </div>
     </form>
   );

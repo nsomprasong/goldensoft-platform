@@ -1,7 +1,8 @@
+import { Settings } from "lucide-react";
+
 import { PlatformShell } from "@/components/platform-shell";
 import { DetailList, PageHeader, SectionHeader } from "@/components/ui/admin-ui";
 import { AccessDenied } from "@/components/ui/admin-ui";
-import { IconSettings } from "@/components/ui/icons";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
 
@@ -41,7 +42,7 @@ export default async function SettingsPage() {
       <PageHeader
         title={TH.pages.settingsTitle}
         description={TH.pages.settingsBody}
-        icon={<IconSettings size={24} />}
+        icon={<Settings size={24} />}
       />
 
       <div className="grid gap-4">

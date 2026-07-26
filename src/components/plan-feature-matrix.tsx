@@ -1,6 +1,10 @@
 "use client";
 
+import { Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
+
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 
 export type PlanFeatureOption = {
   code: string;
@@ -85,14 +89,14 @@ export function PlanFeatureMatrix(props: {
               ))}
             </select>
           </label>
-          <button
+          <IconTextButton
             type="button"
-            className="btn-secondary"
+            variant="outline"
             disabled={!addCode}
             onClick={addSelected}
-          >
-            เพิ่ม
-          </button>
+            icon={<Plus aria-hidden="true" />}
+            label="เพิ่ม"
+          />
         </div>
       </div>
 
@@ -132,8 +136,7 @@ export function PlanFeatureMatrix(props: {
                       เปิดใช้งาน
                     </label>
                   ) : (
-                    <input
-                      className="input"
+                    <Input
                       type={meta.valueKind === "numeric" ? "number" : "text"}
                       min={meta.valueKind === "numeric" ? 0 : undefined}
                       value={row.limitValue ?? ""}
@@ -146,13 +149,13 @@ export function PlanFeatureMatrix(props: {
                     />
                   )}
                 </div>
-                <button
+                <IconTextButton
                   type="button"
-                  className="btn-secondary"
+                  variant="outline"
                   onClick={() => remove(row.featureCode)}
-                >
-                  ลบ
-                </button>
+                  icon={<Trash2 aria-hidden="true" />}
+                  label="ลบ"
+                />
               </li>
             );
           })}

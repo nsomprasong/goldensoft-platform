@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Layers, Plus, Search } from "lucide-react";
 
 import { PlatformShell } from "@/components/platform-shell";
 import {
@@ -8,7 +9,10 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/ui/admin-ui";
-import { IconPlus } from "@/components/ui/icons";
+import {
+  IconTextButton,
+  IconTextLink,
+} from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { labelStatus, TH } from "@/lib/i18n/th";
@@ -71,11 +75,14 @@ export default async function PlansPage({
       <PageHeader
         title={TH.pages.plansTitle}
         description={TH.pages.plansBody}
+        icon={<Layers size={24} />}
         actions={
           canManage ? (
-            <Link href="/plans/new" className="btn-primary">
-              <IconPlus size={16} /> เพิ่มแพ็กเกจ
-            </Link>
+            <IconTextLink
+              href="/plans/new"
+              label="เพิ่มแพ็กเกจ"
+              icon={<Plus className="size-5" />}
+            />
           ) : null
         }
       />
@@ -101,9 +108,12 @@ export default async function PlansPage({
           <option value="ACTIVE">ใช้งาน</option>
           <option value="RETIRED">เลิกใช้</option>
         </select>
-        <button type="submit" className="btn-secondary">
-          {TH.common.filter}
-        </button>
+        <IconTextButton
+          type="submit"
+          variant="outline"
+          label={TH.common.filter}
+          icon={<Search className="size-5" />}
+        />
       </form>
       <section className="card">
         {rows.length === 0 ? (

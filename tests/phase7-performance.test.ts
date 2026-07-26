@@ -68,11 +68,40 @@ describe("Phase 7 database round trips", () => {
     for (const loop of loops) {
       assert.doesNotMatch(loop, /await prisma\./);
     }
-    assert.match(bundle, /await measure\(\s*"context",[\s\S]*Promise\.all\(\[/);
+    assert.match(bundle, /getActiveStatusIds/);
+    assert.match(bundle, /Promise\.all\(\[/);
+    assert.match(
+      read("src/lib/platform/master-ids.ts"),
+      /await Promise\.all\(\[/,
+    );
   });
 
-  it("runs independent master lookups in parallel", () => {
-    assert.match(read("src/lib/auth/actor-access.ts"), /await Promise\.all\(\[/);
+  it("uses a short TTL bundle cache outside the request scope helper", () => {
+    assert.ok(exists("src/lib/auth/platform-user-cache.ts"));
+    const cache = read("src/lib/auth/platform-user-cache.ts");
+    assert.match(cache, /TTL_MS = 30_000/);
+    assert.match(read("src/lib/auth/platform-user.ts"), /readPlatformUserBundleCache/);
+  });
+
+  it("reuses the platform user bundle for actor access", () => {
+    const actor = read("src/lib/auth/actor-access.ts");
+    assert.match(actor, /loadPlatformUserBundle\(authUserId\)/);
+    assert.doesNotMatch(actor, /userProfile\.findUnique/);
+  });
+
+  it("reuses middleware-authenticated identity instead of a second getUser", () => {
+    const session = read("src/lib/auth/session.ts");
+    const middleware = read("middleware.ts");
+    assert.match(middleware, /MIDDLEWARE_AUTH_USER_HEADER/);
+    assert.match(middleware, /requestHeaders\.delete\(MIDDLEWARE_AUTH_USER_HEADER\)/);
+    assert.match(session, /middlewareAuthUserId/);
+  });
+
+  it("avoids getUser on every middleware hit when the session is fresh", () => {
+    const supabaseMw = read("src/lib/supabase/middleware.ts");
+    assert.match(supabaseMw, /getSession\(\)/);
+    assert.match(supabaseMw, /REFRESH_WINDOW_MS/);
+    assert.match(supabaseMw, /getUser\(\)/);
   });
 
   it("fetches independent page data with Promise.all", () => {
@@ -162,6 +191,7 @@ describe("Phase 7 middleware and shell", () => {
   it("keeps a single root layout without per-request data loading", () => {
     const layout = read("src/app/layout.tsx");
     assert.doesNotMatch(layout, /@\/lib\/prisma|requirePlatformPage|getAuthUser/);
+    assert.match(layout, /NavigationPending/);
   });
 });
 

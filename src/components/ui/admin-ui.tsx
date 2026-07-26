@@ -1,4 +1,22 @@
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  IconTextButton,
+  IconTextLink,
+} from "@/components/ui/labeled-icon-button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 export type StatusTone =
   | "neutral"
@@ -33,13 +51,16 @@ const STATUS_TONE_BY_CODE: Record<string, StatusTone> = {
 /** Exported for design-system tests — keep in sync with StatusBadge mapping. */
 export const STATUS_CODES_WITH_TONES = Object.keys(STATUS_TONE_BY_CODE);
 
-const TONE_CLASS: Record<StatusTone, string> = {
-  neutral: "bg-[var(--surface-muted)] text-[var(--text-secondary)]",
-  success: "bg-[var(--success-soft)] text-[var(--success)]",
-  warning: "bg-[var(--warning-soft)] text-[var(--warning)]",
-  danger: "bg-[var(--danger-soft)] text-[var(--danger)]",
-  info: "bg-[var(--info-soft)] text-[var(--info)]",
-  pending: "bg-[var(--primary-soft)] text-[var(--primary)]",
+const TONE_TO_BADGE: Record<
+  StatusTone,
+  "secondary" | "success" | "warning" | "destructive" | "info" | "default"
+> = {
+  neutral: "secondary",
+  success: "success",
+  warning: "warning",
+  danger: "destructive",
+  info: "info",
+  pending: "default",
 };
 
 export function statusToneForCode(code?: string | null): StatusTone {
@@ -59,12 +80,12 @@ export function PageHeader(props: {
   context?: ReactNode;
 }) {
   return (
-    <header className="page-header mb-5 overflow-hidden rounded-[var(--radius-lg)] border shadow-[var(--shadow-sm)]">
+    <header className="page-header mb-5 overflow-hidden rounded-[var(--radius-xl)] border shadow-[var(--shadow-md)]">
       <div className="page-header-content">
         <div className="flex min-w-0 flex-1 gap-3">
           {props.icon ? (
             <div
-              className="page-header-icon inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius-md)] shadow-[var(--shadow-sm)]"
+              className="page-header-icon inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] text-[var(--primary)] shadow-[var(--shadow-xs)]"
               aria-hidden="true"
             >
               {props.icon}
@@ -77,18 +98,18 @@ export function PageHeader(props: {
           )}
           <div className="min-w-0">
             {props.breadcrumb ? (
-              <div className="mb-1 text-[length:var(--text-caption)] text-[var(--text-muted)]">
+              <div className="mb-1 text-xs text-[var(--muted-foreground)]">
                 {props.breadcrumb}
               </div>
             ) : null}
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-[length:var(--text-page)] font-semibold leading-[var(--leading-tight)] text-[var(--text-primary)]">
+              <h1 className="text-xl font-semibold leading-tight text-[var(--foreground)] sm:text-2xl">
                 {props.title}
               </h1>
               {props.status}
             </div>
             {props.description ? (
-              <p className="mt-1 max-w-2xl text-[length:var(--text-helper)] leading-[var(--leading-relaxed)] text-[var(--text-secondary)]">
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)]">
                 {props.description}
               </p>
             ) : null}
@@ -117,13 +138,13 @@ export function SectionHeader(props: {
     <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-[length:var(--text-section)] font-semibold text-[var(--text-primary)]">
+          <h2 className="text-base font-semibold text-[var(--foreground)]">
             {props.title}
           </h2>
           {props.badge}
         </div>
         {props.description ? (
-          <p className="mt-0.5 text-[length:var(--text-helper)] text-[var(--text-muted)]">
+          <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
             {props.description}
           </p>
         ) : null}
@@ -194,21 +215,21 @@ export function StatCard(props: {
       />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[length:var(--text-caption)] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
             {props.label}
           </p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums text-[var(--text-primary)]">
+          <p className="mt-2 text-2xl font-semibold tabular-nums text-[var(--foreground)]">
             {props.value}
           </p>
           {props.hint ? (
-            <p className="mt-1 text-[length:var(--text-caption)] text-[var(--text-secondary)]">
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
               {props.hint}
             </p>
           ) : null}
         </div>
         {props.icon ? (
           <span
-            className={`stat-icon inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] ${accent.icon}`}
+            className={`stat-icon inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] ${accent.icon}`}
             aria-hidden="true"
           >
             {props.icon}
@@ -217,10 +238,7 @@ export function StatCard(props: {
       </div>
     </>
   );
-  const className = [
-    "stat-card",
-    accent.card,
-  ].join(" ");
+  const className = cn("stat-card", accent.card);
   if (props.href) {
     return (
       <a href={props.href} className={className}>
@@ -233,13 +251,13 @@ export function StatCard(props: {
 
 export function LoadingState({ label = "กำลังโหลดข้อมูล..." }: { label?: string }) {
   return (
-    <div
-      className="card text-[length:var(--text-helper)] text-[var(--text-secondary)]"
-      role="status"
-      aria-live="polite"
-    >
-      {label}
-    </div>
+    <Card role="status" aria-live="polite">
+      <CardContent className="space-y-3 pt-4 sm:pt-5">
+        <span className="sr-only">{label}</span>
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-24 w-full" />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -249,10 +267,10 @@ export function EmptyState(props: {
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-strong)] bg-[var(--surface-muted)]/40 px-6 py-10 text-center">
-      <p className="font-medium text-[var(--text-primary)]">{props.title}</p>
+    <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-strong)] bg-[var(--muted)]/50 px-6 py-10 text-center">
+      <p className="font-semibold text-[var(--foreground)]">{props.title}</p>
       {props.body ? (
-        <p className="mx-auto mt-1 max-w-md text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+        <p className="mx-auto mt-1 max-w-md text-sm text-[var(--muted-foreground)]">
           {props.body}
         </p>
       ) : null}
@@ -263,23 +281,25 @@ export function EmptyState(props: {
 
 export function AccessDenied(props: { title: string; body: string }) {
   return (
-    <section className="alert-danger card" role="alert">
-      <h2 className="text-lg font-semibold text-[var(--danger)]">{props.title}</h2>
-      <p className="mt-2 text-[length:var(--text-helper)] text-[var(--danger)]">{props.body}</p>
-    </section>
+    <Card className="alert-danger border-[var(--destructive-border)] bg-[var(--destructive-soft)]" role="alert">
+      <CardContent className="pt-4 sm:pt-5">
+        <h2 className="text-lg font-semibold text-[var(--destructive)]">{props.title}</h2>
+        <p className="mt-2 text-sm text-[var(--destructive)]">{props.body}</p>
+      </CardContent>
+    </Card>
   );
 }
 
 export function ErrorState(props: { title: string; body?: string }) {
   return (
-    <section className="alert-danger card" role="alert">
-      <h2 className="font-semibold text-[var(--danger)]">{props.title}</h2>
-      {props.body ? (
-        <p className="mt-1 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
-          {props.body}
-        </p>
-      ) : null}
-    </section>
+    <Card className="alert-danger border-[var(--destructive-border)] bg-[var(--destructive-soft)]" role="alert">
+      <CardContent className="pt-4 sm:pt-5">
+        <h2 className="font-semibold text-[var(--destructive)]">{props.title}</h2>
+        {props.body ? (
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">{props.body}</p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -290,11 +310,9 @@ export function StatusBadge(props: {
 }) {
   const tone = props.tone ?? statusToneForCode(props.code);
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[length:var(--text-caption)] font-semibold ${TONE_CLASS[tone]}`}
-    >
+    <Badge variant={TONE_TO_BADGE[tone]} className="whitespace-nowrap">
       {props.label}
-    </span>
+    </Badge>
   );
 }
 
@@ -307,11 +325,14 @@ export function FormField(props: {
   children: ReactNode;
 }) {
   return (
-    <div className="block text-[length:var(--text-label)]">
-      <label htmlFor={props.htmlFor} className="mb-1.5 block font-medium text-[var(--text-primary)]">
+    <div className="block text-sm">
+      <label
+        htmlFor={props.htmlFor}
+        className="mb-1.5 block font-medium text-[var(--foreground)]"
+      >
         {props.label}
         {props.required ? (
-          <span className="text-[var(--danger)]" aria-hidden="true">
+          <span className="text-[var(--destructive)]" aria-hidden="true">
             {" "}
             *
           </span>
@@ -319,10 +340,10 @@ export function FormField(props: {
       </label>
       {props.children}
       {props.hint && !props.error ? (
-        <p className="mt-1 text-[length:var(--text-caption)] text-[var(--text-muted)]">{props.hint}</p>
+        <p className="mt-1 text-xs text-[var(--muted-foreground)]">{props.hint}</p>
       ) : null}
       {props.error ? (
-        <p className="mt-1 text-[length:var(--text-caption)] text-[var(--danger)]" role="alert">
+        <p className="mt-1 text-xs text-[var(--destructive)]" role="alert">
           {props.error}
         </p>
       ) : null}
@@ -335,10 +356,10 @@ export function SearchFilterBar(props: {
   resultLabel?: string;
 }) {
   return (
-    <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3">
+    <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] p-3 shadow-[var(--shadow-xs)]">
       <div className="flex flex-wrap items-end gap-3">{props.children}</div>
       {props.resultLabel ? (
-        <p className="mt-2 text-[length:var(--text-caption)] text-[var(--text-muted)]">
+        <p className="mt-2 text-xs text-[var(--muted-foreground)]">
           {props.resultLabel}
         </p>
       ) : null}
@@ -356,24 +377,40 @@ export function Pagination(props: {
 }) {
   const totalPages = Math.max(1, Math.ceil(props.total / props.pageSize));
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--muted-foreground)]">
       <p>
         {props.labels.page} {props.page} {props.labels.of} {totalPages}
       </p>
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         {props.previousHref ? (
-          <a className="btn btn-secondary" href={props.previousHref}>
-            {props.labels.previous}
-          </a>
+          <IconTextLink
+            href={props.previousHref}
+            variant="outline"
+            icon={<ChevronLeft className="size-4" aria-hidden="true" />}
+            label={props.labels.previous}
+          />
         ) : (
-          <span className="btn btn-secondary opacity-50">{props.labels.previous}</span>
+          <IconTextButton
+            type="button"
+            variant="outline"
+            disabled
+            icon={<ChevronLeft className="size-4" aria-hidden="true" />}
+            label={props.labels.previous}
+          />
         )}
         {props.nextHref ? (
-          <a className="btn" href={props.nextHref}>
-            {props.labels.next}
-          </a>
+          <IconTextLink
+            href={props.nextHref}
+            icon={<ChevronRight className="size-4" aria-hidden="true" />}
+            label={props.labels.next}
+          />
         ) : (
-          <span className="btn opacity-50">{props.labels.next}</span>
+          <IconTextButton
+            type="button"
+            disabled
+            icon={<ChevronRight className="size-4" aria-hidden="true" />}
+            label={props.labels.next}
+          />
         )}
       </div>
     </div>
@@ -385,19 +422,17 @@ export function DataTable(props: {
   children: ReactNode;
 }) {
   return (
-    <div className="hidden overflow-x-auto rounded-[var(--radius-md)] border border-[var(--border)] md:block">
-      <table className="min-w-full text-left text-[length:var(--text-label)]">
-        <thead className="bg-[var(--surface-muted)]">
-          <tr className="border-b border-[var(--border)] text-[var(--text-muted)]">
+    <div className="hidden overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow-xs)] md:block">
+      <Table>
+        <TableHeader>
+          <TableRow>
             {props.headers.map((h) => (
-              <th key={h} className="px-3 py-2.5 font-medium">
-                {h}
-              </th>
+              <TableHead key={h}>{h}</TableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody className="bg-[var(--surface)]">{props.children}</tbody>
-      </table>
+          </TableRow>
+        </TableHeader>
+        <TableBody>{props.children}</TableBody>
+      </Table>
     </div>
   );
 }
@@ -410,25 +445,27 @@ export function MobileRecordCard(props: {
   actions?: ReactNode;
 }) {
   return (
-    <li className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3.5 shadow-[var(--shadow-sm)]">
+    <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] p-3.5 shadow-[var(--shadow-sm)]">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-medium text-[var(--text-primary)]">{props.title}</div>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-[var(--foreground)]">{props.title}</div>
           {props.subtitle ? (
-            <div className="mt-0.5 text-[length:var(--text-caption)] text-[var(--text-muted)]">
+            <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
               {props.subtitle}
             </div>
           ) : null}
+          {props.meta ? (
+            <div className="mt-1.5 text-sm leading-relaxed text-[var(--muted-foreground)]">
+              {props.meta}
+            </div>
+          ) : null}
         </div>
-        {props.status}
+        {props.status ? (
+          <div className="shrink-0 self-start">{props.status}</div>
+        ) : null}
       </div>
-      {props.meta ? (
-        <div className="mt-2 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
-          {props.meta}
-        </div>
-      ) : null}
-      {props.actions ? <div className="mt-3 flex flex-wrap gap-2">{props.actions}</div> : null}
-    </li>
+      {props.actions ? <div className="mt-3 w-full">{props.actions}</div> : null}
+    </div>
   );
 }
 
@@ -453,26 +490,26 @@ export function ConfirmDialog(props: {
         if (event.key === "Escape") props.onCancel();
       }}
     >
-      <div className="card w-full max-w-md">
-        <h3 id="confirm-title" className="text-lg font-semibold">
-          {props.title}
-        </h3>
-        <p className="mt-2 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
-          {props.body}
-        </p>
-        <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button type="button" className="btn btn-secondary" onClick={props.onCancel}>
-            {props.cancelLabel}
-          </button>
-          <button
-            type="button"
-            className={props.danger ? "btn btn-danger" : "btn"}
-            onClick={props.onConfirm}
-          >
-            {props.confirmLabel}
-          </button>
-        </div>
-      </div>
+      <Card className="w-full max-w-md">
+        <CardContent className="pt-4 sm:pt-5">
+          <h3 id="confirm-title" className="text-lg font-semibold text-[var(--foreground)]">
+            {props.title}
+          </h3>
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">{props.body}</p>
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" onClick={props.onCancel}>
+              {props.cancelLabel}
+            </Button>
+            <Button
+              type="button"
+              variant={props.danger ? "destructive" : "default"}
+              onClick={props.onConfirm}
+            >
+              {props.confirmLabel}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -484,12 +521,8 @@ export function DetailList(props: {
     <dl className="grid gap-3 sm:grid-cols-2">
       {props.items.map((item) => (
         <div key={item.label} className="min-w-0">
-          <dt className="text-[length:var(--text-caption)] text-[var(--text-muted)]">
-            {item.label}
-          </dt>
-          <dd className="mt-0.5 text-[length:var(--text-label)] text-[var(--text-primary)]">
-            {item.value}
-          </dd>
+          <dt className="text-xs text-[var(--muted-foreground)]">{item.label}</dt>
+          <dd className="mt-0.5 text-sm text-[var(--foreground)]">{item.value}</dd>
         </div>
       ))}
     </dl>
@@ -513,11 +546,11 @@ export function ActivityList(props: {
       {props.items.map((item, index) => (
         <li
           key={item.id}
-          className="group relative flex gap-3 rounded-[var(--radius-md)] py-3 pl-2 pr-1 transition hover:bg-[var(--surface-muted)]/60"
+          className="group relative flex gap-3 rounded-[var(--radius-md)] py-3 pl-2 pr-1 transition hover:bg-[var(--muted)]/60"
         >
           <div className="relative flex w-5 shrink-0 flex-col items-center">
             <span
-              className="z-[1] mt-1 inline-flex h-2.5 w-2.5 rounded-full bg-[var(--primary)] ring-4 ring-[var(--primary-soft)]"
+              className="z-[1] mt-1 inline-flex size-2.5 rounded-full bg-[var(--primary)] ring-4 ring-[var(--primary-soft)]"
               aria-hidden="true"
             />
             {index < props.items.length - 1 ? (
@@ -530,15 +563,15 @@ export function ActivityList(props: {
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-medium text-[var(--text-primary)]">{item.title}</p>
+                <p className="font-medium text-[var(--foreground)]">{item.title}</p>
                 {item.meta ? (
-                  <p className="mt-0.5 text-[length:var(--text-caption)] text-[var(--text-muted)]">
+                  <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
                     {item.meta}
                   </p>
                 ) : null}
               </div>
               {item.when ? (
-                <time className="shrink-0 text-[length:var(--text-caption)] text-[var(--text-muted)]">
+                <time className="shrink-0 text-xs text-[var(--muted-foreground)]">
                   {item.when}
                 </time>
               ) : null}

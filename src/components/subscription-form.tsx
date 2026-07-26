@@ -1,9 +1,22 @@
 "use client";
 
+import {
+  ArrowLeftRight,
+  Ban,
+  CalendarPlus,
+  Pause,
+  Play,
+  RotateCcw,
+  Save,
+  TimerOff,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { FormField } from "@/components/ui/admin-ui";
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 import { pushToast } from "@/components/ui/toast";
 import { TH } from "@/lib/i18n/th";
 
@@ -130,17 +143,25 @@ export function SubscriptionForm(props: {
           </select>
         </FormField>
       </div>
-      <div className="flex gap-2">
-        <button type="submit" className="btn-primary" disabled={pending}>
-          {pending ? TH.common.loading : TH.common.save}
-        </button>
-        <button
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <IconTextButton
+          type="submit"
+          disabled={pending}
+          icon={
+            <Save
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.common.loading : TH.common.save}
+        />
+        <IconTextButton
           type="button"
-          className="btn-secondary"
+          variant="outline"
           onClick={() => router.back()}
-        >
-          {TH.common.cancel}
-        </button>
+          icon={<X aria-hidden="true" />}
+          label={TH.common.cancel}
+        />
       </div>
     </form>
   );
@@ -183,55 +204,78 @@ export function SubscriptionActions(props: {
   return (
     <div className="space-y-3">
       {props.canManage ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {["TRIAL", "SUSPENDED", "PAST_DUE"].includes(props.statusCode) ? (
-            <button
+            <IconTextButton
               type="button"
-              className="btn-primary"
               disabled={pending}
               onClick={() => void run("activate")}
-            >
-              เปิดใช้งาน
-            </button>
+              icon={
+                <Play
+                  className={pending ? "animate-pulse" : undefined}
+                  aria-hidden="true"
+                />
+              }
+              label={pending ? TH.common.loading : "เปิดใช้งาน"}
+            />
           ) : null}
           {["ACTIVE", "TRIAL", "PAST_DUE"].includes(props.statusCode) ? (
-            <button
+            <IconTextButton
               type="button"
-              className="btn-secondary"
+              variant="outline"
               disabled={pending}
               onClick={() => void run("suspend")}
-            >
-              ระงับ
-            </button>
+              icon={
+                <Pause
+                  className={pending ? "animate-pulse" : undefined}
+                  aria-hidden="true"
+                />
+              }
+              label={pending ? TH.common.loading : "ระงับ"}
+            />
           ) : null}
           {props.statusCode === "SUSPENDED" ? (
-            <button
+            <IconTextButton
               type="button"
-              className="btn-primary"
               disabled={pending}
               onClick={() => void run("resume")}
-            >
-              กลับมาใช้งาน
-            </button>
+              icon={
+                <Play
+                  className={pending ? "animate-pulse" : undefined}
+                  aria-hidden="true"
+                />
+              }
+              label={pending ? TH.common.loading : "กลับมาใช้งาน"}
+            />
           ) : null}
           {!["CANCELLED", "EXPIRED"].includes(props.statusCode) ? (
             <>
-              <button
+              <IconTextButton
                 type="button"
-                className="btn-secondary"
+                variant="outline"
                 disabled={pending}
                 onClick={() => void run("cancel")}
-              >
-                ยกเลิก
-              </button>
-              <button
+                icon={
+                  <Ban
+                    className={pending ? "animate-pulse" : undefined}
+                    aria-hidden="true"
+                  />
+                }
+                label={pending ? TH.common.loading : "ยกเลิก"}
+              />
+              <IconTextButton
                 type="button"
-                className="btn-secondary"
+                variant="outline"
                 disabled={pending}
                 onClick={() => void run("expire")}
-              >
-                หมดอายุ
-              </button>
+                icon={
+                  <TimerOff
+                    className={pending ? "animate-pulse" : undefined}
+                    aria-hidden="true"
+                  />
+                }
+                label={pending ? TH.common.loading : "หมดอายุ"}
+              />
             </>
           ) : null}
         </div>
@@ -253,9 +297,8 @@ export function SubscriptionActions(props: {
               ))}
             </select>
           </FormField>
-          <button
+          <IconTextButton
             type="button"
-            className="btn-primary"
             disabled={pending || !planCode}
             onClick={() =>
               void run("change_plan", {
@@ -263,45 +306,59 @@ export function SubscriptionActions(props: {
                 idempotencyKey: `change:${props.subscriptionId}:${planCode}:${Date.now()}`,
               })
             }
-          >
-            เปลี่ยนแพ็กเกจ
-          </button>
+            icon={
+              <ArrowLeftRight
+                className={pending ? "animate-pulse" : undefined}
+                aria-hidden="true"
+              />
+            }
+            label={pending ? TH.common.loading : "เปลี่ยนแพ็กเกจ"}
+          />
         </div>
       ) : null}
 
       {props.canManage ? (
         <div className="flex flex-wrap items-end gap-2">
           <FormField label="ขยายวันสิ้นสุด" htmlFor="endsAt">
-            <input
+            <Input
               id="endsAt"
               type="datetime-local"
-              className="input"
               value={endsAt}
               onChange={(e) => setEndsAt(e.target.value)}
             />
           </FormField>
-          <button
+          <IconTextButton
             type="button"
-            className="btn-secondary"
+            variant="outline"
             disabled={pending || !endsAt}
             onClick={() =>
               void run("extend", { endsAt: new Date(endsAt).toISOString() })
             }
-          >
-            ขยายวันสิ้นสุด
-          </button>
+            icon={
+              <CalendarPlus
+                className={pending ? "animate-pulse" : undefined}
+                aria-hidden="true"
+              />
+            }
+            label={pending ? TH.common.loading : "ขยายวันสิ้นสุด"}
+          />
         </div>
       ) : null}
 
       {props.canRegenerate ? (
-        <button
+        <IconTextButton
           type="button"
-          className="btn-secondary"
+          variant="outline"
           disabled={pending}
           onClick={() => void run("regenerate_entitlements")}
-        >
-          สร้างสิทธิ์การใช้งานใหม่
-        </button>
+          icon={
+            <RotateCcw
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.common.loading : "สร้างสิทธิ์การใช้งานใหม่"}
+        />
       ) : null}
     </div>
   );

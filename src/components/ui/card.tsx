@@ -1,0 +1,68 @@
+import type { HTMLAttributes } from "react";
+
+import { cn } from "@/lib/utils";
+
+export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)] shadow-[var(--shadow-sm)] transition-[border-color,box-shadow,transform] duration-200 ease-out before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white before:to-[var(--primary-soft)] hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-md)]",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export function CardHeader({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("space-y-1.5 p-4 sm:p-5", className)} {...props} />;
+}
+
+export function CardTitle({
+  className,
+  ...props
+}: HTMLAttributes<HTMLHeadingElement>) {
+  return (
+    <h3
+      className={cn(
+        "text-base font-semibold leading-none tracking-tight text-[var(--foreground)]",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export function CardDescription({
+  className,
+  ...props
+}: HTMLAttributes<HTMLParagraphElement>) {
+  return (
+    <p
+      className={cn("text-sm text-[var(--muted-foreground)]", className)}
+      {...props}
+    />
+  );
+}
+
+export function CardContent({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("p-4 pt-0 sm:p-5 sm:pt-0", className)} {...props} />;
+}
+
+export function CardFooter({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn("flex items-center gap-2 p-4 pt-0 sm:p-5 sm:pt-0", className)}
+      {...props}
+    />
+  );
+}

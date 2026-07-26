@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ArrowLeft, GitBranch, Pencil, Plus } from "lucide-react";
 
 import { PlatformShell } from "@/components/platform-shell";
 import {
@@ -9,7 +9,7 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/ui/admin-ui";
-import { IconBranch } from "@/components/ui/icons";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH, labelStatus } from "@/lib/i18n/th";
@@ -76,15 +76,14 @@ export default async function OrganizationBranchesPage({
       <PageHeader
         title={TH.pages.branchesTitle}
         description={TH.pages.branchesBody}
-        icon={<IconBranch size={24} />}
+        icon={<GitBranch size={24} />}
         actions={
           canManage ? (
-            <Link
+            <IconTextLink
               href={`/organizations/${id}/branches/new`}
-              className="btn btn-block-mobile"
-            >
-              {TH.branch.add}
-            </Link>
+              label={TH.branch.add}
+              icon={<Plus className="size-5" />}
+            />
           ) : null
         }
       />
@@ -95,27 +94,29 @@ export default async function OrganizationBranchesPage({
           <>
             <ul className="space-y-3 md:hidden">
               {branches.map((b) => (
-                <MobileRecordCard
-                  key={b.id}
-                  title={b.name}
-                  subtitle={b.code}
-                  status={
-                    <StatusBadge
-                      label={labelStatus(b.status.code)}
-                      code={b.status.code}
-                    />
-                  }
-                  actions={
-                    canManage ? (
-                      <Link
-                        href={`/organizations/${id}/branches/${b.id}/edit`}
-                        className="text-[length:var(--text-helper)] font-medium text-[var(--primary)]"
-                      >
-                        {TH.common.edit}
-                      </Link>
-                    ) : null
-                  }
-                />
+                <li key={b.id}>
+                  <MobileRecordCard
+                    title={b.name}
+                    subtitle={b.code}
+                    status={
+                      <StatusBadge
+                        label={labelStatus(b.status.code)}
+                        code={b.status.code}
+                      />
+                    }
+                    actions={
+                      canManage ? (
+                        <IconTextLink
+                          href={`/organizations/${id}/branches/${b.id}/edit`}
+                          variant="outline"
+                          size="sm"
+                          label={TH.common.edit}
+                          icon={<Pencil className="size-4" />}
+                        />
+                      ) : null
+                    }
+                  />
+                </li>
               ))}
             </ul>
             <DataTable
@@ -141,12 +142,13 @@ export default async function OrganizationBranchesPage({
                   </td>
                   <td className="px-3 py-2.5">
                     {canManage ? (
-                      <Link
+                      <IconTextLink
                         href={`/organizations/${id}/branches/${b.id}/edit`}
-                        className="text-[length:var(--text-helper)] text-[var(--primary)]"
-                      >
-                        {TH.common.edit}
-                      </Link>
+                        variant="outline"
+                        size="sm"
+                        label={TH.common.edit}
+                        icon={<Pencil className="size-4" />}
+                      />
                     ) : null}
                   </td>
                 </tr>

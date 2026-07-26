@@ -1,8 +1,9 @@
-import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 import { BranchForm } from "@/components/branch-form";
 import { PlatformShell } from "@/components/platform-shell";
 import { AccessDenied, PageHeader } from "@/components/ui/admin-ui";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
@@ -57,9 +58,12 @@ export default async function NewBranchPage({
         <PageHeader
           title={TH.branch.add}
           actions={
-            <Link href={`/organizations/${id}/branches`} className="btn !bg-slate-600">
-              {TH.common.back}
-            </Link>
+            <IconTextLink
+              href={`/organizations/${id}/branches`}
+              variant="outline"
+              label={TH.common.back}
+              icon={<ArrowLeft className="size-5" />}
+            />
           }
         />
         <BranchForm organizationId={id} mode="create" />

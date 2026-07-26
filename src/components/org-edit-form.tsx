@@ -3,7 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { Save, X } from "lucide-react";
+
 import { FormField } from "@/components/ui/admin-ui";
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 import { pushToast } from "@/components/ui/toast";
 import { TH } from "@/lib/i18n/th";
 
@@ -58,63 +62,57 @@ export function OrgEditForm(props: {
   return (
     <form action={onSubmit} className="space-y-4">
       <FormField label={TH.org.code} htmlFor="customerCode" hint={TH.org.codeImmutable}>
-        <input
+        <Input
           id="customerCode"
           value={props.initial.customerCode}
           disabled
-          className="input disabled:bg-[var(--surface-muted)]"
+          className="disabled:bg-[var(--surface-muted)]"
         />
       </FormField>
       <div className="grid gap-3 sm:grid-cols-2">
         <FormField label={TH.org.nameTh} htmlFor="displayName" required>
-          <input
+          <Input
             id="displayName"
             name="displayName"
             required
             defaultValue={props.initial.displayName}
-            className="input"
           />
         </FormField>
         <FormField label={TH.org.legalName} htmlFor="legalName" required>
-          <input
+          <Input
             id="legalName"
             name="legalName"
             required
             defaultValue={props.initial.legalName}
-            className="input"
           />
         </FormField>
         <FormField label={TH.org.nameEn} htmlFor="nameEn">
-          <input
+          <Input
             id="nameEn"
             name="nameEn"
             defaultValue={props.initial.nameEn ?? ""}
-            className="input"
           />
         </FormField>
         <FormField label={TH.org.taxId} htmlFor="taxId">
-          <input
+          <Input
             id="taxId"
             name="taxId"
             defaultValue={props.initial.taxId ?? ""}
-            className="input"
           />
         </FormField>
         <FormField label={TH.org.email} htmlFor="email">
-          <input
+          <Input
             id="email"
             name="email"
             type="email"
             defaultValue={props.initial.email ?? ""}
-            className="input"
           />
         </FormField>
         <FormField label={TH.org.phone} htmlFor="phone">
-          <input
+          <Input
             id="phone"
             name="phone"
             defaultValue={props.initial.phone ?? ""}
-            className="input"
           />
         </FormField>
       </div>
@@ -132,17 +130,25 @@ export function OrgEditForm(props: {
           {error}
         </p>
       ) : null}
-      <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
-        <button
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--border)] pt-4">
+        <IconTextButton
           type="button"
-          className="btn btn-secondary btn-block-mobile"
+          variant="outline"
           onClick={() => router.back()}
-        >
-          {TH.common.cancel}
-        </button>
-        <button type="submit" className="btn btn-block-mobile" disabled={pending}>
-          {pending ? TH.common.loading : TH.common.save}
-        </button>
+          icon={<X aria-hidden="true" />}
+          label={TH.common.cancel}
+        />
+        <IconTextButton
+          type="submit"
+          disabled={pending}
+          icon={
+            <Save
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.common.loading : TH.common.save}
+        />
       </div>
     </form>
   );

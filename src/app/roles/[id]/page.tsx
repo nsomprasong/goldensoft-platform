@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Pencil, Shield } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { PlatformShell } from "@/components/platform-shell";
@@ -9,7 +10,7 @@ import {
   SectionHeader,
   StatusBadge,
 } from "@/components/ui/admin-ui";
-import { IconRoles } from "@/components/ui/icons";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH, labelRole } from "@/lib/i18n/th";
 import {
@@ -87,7 +88,7 @@ export default async function RoleDetailPage({ params }: Props) {
       <PageHeader
         title={role.nameTh || labelRole(role.code)}
         description={role.description ?? role.nameEn}
-        icon={<IconRoles size={24} />}
+        icon={<Shield size={24} />}
         status={
           <StatusBadge
             label={role.isActive ? "ใช้งาน" : "ปิดใช้งาน"}
@@ -96,9 +97,11 @@ export default async function RoleDetailPage({ params }: Props) {
         }
         actions={
           canEdit ? (
-            <Link href={`/roles/${role.id}/edit`} className="btn">
-              แก้ไขสิทธิ์
-            </Link>
+            <IconTextLink
+              href={`/roles/${role.id}/edit`}
+              label="แก้ไขสิทธิ์"
+              icon={<Pencil className="size-5" />}
+            />
           ) : null
         }
       />

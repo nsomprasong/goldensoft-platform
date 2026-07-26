@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowLeft, Package, Pencil, Plus, Search } from "lucide-react";
 
 import { PlatformShell } from "@/components/platform-shell";
 import {
@@ -8,7 +9,11 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/ui/admin-ui";
-import { IconPlus, IconProducts } from "@/components/ui/icons";
+import {
+  IconTextButton,
+  IconTextLink,
+} from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { labelStatus, TH } from "@/lib/i18n/th";
@@ -66,21 +71,23 @@ export default async function ProductsPage({
       <PageHeader
         title={TH.pages.productsTitle}
         description={TH.pages.productsBody}
-        icon={<IconProducts size={24} />}
+        icon={<Package size={24} />}
         actions={
           canManage ? (
-            <Link href="/products/new" className="btn-primary">
-              <IconPlus size={16} /> เพิ่มผลิตภัณฑ์
-            </Link>
+            <IconTextLink
+              href="/products/new"
+              label="เพิ่มผลิตภัณฑ์"
+              icon={<Plus className="size-5" />}
+            />
           ) : null
         }
       />
       <form className="mb-4 flex flex-wrap gap-2">
-        <input
+        <Input
           name="q"
           defaultValue={sp.q ?? ""}
           placeholder={TH.common.search}
-          className="input max-w-xs"
+          className="max-w-xs"
         />
         <select
           name="status"
@@ -91,9 +98,12 @@ export default async function ProductsPage({
           <option value="ACTIVE">ใช้งาน</option>
           <option value="RETIRED">เลิกใช้</option>
         </select>
-        <button type="submit" className="btn-secondary">
-          {TH.common.filter}
-        </button>
+        <IconTextButton
+          type="submit"
+          variant="outline"
+          label={TH.common.filter}
+          icon={<Search className="size-5" />}
+        />
       </form>
       <section className="card">
         {rows.length === 0 ? (

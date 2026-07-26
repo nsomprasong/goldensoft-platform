@@ -1,8 +1,9 @@
-import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 import { PlatformShell } from "@/components/platform-shell";
 import { OrgEditForm } from "@/components/org-edit-form";
 import { AccessDenied, PageHeader } from "@/components/ui/admin-ui";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
@@ -63,9 +64,12 @@ export default async function EditOrganizationPage({
         <PageHeader
           title={TH.org.edit}
           actions={
-            <Link href={`/organizations/${id}`} className="btn !bg-slate-600">
-              {TH.common.back}
-            </Link>
+            <IconTextLink
+              href={`/organizations/${id}`}
+              variant="outline"
+              label={TH.common.back}
+              icon={<ArrowLeft className="size-5" />}
+            />
           }
         />
         <OrgEditForm

@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { Save } from "lucide-react";
+
 import { FormField } from "@/components/ui/admin-ui";
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
 import { pushToast } from "@/components/ui/toast";
 import { TH } from "@/lib/i18n/th";
 
@@ -85,14 +88,18 @@ export function BranchScopeForm(props: {
           })}
         </fieldset>
       ) : null}
-      <button
+      <IconTextButton
         type="button"
-        className="btn-primary"
         disabled={pending}
         onClick={() => void save()}
-      >
-        บันทึกขอบเขตสาขา
-      </button>
+        icon={
+          <Save
+            className={pending ? "animate-pulse" : undefined}
+            aria-hidden="true"
+          />
+        }
+        label={pending ? TH.common.loading : "บันทึกขอบเขตสาขา"}
+      />
     </div>
   );
 }

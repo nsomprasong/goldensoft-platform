@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { PlatformShell } from "@/components/platform-shell";
@@ -9,6 +9,7 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/ui/admin-ui";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import {
@@ -112,7 +113,7 @@ export default async function UserInvitationDetailPage({
       : [];
   const canResend =
     permissions.includes(PLATFORM_PERMISSIONS.userInvite) &&
-    ["PENDING", "AUTH_SENT", "FAILED", "PLATFORM_SETUP_FAILED"].includes(
+    ["PENDING", "FAILED", "PLATFORM_SETUP_FAILED"].includes(
       invitation.status.code,
     );
 
@@ -129,13 +130,16 @@ export default async function UserInvitationDetailPage({
             />
           }
           actions={
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-wrap items-start gap-3">
               {canResend ? (
                 <ResendInviteButton invitationId={invitation.id} />
               ) : null}
-              <Link href="/users" className="btn btn-secondary btn-block-mobile">
-                {TH.common.back}
-              </Link>
+              <IconTextLink
+                href="/users"
+                variant="outline"
+                label={TH.common.back}
+                icon={<ArrowLeft className="size-5" />}
+              />
             </div>
           }
         />

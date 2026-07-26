@@ -1,14 +1,23 @@
 "use client";
 
-import Link from "next/link";
+import { LogIn, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormField, LoadingState } from "@/components/ui/admin-ui";
+import {
+  IconTextButton,
+  IconTextLink,
+} from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 import { validateInvitePassword } from "@/lib/auth/accept-invite";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { TH } from "@/lib/i18n/th";
 
 type State = "checking" | "ready" | "invalid" | "setup-incomplete" | "success";
+
+const savePasswordLabel = "บันทึกรหัสผ่าน";
+const goLoginLabel = "เข้าสู่ระบบ";
 
 export function AcceptInviteForm() {
   const router = useRouter();
@@ -99,9 +108,11 @@ export function AcceptInviteForm() {
         <p className="text-[length:var(--text-helper)] text-[var(--danger)]" role="alert">
           คำเชิญไม่ถูกต้องหรือหมดอายุ
         </p>
-        <Link href="/login" className="btn btn-block-mobile inline-flex">
-          เข้าสู่ระบบ
-        </Link>
+        <IconTextLink
+          href="/login"
+          icon={<LogIn aria-hidden="true" />}
+          label={goLoginLabel}
+        />
       </div>
     );
   }
@@ -118,33 +129,35 @@ export function AcceptInviteForm() {
         <p className="text-[length:var(--text-helper)] text-[var(--success)]">
           ตั้งรหัสผ่านสำเร็จ
         </p>
-        <Link href="/" className="btn btn-block-mobile inline-flex">
-          เข้าสู่ระบบ
-        </Link>
+        <IconTextLink
+          href="/"
+          icon={<LogIn aria-hidden="true" />}
+          label={goLoginLabel}
+        />
       </div>
     );
   }
 
+  const saveLabel = pending ? TH.common.loading : savePasswordLabel;
+
   return (
     <div className="space-y-4">
       <FormField label="ตั้งรหัสผ่าน" htmlFor="password" required>
-        <input
+        <Input
           id="password"
           type="password"
           autoComplete="new-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="input"
         />
       </FormField>
       <FormField label="ยืนยันรหัสผ่าน" htmlFor="confirmation" required>
-        <input
+        <Input
           id="confirmation"
           type="password"
           autoComplete="new-password"
           value={confirmation}
           onChange={(event) => setConfirmation(event.target.value)}
-          className="input"
         />
       </FormField>
       {error ? (
@@ -152,14 +165,18 @@ export function AcceptInviteForm() {
           {error}
         </p>
       ) : null}
-      <button
+      <IconTextButton
         type="button"
-        className="btn btn-block-mobile"
         disabled={pending}
         onClick={submit}
-      >
-        {pending ? "กำลังบันทึก..." : "บันทึกรหัสผ่าน"}
-      </button>
+        icon={
+          <Save
+            className={pending ? "animate-pulse" : undefined}
+            aria-hidden="true"
+          />
+        }
+        label={saveLabel}
+      />
     </div>
   );
 }

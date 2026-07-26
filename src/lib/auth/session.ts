@@ -1,9 +1,18 @@
 import { cookies, headers } from "next/headers";
 import { cache } from "react";
 
+import {
+  MIDDLEWARE_AUTH_EMAIL_HEADER,
+  MIDDLEWARE_AUTH_USER_HEADER,
+} from "@/lib/auth/middleware-headers";
 import { isTestAuthEnabled } from "@/lib/env/test-auth";
 import { measure } from "@/lib/perf/server-timing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export {
+  MIDDLEWARE_AUTH_EMAIL_HEADER,
+  MIDDLEWARE_AUTH_USER_HEADER,
+} from "@/lib/auth/middleware-headers";
 
 export type AuthSessionUser = {
   id: string;
@@ -19,11 +28,21 @@ const resolveAuthUser = cache(
   async (
     testAuthUserId: string | null,
     testEmail: string | null,
+    middlewareAuthUserId: string | null,
+    middlewareAuthEmail: string | null,
   ): Promise<AuthSessionUser | null> => {
     if (isTestAuthEnabled() && testAuthUserId && testAuthUserId.length > 0) {
       return {
         id: testAuthUserId,
         email: testEmail ?? `${testAuthUserId}@test.local`,
+      };
+    }
+
+    // Middleware already paid for getUser(); reuse that identity for RSC/API.
+    if (middlewareAuthUserId && middlewareAuthUserId.length > 0) {
+      return {
+        id: middlewareAuthUserId,
+        email: middlewareAuthEmail,
       };
     }
 
@@ -62,22 +81,34 @@ export async function getAuthUser(options?: {
 }): Promise<AuthSessionUser | null> {
   let testAuthUserId = options?.testAuthUserId ?? null;
   let testEmail = options?.testEmail ?? null;
+  let middlewareAuthUserId: string | null = null;
+  let middlewareAuthEmail: string | null = null;
 
-  // When ALLOW_TEST_AUTH is on, also accept headers on RSC/pages (not only API).
-  if (isTestAuthEnabled() && (testAuthUserId == null || testAuthUserId === "")) {
-    try {
-      const headerList = await headers();
+  try {
+    const headerList = await headers();
+    // When ALLOW_TEST_AUTH is on, also accept headers on RSC/pages (not only API).
+    if (
+      isTestAuthEnabled() &&
+      (testAuthUserId == null || testAuthUserId === "")
+    ) {
       const fromHeaders = readTestAuthFromHeaders(headerList);
       if (fromHeaders.testAuthUserId) {
         testAuthUserId = fromHeaders.testAuthUserId;
         testEmail = testEmail ?? fromHeaders.testEmail;
       }
-    } catch {
-      // headers() is unavailable outside a request scope
     }
+    middlewareAuthUserId = headerList.get(MIDDLEWARE_AUTH_USER_HEADER);
+    middlewareAuthEmail = headerList.get(MIDDLEWARE_AUTH_EMAIL_HEADER);
+  } catch {
+    // headers() is unavailable outside a request scope
   }
 
-  return resolveAuthUser(testAuthUserId, testEmail);
+  return resolveAuthUser(
+    testAuthUserId,
+    testEmail,
+    middlewareAuthUserId,
+    middlewareAuthEmail,
+  );
 }
 
 export function readTestAuthFromHeaders(headers: Headers): {

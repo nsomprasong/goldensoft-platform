@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { SubscriptionActions } from "@/components/subscription-form";
@@ -9,6 +9,7 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/ui/admin-ui";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { labelStatus, TH } from "@/lib/i18n/th";
@@ -101,9 +102,12 @@ export default async function SubscriptionDetailPage({
           />
         }
         actions={
-          <Link href="/subscriptions" className="btn-secondary">
-            {TH.common.back}
-          </Link>
+          <IconTextLink
+            href="/subscriptions"
+            variant="outline"
+            label={TH.common.back}
+            icon={<ArrowLeft className="size-5" />}
+          />
         }
       />
       <div className="grid gap-4 lg:grid-cols-2">

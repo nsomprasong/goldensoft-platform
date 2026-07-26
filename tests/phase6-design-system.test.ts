@@ -254,6 +254,9 @@ describe("Phase 6 shared UI components", () => {
     ]) {
       assert.match(source, new RegExp(`export function ${name}`));
     }
+    assert.match(source, /from "@\/components\/ui\/badge"/);
+    assert.match(source, /from "@\/components\/ui\/labeled-icon-button"/);
+    assert.match(source, /from "@\/components\/ui\/table"/);
   });
 
   it("keeps DataTable desktop-only and MobileRecordCard for narrow screens", () => {
@@ -367,6 +370,69 @@ describe("Phase 6 shared UI components", () => {
       assert.ok(source.includes(className), className);
     }
     assert.doesNotMatch(source, /`bg-\$\{/);
+  });
+});
+
+describe("GoldenSoft shadcn foundation", () => {
+  it("configures shadcn for Tailwind v4, aliases, CSS variables, and Lucide", () => {
+    const config = JSON.parse(read("components.json")) as {
+      rsc?: boolean;
+      tailwind?: { css?: string; cssVariables?: boolean };
+      iconLibrary?: string;
+      aliases?: Record<string, string>;
+    };
+    assert.equal(config.rsc, true);
+    assert.equal(config.tailwind?.css, "src/app/globals.css");
+    assert.equal(config.tailwind?.cssVariables, true);
+    assert.equal(config.iconLibrary, "lucide");
+    assert.equal(config.aliases?.ui, "@/components/ui");
+    assert.match(read("src/lib/utils.ts"), /export function cn/);
+  });
+
+  it("provides token-based shadcn primitives and GoldenSoft page patterns", () => {
+    for (const file of [
+      "src/components/ui/button.tsx",
+      "src/components/ui/card.tsx",
+      "src/components/ui/input.tsx",
+      "src/components/ui/dialog.tsx",
+      "src/components/ui/sheet.tsx",
+      "src/components/ui/table.tsx",
+      "src/components/goldensoft/page.tsx",
+      "src/components/goldensoft/confirm-dialog.tsx",
+    ]) {
+      assert.ok(fs.existsSync(path.join(ROOT, file)), file);
+      assert.doesNotMatch(read(file), /\bany\b/, file);
+    }
+
+    const css = read("src/app/globals.css");
+    for (const token of [
+      "--card",
+      "--card-foreground",
+      "--secondary",
+      "--muted",
+      "--accent",
+      "--destructive",
+      "--input",
+      "--ring",
+      "--success-border",
+      "--warning-border",
+      "--info-border",
+      "--header-background",
+      "--sidebar-background",
+    ]) {
+      assert.match(css, new RegExp(`${token}:`), token);
+    }
+    assert.match(css, /\.dark\s*\{/);
+  });
+
+  it("uses shadcn and Lucide in the dashboard template and mobile sheet", () => {
+    const dashboard = read("src/app/page.tsx");
+    const shell = read("src/components/app-shell.tsx");
+    assert.match(dashboard, /from "lucide-react"/);
+    assert.match(dashboard, /SectionCard/);
+    assert.match(dashboard, /IconTextLink|from "@\/components\/ui\/button"/);
+    assert.match(shell, /SheetContent/);
+    assert.match(shell, /from "lucide-react"/);
   });
 });
 

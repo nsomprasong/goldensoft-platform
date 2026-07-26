@@ -1,5 +1,6 @@
 "use client";
 
+import { LogIn } from "lucide-react";
 import { useActionState } from "react";
 
 import {
@@ -7,20 +8,22 @@ import {
   type LoginActionState,
 } from "@/lib/auth/actions";
 import { FormField } from "@/components/ui/admin-ui";
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 import { TH } from "@/lib/i18n/th";
 
 const initial: LoginActionState = { error: null };
 
 export function LoginForm({ nextPath = "/" }: { nextPath?: string }) {
   const [state, action, pending] = useActionState(signInWithPassword, initial);
+  const label = pending ? TH.login.submitting : TH.login.submit;
 
   return (
     <form action={action} className="mt-6 grid gap-4">
       <input type="hidden" name="next" value={nextPath} />
       <FormField label={TH.login.email} htmlFor="email" required>
-        <input
+        <Input
           id="email"
-          className="input"
           type="email"
           name="email"
           autoComplete="username"
@@ -28,9 +31,8 @@ export function LoginForm({ nextPath = "/" }: { nextPath?: string }) {
         />
       </FormField>
       <FormField label={TH.login.password} htmlFor="password" required>
-        <input
+        <Input
           id="password"
-          className="input"
           type="password"
           name="password"
           autoComplete="current-password"
@@ -42,9 +44,18 @@ export function LoginForm({ nextPath = "/" }: { nextPath?: string }) {
           {state.error}
         </p>
       ) : null}
-      <button className="btn btn-block-mobile" type="submit" disabled={pending}>
-        {pending ? TH.login.submitting : TH.login.submit}
-      </button>
+      <IconTextButton
+        type="submit"
+        disabled={pending}
+        className="w-full"
+        icon={
+          <LogIn
+            className={pending ? "animate-pulse" : undefined}
+            aria-hidden="true"
+          />
+        }
+        label={label}
+      />
       <p className="text-[length:var(--text-caption)] text-[var(--text-muted)]">
         {TH.login.forgot} — {TH.login.contactAdmin}
       </p>

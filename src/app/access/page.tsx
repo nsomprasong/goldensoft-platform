@@ -32,7 +32,7 @@ export default async function AccessPage({
           {body}
         </p>
         <div className="mt-6">
-          <LogoutButton className="btn btn-secondary btn-block-mobile" />
+          <LogoutButton appearance="text" />
         </div>
       </section>
     </div>

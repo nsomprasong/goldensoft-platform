@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { isAuthPage, isProtectedPath } from "@/lib/auth/access";
+import {
+  MIDDLEWARE_AUTH_EMAIL_HEADER,
+  MIDDLEWARE_AUTH_USER_HEADER,
+} from "@/lib/auth/middleware-headers";
 import { isTestAuthEnabled } from "@/lib/env/test-auth";
 import { updateSession } from "@/lib/supabase/middleware";
 
@@ -34,7 +38,16 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const requestHeaders = new Headers(request.headers);
+  // Never trust client-supplied identity headers — only middleware may set them.
+  requestHeaders.delete(MIDDLEWARE_AUTH_USER_HEADER);
+  requestHeaders.delete(MIDDLEWARE_AUTH_EMAIL_HEADER);
   requestHeaders.set("x-gs-pathname", pathname);
+  if (user) {
+    requestHeaders.set(MIDDLEWARE_AUTH_USER_HEADER, user.id);
+    if (user.email) {
+      requestHeaders.set(MIDDLEWARE_AUTH_EMAIL_HEADER, user.email);
+    }
+  }
   const response = NextResponse.next({
     request: { headers: requestHeaders },
   });

@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
+import { Shield } from "lucide-react";
 
 import { CustomRoleForm } from "@/components/custom-role-form";
 import { PlatformShell } from "@/components/platform-shell";
 import { AccessDenied, PageHeader } from "@/components/ui/admin-ui";
-import { IconRoles } from "@/components/ui/icons";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
 import {
@@ -66,7 +66,7 @@ export default async function EditCustomRolePage({ params }: Props) {
       <PageHeader
         title={`แก้ไขบทบาท: ${role.nameTh}`}
         description={role.code}
-        icon={<IconRoles size={24} />}
+        icon={<Shield size={24} />}
       />
       <CustomRoleForm
         mode="edit"

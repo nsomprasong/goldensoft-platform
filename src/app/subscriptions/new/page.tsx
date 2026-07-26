@@ -1,8 +1,9 @@
-import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 import { SubscriptionForm } from "@/components/subscription-form";
 import { PlatformShell } from "@/components/platform-shell";
 import { AccessDenied, PageHeader } from "@/components/ui/admin-ui";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
@@ -81,9 +82,12 @@ export default async function NewSubscriptionPage() {
       <PageHeader
         title="สร้างการสมัครใช้บริการ"
         actions={
-          <Link href="/subscriptions" className="btn-secondary">
-            {TH.common.back}
-          </Link>
+          <IconTextLink
+            href="/subscriptions"
+            variant="outline"
+            label={TH.common.back}
+            icon={<ArrowLeft className="size-5" />}
+          />
         }
       />
       <section className="card max-w-2xl">

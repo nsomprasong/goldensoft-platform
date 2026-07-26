@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { ShieldOff, ShieldPlus } from "lucide-react";
+
 import { FormField } from "@/components/ui/admin-ui";
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
 import { pushToast } from "@/components/ui/toast";
 import { TH } from "@/lib/i18n/th";
 
@@ -45,7 +48,7 @@ export function MembershipRoleAssignForm(props: {
           {error}
         </p>
       ) : null}
-      <div className="flex flex-wrap items-end gap-2">
+      <div className="flex flex-wrap items-end gap-3">
         <FormField label="กำหนดบทบาท" htmlFor="roleId">
           <select
             id="roleId"
@@ -61,14 +64,18 @@ export function MembershipRoleAssignForm(props: {
             ))}
           </select>
         </FormField>
-        <button
+        <IconTextButton
           type="button"
-          className="btn-primary"
           disabled={pending || !roleId}
           onClick={() => void assign()}
-        >
-          กำหนดบทบาท
-        </button>
+          icon={
+            <ShieldPlus
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.common.loading : "กำหนดบทบาท"}
+        />
       </div>
     </div>
   );
@@ -96,13 +103,18 @@ export function RoleRevokeButton(props: { assignmentId: string }) {
   }
 
   return (
-    <button
+    <IconTextButton
       type="button"
-      className="btn-secondary"
+      variant="outline"
       disabled={pending}
       onClick={() => void revoke()}
-    >
-      ถอดบทบาท
-    </button>
+      icon={
+        <ShieldOff
+          className={pending ? "animate-pulse" : undefined}
+          aria-hidden="true"
+        />
+      }
+      label={pending ? TH.common.loading : "ถอดบทบาท"}
+    />
   );
 }

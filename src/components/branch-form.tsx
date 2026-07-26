@@ -3,7 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { Save, X } from "lucide-react";
+
 import { FormField } from "@/components/ui/admin-ui";
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 import { pushToast } from "@/components/ui/toast";
 import { TH } from "@/lib/i18n/th";
 
@@ -69,64 +73,58 @@ export function BranchForm(props: {
           required={!isEdit}
           hint={isEdit ? TH.branch.codeImmutable : undefined}
         >
-          <input
+          <Input
             id="code"
             name="code"
             required={!isEdit}
             disabled={isEdit}
             defaultValue={props.initial?.code ?? ""}
-            className="input disabled:bg-[var(--surface-muted)]"
+            className="disabled:bg-[var(--surface-muted)]"
           />
         </FormField>
         <FormField label={TH.branch.nameTh} htmlFor="name" required>
-          <input
+          <Input
             id="name"
             name="name"
             required
             defaultValue={props.initial?.name ?? ""}
-            className="input"
           />
         </FormField>
         <FormField label={TH.branch.nameEn} htmlFor="nameEn">
-          <input
+          <Input
             id="nameEn"
             name="nameEn"
             defaultValue={props.initial?.nameEn ?? ""}
-            className="input"
           />
         </FormField>
         <FormField label={TH.branch.timezone} htmlFor="timezone">
-          <input
+          <Input
             id="timezone"
             name="timezone"
             defaultValue={props.initial?.timezone ?? "Asia/Bangkok"}
-            className="input"
           />
         </FormField>
         <FormField label={TH.branch.email} htmlFor="email">
-          <input
+          <Input
             id="email"
             name="email"
             type="email"
             defaultValue={props.initial?.email ?? ""}
-            className="input"
           />
         </FormField>
         <FormField label={TH.branch.phone} htmlFor="phone">
-          <input
+          <Input
             id="phone"
             name="phone"
             defaultValue={props.initial?.phone ?? ""}
-            className="input"
           />
         </FormField>
       </div>
       <FormField label={TH.branch.address} htmlFor="address">
-        <input
+        <Input
           id="address"
           name="address"
           defaultValue={props.initial?.address ?? ""}
-          className="input"
         />
       </FormField>
       <label className="flex min-h-11 items-center gap-2 text-[length:var(--text-label)]">
@@ -142,17 +140,27 @@ export function BranchForm(props: {
           {error}
         </p>
       ) : null}
-      <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-end">
-        <button
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--border)] pt-4">
+        <IconTextButton
           type="button"
-          className="btn btn-secondary btn-block-mobile"
+          variant="outline"
           onClick={() => router.back()}
-        >
-          {TH.common.cancel}
-        </button>
-        <button type="submit" className="btn btn-block-mobile" disabled={pending}>
-          {pending ? TH.common.loading : isEdit ? TH.common.save : TH.branch.add}
-        </button>
+          icon={<X aria-hidden="true" />}
+          label={TH.common.cancel}
+        />
+        <IconTextButton
+          type="submit"
+          disabled={pending}
+          icon={
+            <Save
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={
+            pending ? TH.common.loading : isEdit ? TH.common.save : TH.branch.add
+          }
+        />
       </div>
     </form>
   );

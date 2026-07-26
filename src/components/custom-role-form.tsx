@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckCheck, Save } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
@@ -10,6 +11,9 @@ import {
   permissionResourceGroup,
   type PlatformPermission,
 } from "@/lib/permissions/codes";
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
+import { TH } from "@/lib/i18n/th";
 
 const ALL_PERMS = Object.values(PLATFORM_PERMISSIONS);
 
@@ -129,8 +133,7 @@ export function CustomRoleForm(props: {
       <section className="card grid gap-3">
         <label className="grid gap-1 text-[length:var(--text-label)]">
           รหัสบทบาท
-          <input
-            className="input"
+          <Input
             value={code}
             disabled={props.mode === "edit" || readOnly || pending}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
@@ -139,8 +142,7 @@ export function CustomRoleForm(props: {
         </label>
         <label className="grid gap-1 text-[length:var(--text-label)]">
           ชื่อภาษาไทย
-          <input
-            className="input"
+          <Input
             value={nameTh}
             disabled={readOnly || pending}
             onChange={(e) => setNameTh(e.target.value)}
@@ -148,8 +150,7 @@ export function CustomRoleForm(props: {
         </label>
         <label className="grid gap-1 text-[length:var(--text-label)]">
           ชื่อภาษาอังกฤษ
-          <input
-            className="input"
+          <Input
             value={nameEn}
             disabled={readOnly || pending}
             onChange={(e) => setNameEn(e.target.value)}
@@ -171,8 +172,8 @@ export function CustomRoleForm(props: {
           <h2 className="text-[length:var(--text-section)] font-semibold">
             สิทธิ์ของบทบาท
           </h2>
-          <input
-            className="input max-w-xs"
+          <Input
+            className="max-w-xs"
             placeholder="ค้นหาสิทธิ์..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -183,13 +184,13 @@ export function CustomRoleForm(props: {
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="font-medium capitalize">{group}</p>
               {!readOnly ? (
-                <button
+                <IconTextButton
                   type="button"
-                  className="btn btn-ghost !min-h-8"
+                  variant="ghost"
                   onClick={() => toggleGroup(codes)}
-                >
-                  เลือกทั้งหมดในหมวด
-                </button>
+                  icon={<CheckCheck aria-hidden="true" />}
+                  label="เลือกทั้งหมดในหมวด"
+                />
               ) : null}
             </div>
             <ul className="grid gap-2">
@@ -226,14 +227,24 @@ export function CustomRoleForm(props: {
       ) : null}
 
       {!readOnly ? (
-        <button
+        <IconTextButton
           type="button"
-          className="btn"
-          disabled={pending || selected.size === 0 || !nameTh || !nameEn || (props.mode === "create" && !code)}
+          disabled={
+            pending ||
+            selected.size === 0 ||
+            !nameTh ||
+            !nameEn ||
+            (props.mode === "create" && !code)
+          }
           onClick={submit}
-        >
-          {pending ? "กำลังบันทึก..." : "บันทึกบทบาท"}
-        </button>
+          icon={
+            <Save
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.common.loading : "บันทึกบทบาท"}
+        />
       ) : (
         <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">
           บทบาทระบบดูได้อย่างเดียว — ยังไม่เปิดให้แก้สิทธิ์ในเฟสนี้

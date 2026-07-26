@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const REFRESH_WINDOW_MS = 120_000;
+
 /** Refresh Supabase Auth session cookies on the edge (read/write response cookies). */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -35,6 +37,19 @@ export async function updateSession(request: NextRequest) {
       },
     },
   });
+
+  // Fast path: trust a non-expiring-soon session locally. getUser() hits Auth
+  // over the network and dominated page latency when called on every request.
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const expiresAtMs = session?.expires_at ? session.expires_at * 1000 : 0;
+  const sessionFresh =
+    Boolean(session?.user) && expiresAtMs - Date.now() > REFRESH_WINDOW_MS;
+
+  if (sessionFresh && session?.user) {
+    return { response: supabaseResponse, user: session.user };
+  }
 
   const {
     data: { user },

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import {
@@ -11,6 +11,7 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/ui/admin-ui";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { labelStatus, TH } from "@/lib/i18n/th";
@@ -74,14 +75,19 @@ export default async function ProductDetailPage({
           />
         }
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Link href="/products" className="btn-secondary">
-              {TH.common.back}
-            </Link>
+          <div className="flex flex-wrap items-start gap-3">
+            <IconTextLink
+              href="/products"
+              variant="outline"
+              label={TH.common.back}
+              icon={<ArrowLeft className="size-5" />}
+            />
             {canManage ? (
-              <Link href={`/products/${product.id}/edit`} className="btn-primary">
-                {TH.common.edit}
-              </Link>
+              <IconTextLink
+                href={`/products/${product.id}/edit`}
+                label={TH.common.edit}
+                icon={<Pencil className="size-5" />}
+              />
             ) : null}
           </div>
         }

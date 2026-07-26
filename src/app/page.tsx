@@ -1,23 +1,23 @@
-import Link from "next/link";
+import {
+  Building2,
+  GitBranch,
+  LayoutDashboard,
+  Mail,
+  Plus,
+  ScrollText,
+  Users,
+  WalletCards,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
+import { SectionCard } from "@/components/goldensoft/page";
 import { PlatformShell } from "@/components/platform-shell";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import {
   ActivityList,
   EmptyState,
-  SectionHeader,
   StatCard,
 } from "@/components/ui/admin-ui";
-import {
-  IconAudit,
-  IconBranch,
-  IconDashboard,
-  IconMail,
-  IconOrganization,
-  IconPlus,
-  IconSubscription,
-  IconUsers,
-} from "@/components/ui/icons";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
@@ -154,14 +154,14 @@ export default async function DashboardPage() {
         href: "/users/invite",
         title: TH.users.invite,
         body: "ส่งคำเชิญและกำหนดบทบาทให้ผู้ใช้ใหม่",
-        icon: <IconUsers size={20} />,
+        icon: <Users size={20} />,
       }
     : canCreateOrg
       ? {
           href: "/organizations/new",
           title: TH.org.add,
           body: "สร้างองค์กรใหม่บนแพลตฟอร์ม",
-          icon: <IconOrganization size={20} />,
+          icon: <Building2 size={20} />,
         }
       : null;
 
@@ -171,7 +171,7 @@ export default async function DashboardPage() {
           href: "/organizations/new",
           title: TH.org.add,
           body: "สร้างองค์กรใหม่บนแพลตฟอร์ม",
-          icon: <IconPlus size={18} />,
+          icon: <Plus size={18} />,
         }
       : null,
     canCreateBranch && ctx.activeOrganization
@@ -179,7 +179,7 @@ export default async function DashboardPage() {
           href: `/organizations/${ctx.activeOrganization.id}/branches/new`,
           title: TH.branch.add,
           body: "เพิ่มสาขาในองค์กรที่ใช้งานอยู่",
-          icon: <IconBranch size={18} />,
+          icon: <GitBranch size={18} />,
         }
       : null,
     canInvite && primaryAction?.href !== "/users/invite"
@@ -187,7 +187,7 @@ export default async function DashboardPage() {
           href: "/users/invite",
           title: TH.users.invite,
           body: "ส่งคำเชิญและกำหนดบทบาท",
-          icon: <IconUsers size={18} />,
+          icon: <Users size={18} />,
         }
       : null,
     canReadAudit
@@ -195,7 +195,7 @@ export default async function DashboardPage() {
           href: "/audit-logs",
           title: TH.nav.auditLogs,
           body: "ติดตามเหตุการณ์สำคัญล่าสุด",
-          icon: <IconAudit size={18} />,
+          icon: <ScrollText size={18} />,
         }
       : null,
   ].filter(Boolean) as Array<{
@@ -207,44 +207,53 @@ export default async function DashboardPage() {
 
   return (
     <PlatformShell {...shellProps}>
-      <section className="dashboard-hero mb-5 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] shadow-[var(--shadow-sm)]">
-        <div className="dashboard-hero-surface relative px-4 py-5 sm:px-6 sm:py-6">
+      <section className="dashboard-hero mb-5 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--page-header-border)] shadow-[var(--shadow-md)]">
+        <div className="dashboard-hero-surface relative px-4 py-5 sm:px-6 sm:py-7">
           <div
-            className="dashboard-hero-orb pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full"
+            className="dashboard-hero-orb pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full"
+            aria-hidden="true"
+          />
+          <div
+            className="dashboard-hero-orb-secondary pointer-events-none absolute -bottom-12 left-8 h-32 w-32 rounded-full"
             aria-hidden="true"
           />
           <div
             className="dashboard-hero-accent pointer-events-none absolute bottom-0 left-0 h-1 w-full"
             aria-hidden="true"
           />
-          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start">
-            <div
-              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--surface)] text-[var(--primary)] shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)]"
-              aria-hidden="true"
-            >
-              <IconDashboard size={24} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[length:var(--text-caption)] font-semibold uppercase tracking-wide text-[var(--primary)]">
-                {TH.shellName}
-              </p>
-              <h1 className="mt-1 text-[length:var(--text-page)] font-semibold leading-[var(--leading-tight)] text-[var(--text-primary)]">
-                {greetingForHour(hour)} {displayName}
-              </h1>
-              <p className="mt-1 max-w-2xl text-[length:var(--text-helper)] text-[var(--text-secondary)]">
-                {TH.pages.dashboardBody}
-              </p>
-              <p className="mt-3 text-[length:var(--text-caption)] text-[var(--text-muted)]">
-                {TH.common.currentOrganization}:{" "}
-                <strong className="text-[var(--text-secondary)]">
-                  {ctx.activeOrganization?.name ?? TH.common.notFound}
-                </strong>
-                {" · "}
-                {TH.common.currentBranch}:{" "}
-                <strong className="text-[var(--text-secondary)]">
-                  {ctx.activeBranch?.name ?? TH.common.noBranch}
-                </strong>
-              </p>
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
+              <div
+                className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[1rem] bg-gradient-to-br from-white to-[var(--primary-soft)] text-[var(--primary)] shadow-[var(--shadow-md)] ring-1 ring-[var(--page-header-border)]"
+                aria-hidden="true"
+              >
+                <LayoutDashboard size={24} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[length:var(--text-caption)] font-semibold uppercase tracking-[0.08em] text-[var(--primary)]">
+                  {TH.shellName}
+                </p>
+                <h1 className="mt-1 text-[length:var(--text-page)] font-semibold leading-[var(--leading-tight)] text-[var(--text-primary)]">
+                  {greetingForHour(hour)} {displayName}
+                </h1>
+                <p className="mt-1.5 max-w-2xl text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+                  {TH.pages.dashboardBody}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center rounded-full border border-[var(--page-header-border)] bg-white/80 px-2.5 py-1 text-[length:var(--text-caption)] text-[var(--text-secondary)] shadow-[var(--shadow-xs)]">
+                    {TH.common.currentOrganization}:{" "}
+                    <strong className="ml-1 text-[var(--text-primary)]">
+                      {ctx.activeOrganization?.name ?? TH.common.notFound}
+                    </strong>
+                  </span>
+                  <span className="inline-flex items-center rounded-full border border-[var(--page-header-border)] bg-white/80 px-2.5 py-1 text-[length:var(--text-caption)] text-[var(--text-secondary)] shadow-[var(--shadow-xs)]">
+                    {TH.common.currentBranch}:{" "}
+                    <strong className="ml-1 text-[var(--text-primary)]">
+                      {ctx.activeBranch?.name ?? TH.common.noBranch}
+                    </strong>
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -259,7 +268,7 @@ export default async function DashboardPage() {
               hint="องค์กรในขอบเขตของคุณ"
               href="/organizations"
               accent="blue"
-              icon={<IconOrganization size={22} />}
+              icon={<Building2 size={22} />}
             />
           ) : null}
           {perms.includes(PLATFORM_PERMISSIONS.branchRead) ? (
@@ -269,7 +278,7 @@ export default async function DashboardPage() {
               hint="สาขาที่มองเห็นได้"
               href="/branches"
               accent="green"
-              icon={<IconBranch size={22} />}
+              icon={<GitBranch size={22} />}
             />
           ) : null}
           {perms.includes(PLATFORM_PERMISSIONS.userRead) ? (
@@ -279,7 +288,7 @@ export default async function DashboardPage() {
               hint="สมาชิกองค์กรที่ยังใช้งาน"
               href="/users"
               accent="violet"
-              icon={<IconUsers size={22} />}
+              icon={<Users size={22} />}
             />
           ) : null}
           {perms.includes(PLATFORM_PERMISSIONS.subscriptionRead) ? (
@@ -289,7 +298,7 @@ export default async function DashboardPage() {
               hint="สถานะใช้งาน / ทดลอง / ค้างชำระ"
               href="/subscriptions"
               accent="amber"
-              icon={<IconSubscription size={22} />}
+              icon={<WalletCards size={22} />}
             />
           ) : null}
         </div>
@@ -302,55 +311,33 @@ export default async function DashboardPage() {
               hint="คำเชิญที่รอการตอบรับหรือส่งซ้ำ"
               href="/users"
               accent="orange"
-              icon={<IconMail size={22} />}
+              icon={<Mail size={22} />}
             />
           </div>
         ) : null}
       </section>
 
       <div className="dashboard-panels mt-5">
-        <section className="card">
-          <SectionHeader
-            title={TH.pages.quickActions}
-            description="ทางลัดตามสิทธิ์ปัจจุบันของคุณ"
-          />
-          <div className="grid gap-2">
+        <SectionCard
+          title={TH.pages.quickActions}
+          description="ทางลัดตามสิทธิ์ปัจจุบันของคุณ"
+        >
+          <div className="flex flex-wrap items-start gap-3">
             {primaryAction ? (
-              <Link
+              <IconTextLink
                 href={primaryAction.href}
-                className="dashboard-primary-action flex items-start gap-3 rounded-[var(--radius-lg)] border p-3.5 transition hover:border-[var(--primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
-              >
-                <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--surface)] text-[var(--primary)]">
-                  {primaryAction.icon}
-                </span>
-                <span className="min-w-0">
-                  <span className="block font-semibold text-[var(--text-primary)]">
-                    {primaryAction.title}
-                  </span>
-                  <span className="mt-0.5 block text-[length:var(--text-caption)] text-[var(--text-secondary)]">
-                    {primaryAction.body}
-                  </span>
-                </span>
-              </Link>
+                label={primaryAction.title}
+                icon={primaryAction.icon}
+              />
             ) : null}
             {secondaryActions.map((action) => (
-              <Link
+              <IconTextLink
                 key={action.href + action.title}
                 href={action.href}
-                className="flex items-start gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-3.5 transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)]/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
-              >
-                <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--surface-muted)] text-[var(--text-secondary)]">
-                  {action.icon}
-                </span>
-                <span className="min-w-0">
-                  <span className="block font-semibold text-[var(--text-primary)]">
-                    {action.title}
-                  </span>
-                  <span className="mt-0.5 block text-[length:var(--text-caption)] text-[var(--text-muted)]">
-                    {action.body}
-                  </span>
-                </span>
-              </Link>
+                variant="outline"
+                label={action.title}
+                icon={action.icon}
+              />
             ))}
             {!primaryAction && secondaryActions.length === 0 ? (
               <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">
@@ -358,13 +345,12 @@ export default async function DashboardPage() {
               </p>
             ) : null}
           </div>
-        </section>
+        </SectionCard>
 
-        <section className="card">
-          <SectionHeader
-            title={TH.pages.recentActivity}
-            description="เหตุการณ์ล่าสุดในขอบเขตที่คุณมีสิทธิ์"
-          />
+        <SectionCard
+          title={TH.pages.recentActivity}
+          description="เหตุการณ์ล่าสุดในขอบเขตที่คุณมีสิทธิ์"
+        >
           <ActivityList
             items={recentAudits.map((row) => ({
               id: row.id,
@@ -382,7 +368,7 @@ export default async function DashboardPage() {
               />
             }
           />
-        </section>
+        </SectionCard>
       </div>
     </PlatformShell>
   );

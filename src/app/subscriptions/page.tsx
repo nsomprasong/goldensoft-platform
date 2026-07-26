@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CreditCard, Plus } from "lucide-react";
 
 import { PlatformShell } from "@/components/platform-shell";
 import {
@@ -8,7 +9,7 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/ui/admin-ui";
-import { IconPlus, IconSubscription } from "@/components/ui/icons";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { labelStatus, TH } from "@/lib/i18n/th";
@@ -64,12 +65,14 @@ export default async function SubscriptionsPage({
       <PageHeader
         title={TH.pages.subscriptionsTitle}
         description={TH.pages.subscriptionsBody}
-        icon={<IconSubscription size={24} />}
+        icon={<CreditCard size={24} />}
         actions={
           canManage ? (
-            <Link href="/subscriptions/new" className="btn-primary">
-              <IconPlus size={16} /> สร้างการสมัคร
-            </Link>
+            <IconTextLink
+              href="/subscriptions/new"
+              label="สร้างการสมัคร"
+              icon={<Plus className="size-5" />}
+            />
           ) : null
         }
       />

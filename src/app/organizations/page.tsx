@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Building2, FilterX, Plus, Search } from "lucide-react";
 
 import { PlatformShell } from "@/components/platform-shell";
 import {
@@ -10,7 +11,11 @@ import {
   SearchFilterBar,
   StatusBadge,
 } from "@/components/ui/admin-ui";
-import { IconOrganization } from "@/components/ui/icons";
+import {
+  IconTextButton,
+  IconTextLink,
+} from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH, labelStatus } from "@/lib/i18n/th";
@@ -85,12 +90,14 @@ export default async function OrganizationsPage({
       <PageHeader
         title={TH.pages.organizationsTitle}
         description={TH.pages.organizationsBody}
-        icon={<IconOrganization size={24} />}
+        icon={<Building2 size={24} />}
         actions={
           canCreate ? (
-            <Link href="/organizations/new" className="btn btn-block-mobile">
-              {TH.org.add}
-            </Link>
+            <IconTextLink
+              href="/organizations/new"
+              label={TH.org.add}
+              icon={<Plus className="size-5" />}
+            />
           ) : null
         }
       />
@@ -102,11 +109,10 @@ export default async function OrganizationsPage({
           <form className="flex w-full flex-wrap items-end gap-2" method="get">
             <label className="min-w-[12rem] flex-1 text-[length:var(--text-label)]">
               <span className="mb-1 block font-medium">{TH.common.search}</span>
-              <input
+              <Input
                 name="q"
                 defaultValue={params.q ?? ""}
                 placeholder={TH.common.search}
-                className="input"
                 aria-label={TH.common.search}
               />
             </label>
@@ -123,13 +129,18 @@ export default async function OrganizationsPage({
                 <option value="CLOSED">{labelStatus("CLOSED")}</option>
               </select>
             </label>
-            <button type="submit" className="btn">
-              {TH.common.filter}
-            </button>
+            <IconTextButton
+              type="submit"
+              label={TH.common.filter}
+              icon={<Search className="size-5" />}
+            />
             {params.q || params.status ? (
-              <Link href="/organizations" className="btn btn-secondary">
-                {TH.common.clearFilter}
-              </Link>
+              <IconTextLink
+                href="/organizations"
+                variant="outline"
+                label={TH.common.clearFilter}
+                icon={<FilterX className="size-5" />}
+              />
             ) : null}
           </form>
         </SearchFilterBar>

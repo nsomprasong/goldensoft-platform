@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import {
@@ -14,6 +14,7 @@ import {
   encodeContextCookie,
 } from "@/lib/context/cookie";
 import { TH } from "@/lib/i18n/th";
+import { writeAuditLog } from "@/lib/platform/audit";
 import { MASTER } from "@/lib/platform/master-codes";
 import { permissionsForRoles } from "@/lib/permissions/codes";
 import { prisma } from "@/lib/prisma";
@@ -22,21 +23,6 @@ const switchSchema = z.object({
   organizationId: z.string().uuid(),
   branchId: z.string().uuid().nullable().optional(),
 });
-
-async function ensureAuditAction(code: string, nameTh: string, nameEn: string) {
-  return prisma.auditActionType.upsert({
-    where: { code },
-    create: {
-      code,
-      nameTh,
-      nameEn,
-      sortOrder: 100,
-      isActive: true,
-      isSystem: true,
-    },
-    update: {},
-  });
-}
 
 export async function GET(request: NextRequest) {
   const user = await requireAuthUser(request);
@@ -277,6 +263,7 @@ export async function POST(request: NextRequest) {
     mode,
   });
 
+  // Preference must finish before the response so last-org restore stays correct.
   await prisma.userPreference.upsert({
     where: { userProfileId: bundle.profile.id },
     create: {
@@ -290,35 +277,28 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  const action = await ensureAuditAction(
-    platformAdminAccess
+  const auditPayload = {
+    organizationId,
+    actorAuthUserId: user.id,
+    actionCode: platformAdminAccess
       ? MASTER.auditActionType.CONTEXT_PLATFORM_ADMIN
       : MASTER.auditActionType.CONTEXT_SWITCH,
-    platformAdminAccess
-      ? "สลับโหมดผู้ดูแลแพลตฟอร์ม"
-      : "เปลี่ยนบริบทองค์กรหรือสาขา",
-    platformAdminAccess
-      ? "Switch platform admin context"
-      : "Switch organization or branch context",
-  );
+    entityType: "platform_context",
+    entityId: organizationId,
+    before: previous
+      ? {
+          organizationId: previous.organizationId,
+          branchId: previous.branchId,
+          mode: previous.mode ?? "membership",
+        }
+      : undefined,
+    after: { organizationId, branchId, mode },
+    userAgent: request.headers.get("user-agent"),
+  };
 
-  await prisma.auditLog.create({
-    data: {
-      organizationId,
-      actorAuthUserId: user.id,
-      actionTypeId: action.id,
-      entityType: "platform_context",
-      entityId: organizationId,
-      beforeJson: previous
-        ? {
-            organizationId: previous.organizationId,
-            branchId: previous.branchId,
-            mode: previous.mode ?? "membership",
-          }
-        : undefined,
-      afterJson: { organizationId, branchId, mode },
-      userAgent: request.headers.get("user-agent"),
-    },
+  // Audit is durable but not on the user-visible critical path.
+  after(() => {
+    void writeAuditLog(prisma, auditPayload);
   });
 
   const response = NextResponse.json({

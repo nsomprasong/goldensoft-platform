@@ -1,9 +1,12 @@
 "use client";
 
+import { ArrowLeft, ChevronRight, Send } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormField, StatusBadge } from "@/components/ui/admin-ui";
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 import { pushToast } from "@/components/ui/toast";
 import { TH, labelRole } from "@/lib/i18n/th";
 
@@ -125,21 +128,19 @@ export function UserInviteWizard(props: {
       {step === 1 ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <FormField label={TH.users.email} htmlFor="email" required>
-            <input
+            <Input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="input"
               autoComplete="email"
             />
           </FormField>
           <FormField label={TH.users.displayName} htmlFor="displayName" required>
-            <input
+            <Input
               id="displayName"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="input"
               autoComplete="name"
             />
           </FormField>
@@ -276,40 +277,43 @@ export function UserInviteWizard(props: {
         </p>
       ) : null}
 
-      <div className="flex flex-col-reverse gap-2 border-t border-[var(--border)] pt-4 sm:flex-row sm:justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
         {step > 1 ? (
-          <button
+          <IconTextButton
             type="button"
-            className="btn btn-secondary btn-block-mobile"
+            variant="outline"
             onClick={() => setStep((s) => s - 1)}
-          >
-            {TH.common.back}
-          </button>
+            icon={<ArrowLeft aria-hidden="true" />}
+            label={TH.common.back}
+          />
         ) : (
           <span />
         )}
         {step < 5 ? (
-          <button
+          <IconTextButton
             type="button"
-            className="btn btn-block-mobile"
             onClick={() => setStep((s) => s + 1)}
             disabled={
               (step === 1 && (!email || !displayName)) ||
               (step === 2 && !organizationId) ||
               (step === 4 && branchScope === "SELECTED" && branchIds.length === 0)
             }
-          >
-            {TH.common.continue}
-          </button>
+            icon={<ChevronRight aria-hidden="true" />}
+            label={TH.common.continue}
+          />
         ) : (
-          <button
+          <IconTextButton
             type="button"
-            className="btn btn-block-mobile"
             disabled={pending}
             onClick={submit}
-          >
-            {pending ? TH.common.loading : TH.users.invite}
-          </button>
+            icon={
+              <Send
+                className={pending ? "animate-pulse" : undefined}
+                aria-hidden="true"
+              />
+            }
+            label={pending ? TH.common.loading : TH.users.invite}
+          />
         )}
       </div>
     </div>

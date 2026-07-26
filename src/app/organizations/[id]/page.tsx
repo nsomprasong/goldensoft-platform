@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GitBranch, Pencil } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { PlatformShell } from "@/components/platform-shell";
@@ -8,6 +9,7 @@ import {
   SectionHeader,
   StatusBadge,
 } from "@/components/ui/admin-ui";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { labelStatus, TH } from "@/lib/i18n/th";
@@ -100,21 +102,20 @@ export default async function OrganizationDetailPage({ params }: Props) {
               />
             }
             actions={
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="flex flex-wrap items-start gap-3">
                 {canManage ? (
-                  <Link
+                  <IconTextLink
                     href={`/organizations/${org.id}/edit`}
-                    className="btn btn-block-mobile"
-                  >
-                    {TH.org.edit}
-                  </Link>
+                    label={TH.org.edit}
+                    icon={<Pencil className="size-5" />}
+                  />
                 ) : null}
-                <Link
+                <IconTextLink
                   href={`/organizations/${org.id}/branches`}
-                  className="btn btn-secondary btn-block-mobile"
-                >
-                  จัดการ{TH.nav.branches}
-                </Link>
+                  variant="outline"
+                  label={`จัดการ${TH.nav.branches}`}
+                  icon={<GitBranch className="size-5" />}
+                />
               </div>
             }
           />

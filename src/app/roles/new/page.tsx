@@ -1,9 +1,9 @@
-import Link from "next/link";
+import { ArrowLeft, Shield } from "lucide-react";
 
 import { CustomRoleForm } from "@/components/custom-role-form";
 import { PlatformShell } from "@/components/platform-shell";
 import { AccessDenied, PageHeader } from "@/components/ui/admin-ui";
-import { IconRoles } from "@/components/ui/icons";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
 import {
@@ -46,11 +46,14 @@ export default async function NewCustomRolePage() {
       <PageHeader
         title="สร้างบทบาทกำหนดเอง"
         description={`องค์กร: ${ctx.activeOrganization.name}`}
-        icon={<IconRoles size={24} />}
+        icon={<Shield size={24} />}
         actions={
-          <Link href="/roles" className="btn btn-secondary">
-            กลับ
-          </Link>
+          <IconTextLink
+            href="/roles"
+            variant="outline"
+            label="กลับ"
+            icon={<ArrowLeft className="size-5" />}
+          />
         }
       />
       <CustomRoleForm

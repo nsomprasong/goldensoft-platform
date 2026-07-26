@@ -1,14 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { MailPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
+import { LabeledIconButton } from "@/components/ui/labeled-icon-button";
 import { pushToast } from "@/components/ui/toast";
 import { TH } from "@/lib/i18n/th";
 
 export function ResendInviteButton({ invitationId }: { invitationId: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const label = pending ? TH.common.loading : TH.users.reinvite;
 
   async function resend() {
     setPending(true);
@@ -19,12 +23,25 @@ export function ResendInviteButton({ invitationId }: { invitationId: string }) {
     const result = (await response.json()) as { message?: string };
     setPending(false);
     pushToast(result.message ?? TH.common.failed);
-    if (response.ok) router.refresh();
+    if (response.ok) {
+      setSent(true);
+      router.refresh();
+    }
   }
 
+  if (sent) return null;
+
   return (
-    <button type="button" className="btn" disabled={pending} onClick={resend}>
-      {pending ? TH.common.loading : TH.users.reinvite}
-    </button>
+    <LabeledIconButton
+      type="button"
+      variant="outline"
+      disabled={pending}
+      onClick={resend}
+      className="border-[var(--page-header-border)] bg-[var(--primary-soft)] text-[var(--primary)] hover:border-[var(--primary)]/40 hover:bg-[var(--primary-soft)] hover:text-[var(--primary-hover)]"
+      icon={
+        <MailPlus className={pending ? "animate-pulse" : undefined} aria-hidden="true" />
+      }
+      label={label}
+    />
   );
 }

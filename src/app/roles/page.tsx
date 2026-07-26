@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Plus, Shield } from "lucide-react";
 
 import { PlatformShell } from "@/components/platform-shell";
 import {
@@ -7,7 +8,7 @@ import {
   PageHeader,
   SectionHeader,
 } from "@/components/ui/admin-ui";
-import { IconRoles } from "@/components/ui/icons";
+import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH, labelRole } from "@/lib/i18n/th";
 import {
@@ -77,12 +78,14 @@ export default async function RolesPage() {
       <PageHeader
         title={TH.pages.rolesTitle}
         description={TH.pages.rolesBody}
-        icon={<IconRoles size={24} />}
+        icon={<Shield size={24} />}
         actions={
           canManage && ctx.activeOrganization ? (
-            <Link href="/roles/new" className="btn">
-              สร้างบทบาทกำหนดเอง
-            </Link>
+            <IconTextLink
+              href="/roles/new"
+              label="สร้างบทบาทกำหนดเอง"
+              icon={<Plus className="size-5" />}
+            />
           ) : null
         }
       />

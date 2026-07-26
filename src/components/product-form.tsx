@@ -3,7 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { Ban, Pause, Play, Save, X } from "lucide-react";
+
 import { FormField } from "@/components/ui/admin-ui";
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 import { pushToast } from "@/components/ui/toast";
 import { TH } from "@/lib/i18n/th";
 
@@ -82,51 +86,47 @@ export function ProductForm(props: {
         </p>
       ) : null}
       <FormField label="รหัสผลิตภัณฑ์" htmlFor="code" required>
-        <input
+        <Input
           id="code"
           name="code"
           required={props.mode === "create"}
           disabled={props.mode === "edit"}
           defaultValue={props.initial?.code ?? ""}
-          className="input disabled:bg-[var(--surface-muted)]"
+          className="disabled:bg-[var(--surface-muted)]"
           placeholder="RESIDENT_V2"
         />
       </FormField>
       <div className="grid gap-3 sm:grid-cols-2">
         <FormField label="ชื่อภาษาไทย" htmlFor="nameTh" required>
-          <input
+          <Input
             id="nameTh"
             name="nameTh"
             required
             defaultValue={props.initial?.nameTh ?? ""}
-            className="input"
           />
         </FormField>
         <FormField label="ชื่อภาษาอังกฤษ" htmlFor="nameEn" required>
-          <input
+          <Input
             id="nameEn"
             name="nameEn"
             required
             defaultValue={props.initial?.nameEn ?? ""}
-            className="input"
           />
         </FormField>
         <FormField label="ประเภท" htmlFor="productType">
-          <input
+          <Input
             id="productType"
             name="productType"
             defaultValue={props.initial?.productType ?? "APPLICATION"}
-            className="input"
           />
         </FormField>
         <FormField label="ลำดับการแสดง" htmlFor="sortOrder">
-          <input
+          <Input
             id="sortOrder"
             name="sortOrder"
             type="number"
             min={0}
             defaultValue={props.initial?.sortOrder ?? 0}
-            className="input"
           />
         </FormField>
       </div>
@@ -139,17 +139,25 @@ export function ProductForm(props: {
           className="input"
         />
       </FormField>
-      <div className="flex gap-2">
-        <button type="submit" className="btn-primary" disabled={pending}>
-          {pending ? TH.common.loading : TH.common.save}
-        </button>
-        <button
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <IconTextButton
+          type="submit"
+          disabled={pending}
+          icon={
+            <Save
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.common.loading : TH.common.save}
+        />
+        <IconTextButton
           type="button"
-          className="btn-secondary"
+          variant="outline"
           onClick={() => router.back()}
-        >
-          {TH.common.cancel}
-        </button>
+          icon={<X aria-hidden="true" />}
+          label={TH.common.cancel}
+        />
       </div>
     </form>
   );
@@ -180,25 +188,34 @@ export function ProductStatusActions(props: {
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {props.statusCode !== "ACTIVE" ? (
-        <button
+        <IconTextButton
           type="button"
-          className="btn-primary"
           disabled={pending}
           onClick={() => void run("activate")}
-        >
-          เปิดใช้งาน
-        </button>
+          icon={
+            <Play
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.common.loading : "เปิดใช้งาน"}
+        />
       ) : (
-        <button
+        <IconTextButton
           type="button"
-          className="btn-secondary"
+          variant="outline"
           disabled={pending}
           onClick={() => void run("deactivate")}
-        >
-          ปิดใช้งาน
-        </button>
+          icon={
+            <Pause
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.common.loading : "ปิดใช้งาน"}
+        />
       )}
     </div>
   );

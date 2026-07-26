@@ -1,7 +1,11 @@
 "use client";
 
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+
+import { IconTextButton } from "@/components/ui/labeled-icon-button";
+import { Input } from "@/components/ui/input";
 
 type ProductOption = { code: string; name: string };
 type PlanOption = { code: string; name: string; productCode: string };
@@ -129,8 +133,7 @@ export function OrganizationOnboardingWizard(props: {
           ).map(([key, label]) => (
             <label key={key} className="grid gap-1 text-[length:var(--text-label)]">
               {label}
-              <input
-                className="input"
+              <Input
                 value={organization[key]}
                 onChange={(e) =>
                   setOrganization((prev) => ({ ...prev, [key]: e.target.value }))
@@ -145,8 +148,7 @@ export function OrganizationOnboardingWizard(props: {
         <section className="card grid gap-3">
           <label className="grid gap-1 text-[length:var(--text-label)]">
             รหัสสาขาหลัก
-            <input
-              className="input"
+            <Input
               value={primaryBranch.code}
               onChange={(e) =>
                 setPrimaryBranch((p) => ({ ...p, code: e.target.value }))
@@ -155,8 +157,7 @@ export function OrganizationOnboardingWizard(props: {
           </label>
           <label className="grid gap-1 text-[length:var(--text-label)]">
             ชื่อสาขาหลัก
-            <input
-              className="input"
+            <Input
               value={primaryBranch.name}
               onChange={(e) =>
                 setPrimaryBranch((p) => ({ ...p, name: e.target.value }))
@@ -180,8 +181,7 @@ export function OrganizationOnboardingWizard(props: {
         <section className="card grid gap-3">
           <label className="grid gap-1 text-[length:var(--text-label)]">
             อีเมลเจ้าของ
-            <input
-              className="input"
+            <Input
               type="email"
               value={owner.email}
               onChange={(e) => setOwner((o) => ({ ...o, email: e.target.value }))}
@@ -189,8 +189,7 @@ export function OrganizationOnboardingWizard(props: {
           </label>
           <label className="grid gap-1 text-[length:var(--text-label)]">
             ชื่อเจ้าของ
-            <input
-              className="input"
+            <Input
               value={owner.displayName}
               onChange={(e) =>
                 setOwner((o) => ({ ...o, displayName: e.target.value }))
@@ -285,25 +284,38 @@ export function OrganizationOnboardingWizard(props: {
         </p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         {step > 0 ? (
-          <button type="button" className="btn btn-secondary" onClick={back} disabled={pending}>
-            ย้อนกลับ
-          </button>
+          <IconTextButton
+            type="button"
+            variant="outline"
+            onClick={back}
+            disabled={pending}
+            icon={<ArrowLeft aria-hidden="true" />}
+            label="ย้อนกลับ"
+          />
         ) : null}
         {step < STEPS.length - 1 ? (
-          <button type="button" className="btn" onClick={next} disabled={pending}>
-            ถัดไป
-          </button>
-        ) : (
-          <button
+          <IconTextButton
             type="button"
-            className="btn"
+            onClick={next}
+            disabled={pending}
+            icon={<ArrowRight aria-hidden="true" />}
+            label="ถัดไป"
+          />
+        ) : (
+          <IconTextButton
+            type="button"
             onClick={submit}
             disabled={pending || !planCode}
-          >
-            {pending ? "กำลังสร้าง..." : "ยืนยันและสร้างองค์กร"}
-          </button>
+            icon={
+              <Check
+                className={pending ? "animate-pulse" : undefined}
+                aria-hidden="true"
+              />
+            }
+            label={pending ? "กำลังสร้าง..." : "ยืนยันและสร้างองค์กร"}
+          />
         )}
       </div>
     </div>
