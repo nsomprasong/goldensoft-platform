@@ -55,6 +55,13 @@ export const NAV_ACTIVE_RULES: Record<
   "/users": {
     include: [/^\/users(\/|$)/],
   },
+  "/staff": {
+    include: [/^\/staff$/, /^\/staff\/new$/, /^\/staff\/[^/]+\/edit$/],
+    exclude: [/^\/staff-portfolio(\/|$)/],
+  },
+  "/staff-portfolio": {
+    include: [/^\/staff-portfolio(\/|$)/],
+  },
   "/roles": {
     include: [/^\/roles(\/|$)/],
   },

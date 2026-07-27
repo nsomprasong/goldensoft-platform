@@ -21,6 +21,7 @@ import {
   UserInvitationError,
   resendOrganizationInvitation,
 } from "@/lib/platform/user-invitations";
+import { isInvitationSendEnabled } from "@/lib/platform/system-settings";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(
@@ -35,6 +36,15 @@ export async function POST(
     return NextResponse.json({ message: TH.common.sessionExpired }, { status: 401 });
   }
   try {
+    if (!(await isInvitationSendEnabled(prisma))) {
+      return NextResponse.json(
+        {
+          message: TH.settings.invitationsDisabled,
+          code: "INVITATIONS_DISABLED",
+        },
+        { status: 403 },
+      );
+    }
     const { id } = await params;
     const actor = await loadActorAccess(prisma, user.id);
     const environment = resolveInviteEnvironment();

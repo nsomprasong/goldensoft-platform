@@ -56,10 +56,11 @@ export default async function PlansPage({
     );
   }
   const sp = await searchParams;
+  const statusFilter = sp.status ?? "ACTIVE";
   const [{ rows }, products] = await Promise.all([
     listPlans(prisma, actor, {
       productId: sp.productId,
-      statusCode: sp.status,
+      statusCode: statusFilter || undefined,
       take: 100,
     }),
     prisma.product.findMany({
@@ -101,12 +102,12 @@ export default async function PlansPage({
         </select>
         <select
           name="status"
-          defaultValue={sp.status ?? ""}
+          defaultValue={statusFilter}
           className="input max-w-[10rem]"
         >
-          <option value="">ทุกสถานะ</option>
           <option value="ACTIVE">ใช้งาน</option>
           <option value="RETIRED">เลิกใช้</option>
+          <option value="">ทุกสถานะ</option>
         </select>
         <IconTextButton
           type="submit"

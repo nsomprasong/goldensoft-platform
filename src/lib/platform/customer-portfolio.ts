@@ -166,27 +166,51 @@ export async function assignStaffToOrganization(
   }
 
   return db.$transaction(async (tx) => {
-    const created = await tx.staffOrganizationAssignment.create({
-      data: {
-        staffUserProfileId: input.staffUserProfileId,
-        organizationId: input.organizationId,
-        assignedByAuthUserId: input.actor.authUserId,
-        note: input.note?.trim() || null,
-      },
-    });
-    await writeAuditLog(tx, {
+    return createStaffOrganizationAssignment(tx, {
+      staffUserProfileId: input.staffUserProfileId,
       organizationId: input.organizationId,
-      actorAuthUserId: input.actor.authUserId,
-      actionCode: MASTER.auditActionType.STAFF_PORTFOLIO_ASSIGN,
-      entityType: "staff_organization_assignment",
-      entityId: created.id,
-      after: {
-        staffUserProfileId: input.staffUserProfileId,
-        organizationId: input.organizationId,
-      },
+      assignedByAuthUserId: input.actor.authUserId,
+      note: input.note?.trim() || null,
+      autoAssigned: false,
     });
-    return created;
   });
+}
+
+/**
+ * Bind a staff profile to a customer org (used by Super Admin assign UI and
+ * auto-bind when SALES/ACCOUNT_MANAGER creates an organization).
+ */
+export async function createStaffOrganizationAssignment(
+  db: Db,
+  input: {
+    staffUserProfileId: string;
+    organizationId: string;
+    assignedByAuthUserId: string;
+    note?: string | null;
+    autoAssigned?: boolean;
+  },
+) {
+  const created = await db.staffOrganizationAssignment.create({
+    data: {
+      staffUserProfileId: input.staffUserProfileId,
+      organizationId: input.organizationId,
+      assignedByAuthUserId: input.assignedByAuthUserId,
+      note: input.note?.trim() || null,
+    },
+  });
+  await writeAuditLog(db, {
+    organizationId: input.organizationId,
+    actorAuthUserId: input.assignedByAuthUserId,
+    actionCode: MASTER.auditActionType.STAFF_PORTFOLIO_ASSIGN,
+    entityType: "staff_organization_assignment",
+    entityId: created.id,
+    after: {
+      staffUserProfileId: input.staffUserProfileId,
+      organizationId: input.organizationId,
+      autoAssigned: input.autoAssigned === true,
+    },
+  });
+  return created;
 }
 
 export async function revokeStaffOrganizationAssignment(

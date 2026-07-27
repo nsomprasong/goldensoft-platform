@@ -3,11 +3,34 @@ import { z } from "zod";
 import type { PrismaClient } from "@prisma/client";
 
 import { TH } from "@/lib/i18n/th";
+import {
+  PLATFORM_PERMISSIONS,
+  permissionsForRoles,
+} from "@/lib/permissions/codes";
 import { writeAuditLog } from "@/lib/platform/audit";
 import { MASTER } from "@/lib/platform/master-codes";
 import { requireActiveMasterId } from "@/lib/platform/master-data";
 import type { ActorAccess } from "@/lib/platform/organizations-admin";
-import { canManageOrganization } from "@/lib/platform/organizations-admin";
+import {
+  canManageOrganization,
+  canViewOrganization,
+} from "@/lib/platform/organizations-admin";
+
+function assertBranchManage(
+  actor: ActorAccess & { organizationRoles?: string[] },
+  organizationId: string,
+) {
+  if (!canManageOrganization(actor, organizationId)) {
+    throw new BranchAdminError("FORBIDDEN", TH.common.forbidden);
+  }
+  const perms = permissionsForRoles({
+    platformRoles: actor.platformRoles,
+    organizationRoles: actor.organizationRoles ?? [],
+  });
+  if (!perms.includes(PLATFORM_PERMISSIONS.branchManage)) {
+    throw new BranchAdminError("FORBIDDEN", TH.common.forbidden);
+  }
+}
 
 export class BranchAdminError extends Error {
   readonly code:
@@ -51,11 +74,7 @@ export async function listBranches(
   actor: ActorAccess,
   organizationId: string,
 ) {
-  const canRead =
-    actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN) ||
-    actor.platformRoles.includes(MASTER.platformRole.SUPPORT) ||
-    actor.membershipOrganizationIds.includes(organizationId);
-  if (!canRead) {
+  if (!canViewOrganization(actor, organizationId)) {
     throw new BranchAdminError("FORBIDDEN", TH.common.forbidden);
   }
 
@@ -84,13 +103,11 @@ export async function listBranches(
 
 export async function createBranch(
   db: PrismaClient,
-  actor: ActorAccess,
+  actor: ActorAccess & { organizationRoles?: string[] },
   organizationId: string,
   input: z.infer<typeof createBranchSchema>,
 ) {
-  if (!canManageOrganization(actor, organizationId)) {
-    throw new BranchAdminError("FORBIDDEN", TH.common.forbidden);
-  }
+  assertBranchManage(actor, organizationId);
   const parsed = createBranchSchema.parse(input);
 
   try {
@@ -141,14 +158,12 @@ export async function createBranch(
 
 export async function updateBranch(
   db: PrismaClient,
-  actor: ActorAccess,
+  actor: ActorAccess & { organizationRoles?: string[] },
   organizationId: string,
   branchId: string,
   input: z.infer<typeof updateBranchSchema>,
 ) {
-  if (!canManageOrganization(actor, organizationId)) {
-    throw new BranchAdminError("FORBIDDEN", TH.common.forbidden);
-  }
+  assertBranchManage(actor, organizationId);
   const parsed = updateBranchSchema.parse(input);
   if (parsed.code !== undefined) {
     throw new BranchAdminError("CODE_IMMUTABLE", TH.branch.codeImmutable);
@@ -195,13 +210,11 @@ export async function updateBranch(
 
 export async function suspendBranch(
   db: PrismaClient,
-  actor: ActorAccess,
+  actor: ActorAccess & { organizationRoles?: string[] },
   organizationId: string,
   branchId: string,
 ) {
-  if (!canManageOrganization(actor, organizationId)) {
-    throw new BranchAdminError("FORBIDDEN", TH.common.forbidden);
-  }
+  assertBranchManage(actor, organizationId);
 
   const existing = await db.branch.findFirst({
     where: { id: branchId, organizationId, deletedAt: null },

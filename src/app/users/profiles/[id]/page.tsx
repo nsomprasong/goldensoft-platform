@@ -7,6 +7,10 @@ import {
   MembershipRoleAssignForm,
   RoleRevokeButton,
 } from "@/components/membership-role-form";
+import {
+  PlatformRoleAssignForm,
+  PlatformRoleRevokeButton,
+} from "@/components/platform-role-form";
 import { PlatformShell } from "@/components/platform-shell";
 import {
   AccessDenied,
@@ -118,6 +122,9 @@ export default async function UserProfileAdminPage({
   }
 
   const canAssign = permissions.includes(PLATFORM_PERMISSIONS.roleAssign);
+  const canManagePlatformRoles = actor.platformRoles.includes(
+    MASTER.platformRole.SUPER_ADMIN,
+  );
   const canManageBranchScope =
     permissions.includes(PLATFORM_PERMISSIONS.userManage) ||
     permissions.includes(PLATFORM_PERMISSIONS.roleAssign);
@@ -125,6 +132,14 @@ export default async function UserProfileAdminPage({
     authUserId: profile.authUserId,
     organizationId: ctx.activeOrganization?.id ?? null,
   });
+
+  const platformRoleOptions = canManagePlatformRoles
+    ? await prisma.platformRole.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, code: true, nameTh: true },
+      })
+    : [];
 
   const membershipsVisible = isSuper
     ? profile.memberships
@@ -220,19 +235,45 @@ export default async function UserProfileAdminPage({
       />
 
       <div className="grid gap-4">
-        <section className="card">
+        <section className="card space-y-3">
+          <h3 className="font-semibold">{TH.roles.platformRoles}</h3>
           <DetailList
             items={[
               { label: "อีเมล", value: profile.email },
               { label: "Auth User", value: profile.authUserId },
-              {
-                label: "บทบาทแพลตฟอร์ม",
-                value:
-                  profile.platformRoles.map((r) => r.role.code).join(", ") ||
-                  "—",
-              },
             ]}
           />
+          <ul className="space-y-2 text-sm">
+            {profile.platformRoles.length === 0 ? (
+              <li className="text-[var(--text-secondary)]">ยังไม่มีบทบาทแพลตฟอร์ม</li>
+            ) : (
+              profile.platformRoles.map((assignment) => (
+                <li
+                  key={assignment.id}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span>
+                    {labelRole(assignment.role.code)} · {assignment.role.nameTh}{" "}
+                    ({assignment.role.code})
+                  </span>
+                  {canManagePlatformRoles ? (
+                    <PlatformRoleRevokeButton assignmentId={assignment.id} />
+                  ) : null}
+                </li>
+              ))
+            )}
+          </ul>
+          {canManagePlatformRoles ? (
+            <PlatformRoleAssignForm
+              userProfileId={profile.id}
+              roles={platformRoleOptions}
+              assignedRoleIds={profile.platformRoles.map((row) => row.roleId)}
+            />
+          ) : (
+            <p className="text-sm text-[var(--text-secondary)]">
+              เฉพาะ Super Admin เท่านั้นที่กำหนดบทบาทแพลตฟอร์มได้
+            </p>
+          )}
         </section>
 
         {membershipsVisible.map((m) => (

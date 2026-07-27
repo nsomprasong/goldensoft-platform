@@ -112,7 +112,7 @@ export default async function StaffPortfolioPage() {
           {staffOptions.length === 0 ? (
             <EmptyState
               title={TH.staffPortfolio.selectStaffPlaceholder}
-              body="ยังไม่มีพนักงานที่ได้รับบทบาท SALES หรือ ACCOUNT_MANAGER — กำหนดบทบาทให้พนักงานก่อนที่หน้าผู้ใช้งาน"
+              body="ยังไม่มีพนักงานที่ได้รับบทบาท SALES หรือ ACCOUNT_MANAGER — ไปที่เมนู «พนักงาน GoldenSoft» เพื่อกำหนดบทบาทก่อน"
             />
           ) : (
             <StaffPortfolioAssignForm

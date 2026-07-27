@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { Plus, Shield } from "lucide-react";
+import { Pencil, Plus, Shield, ShieldCheck } from "lucide-react";
+import type { ReactNode } from "react";
 
+import { DeleteCustomRoleButton } from "@/components/delete-custom-role-button";
 import { PlatformShell } from "@/components/platform-shell";
 import {
   AccessDenied,
@@ -14,26 +16,104 @@ import { TH, labelRole } from "@/lib/i18n/th";
 import {
   PLATFORM_PERMISSIONS,
   PLATFORM_PERMISSION_LABELS,
-  permissionsForRoles,
 } from "@/lib/permissions/codes";
+import { MASTER } from "@/lib/platform/master-codes";
+import { cn } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 function CheckIcon() {
   return (
-    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--success-soft)] text-[var(--success)]" aria-hidden="true">
+    <span
+      className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--success-soft)] text-[var(--success)]"
+      aria-hidden="true"
+    >
       ✓
     </span>
   );
 }
 
+function RoleCard(props: {
+  href?: string;
+  title: string;
+  subtitle: string;
+  meta?: string;
+  badge?: string;
+  action?: ReactNode;
+}) {
+  const content = (
+    <div className="flex min-w-0 items-start gap-3">
+      <span
+        className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[#fde68a] bg-[#fffbeb] text-[#b45309]"
+        aria-hidden="true"
+      >
+        <ShieldCheck className="size-5" />
+      </span>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate font-semibold text-[var(--text-primary)]">
+            {props.title}
+          </p>
+          {props.badge ? (
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)]">
+              {props.badge}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-1 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+          {props.subtitle}
+        </p>
+        {props.meta ? (
+          <p className="mt-1 font-mono text-[length:var(--text-caption)] text-[var(--text-muted)]">
+            {props.meta}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  return (
+    <li
+      className={cn(
+        "flex flex-col gap-3 rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--card)] p-4 shadow-[var(--shadow-xs)] transition",
+        "hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-sm)]",
+        "sm:flex-row sm:items-center sm:justify-between sm:gap-4",
+      )}
+    >
+      {props.href ? (
+        <Link
+          href={props.href}
+          className="min-w-0 flex-1 rounded-[var(--radius-md)] outline-none transition-colors hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        >
+          {content}
+        </Link>
+      ) : (
+        <div className="min-w-0 flex-1">{content}</div>
+      )}
+      {props.action ? (
+        <div className="flex shrink-0 justify-end sm:justify-end">
+          {props.action}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function SoftEditLink(props: { href: string; label: string }) {
+  return (
+    <IconTextLink
+      href={props.href}
+      label={props.label}
+      size="sm"
+      icon={<Pencil className="size-3.5" aria-hidden="true" />}
+    />
+  );
+}
+
 export default async function RolesPage() {
   const ctx = await requirePlatformPage();
-  const perms = permissionsForRoles({
-    platformRoles: ctx.bundle.platformRoles,
-    organizationRoles: ctx.organizationRoles,
-  });
+  const perms = ctx.permissionCodes;
   const shellProps = {
     displayName: ctx.bundle.profile?.displayName ?? TH.common.user,
     platformRoles: ctx.bundle.platformRoles,
@@ -66,10 +146,12 @@ export default async function RolesPage() {
             : []),
         ],
       },
-      orderBy: [{ isSystem: "desc" }, { sortOrder: "asc" }],
+      orderBy: [{ isSystem: "desc" }, { isActive: "desc" }, { sortOrder: "asc" }],
     }),
   ]);
-  const isSuper = ctx.bundle.platformRoles.includes("SUPER_ADMIN");
+  const isSuper = ctx.bundle.platformRoles.includes(
+    MASTER.platformRole.SUPER_ADMIN,
+  );
   const permissionCodes = Object.values(PLATFORM_PERMISSIONS);
   const canManage = perms.includes(PLATFORM_PERMISSIONS.roleManage);
 
@@ -94,57 +176,92 @@ export default async function RolesPage() {
         }
       />
 
-      <div className="grid gap-4">
-        <section className="card">
-          <SectionHeader title={TH.roles.platformRoles} />
-          <ul className="mb-6 grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-5">
+        <section className="card space-y-4">
+          <SectionHeader
+            title={TH.roles.platformRoles}
+            description="บทบาทพนักงาน GoldenSoft ระดับแพลตฟอร์ม"
+          />
+          <ul className="grid gap-3">
             {platformRoles.map((r) => (
-              <li
+              <RoleCard
                 key={r.id}
-                className="rounded-[var(--radius-lg)] border border-[var(--border)] p-3.5"
-              >
-                <p className="font-semibold text-[var(--text-primary)]">
-                  {labelRole(r.code)}
-                </p>
-                <p className="mt-1 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
-                  {r.nameTh}
-                </p>
-                {isSuper ? (
-                  <p className="mt-1 text-[length:var(--text-caption)] text-[var(--text-muted)]">
-                    {r.code}
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-
-          <SectionHeader title={TH.roles.organizationRoles} />
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {organizationRoles.map((r) => (
-              <li key={r.id}>
-                <Link
-                  href={`/roles/${r.id}`}
-                  className="block rounded-[var(--radius-lg)] border border-[var(--border)] p-3.5 transition hover:border-[var(--border-strong)]"
-                >
-                  <p className="font-semibold text-[var(--text-primary)]">
-                    {r.nameTh || labelRole(r.code)}
-                  </p>
-                  <p className="mt-1 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
-                    {r.isSystem ? "บทบาทระบบ" : "บทบาทกำหนดเอง"}
-                    {r.isActive ? "" : " · ปิดใช้งาน"}
-                  </p>
-                  {isSuper ? (
-                    <p className="mt-1 text-[length:var(--text-caption)] text-[var(--text-muted)]">
-                      {r.code}
-                    </p>
-                  ) : null}
-                </Link>
-              </li>
+                href={isSuper ? `/roles/platform/${r.id}` : undefined}
+                title={labelRole(r.code)}
+                subtitle={r.nameTh}
+                meta={isSuper ? r.code : undefined}
+                badge="แพลตฟอร์ม"
+                action={
+                  isSuper ? (
+                    <SoftEditLink
+                      href={`/roles/platform/${r.id}/edit`}
+                      label={
+                        r.code === MASTER.platformRole.SUPER_ADMIN
+                          ? "แก้ไขคำอธิบาย"
+                          : "แก้ไขสิทธิ์"
+                      }
+                    />
+                  ) : null
+                }
+              />
             ))}
           </ul>
         </section>
 
-        <section className="card">
+        <section className="card space-y-4">
+          <SectionHeader
+            title={TH.roles.organizationRoles}
+            description="บทบาทภายในองค์กรลูกค้า — บทบาทกำหนดเองลบได้เมื่อไม่มีผู้ใช้หรือคำเชิญอ้างอิง"
+          />
+          <ul className="grid gap-3">
+            {organizationRoles.map((r) => {
+              const canEditRole =
+                (r.isSystem && isSuper) ||
+                (!r.isSystem &&
+                  canManage &&
+                  r.organizationId === ctx.activeOrganization?.id);
+              const canDeleteRole =
+                !r.isSystem &&
+                canManage &&
+                r.organizationId === ctx.activeOrganization?.id;
+              return (
+                <RoleCard
+                  key={r.id}
+                  href={`/roles/${r.id}`}
+                  title={r.nameTh || labelRole(r.code)}
+                  subtitle={
+                    `${r.isSystem ? "บทบาทระบบ" : "บทบาทกำหนดเอง"}${
+                      r.isActive ? "" : " · ปิดใช้งาน"
+                    }`
+                  }
+                  meta={isSuper ? r.code : undefined}
+                  badge={r.isSystem ? "ระบบ" : "กำหนดเอง"}
+                  action={
+                    canEditRole || canDeleteRole ? (
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {canEditRole ? (
+                          <SoftEditLink
+                            href={`/roles/${r.id}/edit`}
+                            label="แก้ไขสิทธิ์"
+                          />
+                        ) : null}
+                        {canDeleteRole ? (
+                          <DeleteCustomRoleButton
+                            roleId={r.id}
+                            roleName={r.nameTh || r.code}
+                            size="sm"
+                          />
+                        ) : null}
+                      </div>
+                    ) : null
+                  }
+                />
+              );
+            })}
+          </ul>
+        </section>
+
+        <section className="card space-y-4">
           <SectionHeader
             title={TH.roles.permissionMatrix}
             description="รายการสิทธิ์ที่ระบบรองรับ จัดกลุ่มตามการใช้งาน"

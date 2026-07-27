@@ -1,14 +1,16 @@
-import { ArrowLeft, Pencil } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Layers, Pencil, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 
-import {
-  ProductStatusActions,
-} from "@/components/product-form";
+import { ProductStatusActions } from "@/components/product-form";
 import { PlatformShell } from "@/components/platform-shell";
 import {
   AccessDenied,
   DetailList,
+  EmptyState,
+  MobileRecordCard,
   PageHeader,
+  SectionHeader,
   StatusBadge,
 } from "@/components/ui/admin-ui";
 import { IconTextLink } from "@/components/ui/labeled-icon-button";
@@ -61,7 +63,9 @@ export default async function ProductDetailPage({
   } catch {
     notFound();
   }
-  const canManage = perms.includes(PLATFORM_PERMISSIONS.productManage);
+  const canManageProduct = perms.includes(PLATFORM_PERMISSIONS.productManage);
+  const canReadPlans = perms.includes(PLATFORM_PERMISSIONS.planRead);
+  const canManagePlans = perms.includes(PLATFORM_PERMISSIONS.planManage);
 
   return (
     <PlatformShell {...shellProps}>
@@ -82,7 +86,7 @@ export default async function ProductDetailPage({
               label={TH.common.back}
               icon={<ArrowLeft className="size-5" />}
             />
-            {canManage ? (
+            {canManageProduct ? (
               <IconTextLink
                 href={`/products/${product.id}/edit`}
                 label={TH.common.edit}
@@ -92,7 +96,7 @@ export default async function ProductDetailPage({
           </div>
         }
       />
-      <section className="card space-y-4">
+      <section className="card mb-4 space-y-4">
         <DetailList
           items={[
             { label: "รหัส", value: product.code },
@@ -108,13 +112,83 @@ export default async function ProductDetailPage({
             { label: "คำอธิบาย", value: product.description ?? "—" },
           ]}
         />
-        {canManage ? (
+        {canManageProduct ? (
           <ProductStatusActions
             productId={product.id}
             statusCode={product.status.code}
           />
         ) : null}
       </section>
+
+      {canReadPlans ? (
+        <section id="plans" className="card scroll-mt-24 space-y-4">
+          <SectionHeader
+            title="แพ็กเกจของผลิตภัณฑ์นี้"
+            description={`ทั้งหมด ${product.plans.length} รายการ`}
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <IconTextLink
+                  href={`/plans?productId=${product.id}&status=`}
+                  variant="outline"
+                  size="sm"
+                  label="ดูในหน้าแพ็กเกจ"
+                  icon={<Layers className="size-4" />}
+                />
+                {canManagePlans ? (
+                  <IconTextLink
+                    href={`/plans/new?productId=${product.id}`}
+                    size="sm"
+                    label="เพิ่มแพ็กเกจ"
+                    icon={<Plus className="size-4" />}
+                  />
+                ) : null}
+              </div>
+            }
+          />
+          {product.plans.length === 0 ? (
+            <EmptyState
+              title="ยังไม่มีแพ็กเกจ"
+              body="สร้างแพ็กเกจสำหรับผลิตภัณฑ์นี้เพื่อให้ลูกค้าเลือกสมัครได้"
+              action={
+                canManagePlans ? (
+                  <IconTextLink
+                    href={`/plans/new?productId=${product.id}`}
+                    label="เพิ่มแพ็กเกจ"
+                    icon={<Plus className="size-5" />}
+                  />
+                ) : undefined
+              }
+            />
+          ) : (
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {product.plans.map((plan) => {
+                const latest = plan.versions[0];
+                return (
+                  <li key={plan.id}>
+                    <Link href={`/plans/${plan.id}`} className="block">
+                      <MobileRecordCard
+                        title={plan.name}
+                        subtitle={plan.code}
+                        status={
+                          <StatusBadge
+                            label={labelStatus(plan.status.code)}
+                            code={plan.status.code}
+                          />
+                        }
+                        meta={
+                          latest
+                            ? `v${latest.versionNumber} · ${Number(latest.priceAmount).toLocaleString("th-TH")} ${latest.currency} · ${plan._count.subscriptions} การสมัคร`
+                            : `${plan._count.subscriptions} การสมัคร`
+                        }
+                      />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ) : null}
     </PlatformShell>
   );
 }

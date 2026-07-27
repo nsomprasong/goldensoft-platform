@@ -42,14 +42,17 @@ export function LabeledIconButton({
         variant={variant}
         aria-label={label}
         title={title}
-        className={cn("size-10 shrink-0 rounded-[0.75rem]", className)}
+        className={cn(
+          "size-10 shrink-0 rounded-[var(--radius-md)]",
+          className,
+        )}
         {...props}
       >
         {icon}
       </Button>
       <span
         className={cn(
-          "w-full text-center text-[0.65rem] font-medium leading-tight text-[var(--muted-foreground)]",
+          "w-full text-center text-[length:var(--text-caption)] font-medium leading-tight text-[var(--text-muted)]",
           labelClassName,
         )}
       >
@@ -58,6 +61,10 @@ export function LabeledIconButton({
     </div>
   );
 }
+
+/** Soft primary chip used for dense row actions (invite / reset / etc.). */
+export const labeledActionSoftClassName =
+  "border-[var(--page-header-border)] bg-[var(--primary-soft)] text-[var(--primary)] shadow-[var(--shadow-xs)] hover:border-[var(--primary)]/40 hover:bg-[var(--primary-soft)] hover:text-[var(--primary-hover)]";
 
 export function LabeledIconLink({
   href,
@@ -86,7 +93,10 @@ export function LabeledIconLink({
         asChild
         size={size}
         variant={variant}
-        className={cn("size-10 shrink-0 rounded-[0.75rem]", className)}
+        className={cn(
+          "size-10 shrink-0 rounded-[var(--radius-md)]",
+          className,
+        )}
       >
         <Link href={href} aria-label={label} title={title}>
           {icon}
@@ -94,7 +104,7 @@ export function LabeledIconLink({
       </Button>
       <span
         className={cn(
-          "w-full text-center text-[0.65rem] font-medium leading-tight text-[var(--muted-foreground)]",
+          "w-full text-center text-[length:var(--text-caption)] font-medium leading-tight text-[var(--text-muted)]",
           labelClassName,
         )}
       >

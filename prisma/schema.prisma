@@ -45,8 +45,28 @@ model PlatformRole {
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   assignments PlatformRoleAssignment[]
+  permissions PlatformRolePermission[]
 
   @@map("platform_roles")
+  @@schema("platform")
+}
+
+model PlatformRolePermission {
+  id             String    @id @default(uuid()) @db.Uuid
+  platformRoleId String    @map("platform_role_id") @db.Uuid
+  permissionId   String    @map("permission_id") @db.Uuid
+  grantedAt      DateTime  @default(now()) @map("granted_at") @db.Timestamptz(6)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  platformRole PlatformRole @relation(fields: [platformRoleId], references: [id], onDelete: Cascade)
+  permission   Permission   @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+
+  @@unique([platformRoleId, permissionId])
+  @@index([platformRoleId])
+  @@index([permissionId])
+  @@map("platform_role_permissions")
   @@schema("platform")
 }
 
@@ -165,7 +185,8 @@ model Permission {
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  rolePermissions OrganizationRolePermission[]
+  rolePermissions         OrganizationRolePermission[]
+  platformRolePermissions PlatformRolePermission[]
 
   @@index([productCode, resource])
   @@index([isActive])
@@ -470,6 +491,8 @@ model UserProfile {
   id             String   @id @default(uuid()) @db.Uuid
   authUserId     String   @unique @map("auth_user_id") @db.Uuid
   email          String   @unique
+  /// E.164 mobile when the account uses phone login (optional).
+  phone          String?  @unique
   displayName    String   @map("display_name")
   statusId       String   @map("status_id") @db.Uuid
   sessionVersion Int      @default(0) @map("session_version")
@@ -485,9 +508,37 @@ model UserProfile {
   organizationProductMembers OrganizationProductMembership[]
   invitationsSent            UserInvitation[]              @relation("InvitationInviter")
   staffPortfolioAssignments  StaffOrganizationAssignment[] @relation("StaffPortfolioAssignments")
+  passwordResets             UserPasswordReset[]           @relation("UserPasswordResets")
+  staffProfile               StaffProfile?
 
   @@index([statusId])
   @@map("user_profiles")
+  @@schema("platform")
+}
+
+/**
+ * Personal record for GoldenSoft employees (civil-ID style basics).
+ * Kept off UserProfile so central auth identity stays lean — not HR payroll.
+ */
+model StaffProfile {
+  id            String   @id @default(uuid()) @db.Uuid
+  userProfileId String   @unique @map("user_profile_id") @db.Uuid
+  titleCode     String   @map("title_code")
+  firstNameTh   String   @map("first_name_th")
+  lastNameTh    String   @map("last_name_th")
+  firstNameEn   String?  @map("first_name_en")
+  lastNameEn    String?  @map("last_name_en")
+  nationalId    String?  @unique @map("national_id")
+  dateOfBirth   DateTime @map("date_of_birth") @db.Date
+  addressLine   String?  @map("address_line")
+  phone         String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  userProfile UserProfile @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+
+  @@index([nationalId])
+  @@map("staff_profiles")
   @@schema("platform")
 }
 
@@ -528,6 +579,8 @@ model Organization {
   id           String    @id @default(uuid()) @db.Uuid
   customerCode String    @unique @map("customer_code")
   slug         String    @unique
+  /// LEGAL_ENTITY (นิติบุคคล) or INDIVIDUAL (บุคคลธรรมดา) — used for tax invoices.
+  entityType   String    @default("LEGAL_ENTITY") @map("entity_type")
   legalName    String    @map("legal_name")
   displayName  String    @map("display_name")
   nameEn       String?   @map("name_en")
@@ -536,6 +589,12 @@ model Organization {
   address      String?
   statusId     String    @map("status_id") @db.Uuid
   taxId        String?   @map("tax_id")
+  /// Individual customer fields (invoice / civil-ID style). Null for legal entities.
+  titleCode    String?   @map("title_code")
+  firstNameTh  String?   @map("first_name_th")
+  lastNameTh   String?   @map("last_name_th")
+  nationalId   String?   @map("national_id")
+  dateOfBirth  DateTime? @map("date_of_birth") @db.Date
   timezone     String    @default("Asia/Bangkok")
   currency     String    @default("THB")
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -562,6 +621,8 @@ model Organization {
   staffPortfolioAssignments StaffOrganizationAssignment[]
 
   @@index([statusId])
+  @@index([entityType])
+  @@index([nationalId])
   @@map("organizations")
   @@schema("platform")
 }
@@ -1413,5 +1474,42 @@ model StaffOrganizationAssignment {
   @@index([organizationId])
   @@index([staffUserProfileId, organizationId])
   @@map("staff_organization_assignments")
+  @@schema("platform")
+}
+
+// ——— Administrator-initiated password resets ———
+// An operator with platform.user.password_reset opens a reset window; the user
+// then signs in with an empty password once to reach the set-password screen.
+// A partial unique index (SQL only) keeps at most one open row per profile.
+
+model UserPasswordReset {
+  id                    String    @id @default(uuid()) @db.Uuid
+  userProfileId         String    @map("user_profile_id") @db.Uuid
+  requestedByAuthUserId String?   @map("requested_by_auth_user_id") @db.Uuid
+  requestedAt           DateTime  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  expiresAt             DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt            DateTime? @map("consumed_at") @db.Timestamptz(6)
+  cancelledAt           DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  note                  String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  userProfile UserProfile @relation("UserPasswordResets", fields: [userProfileId], references: [id], onDelete: Cascade)
+
+  @@index([userProfileId])
+  @@index([expiresAt])
+  @@map("user_password_resets")
+  @@schema("platform")
+}
+
+/// Runtime product toggles (SUPER_ADMIN). Orthogonal to deploy env like AUTH_INVITE_MODE.
+model SystemSetting {
+  key                 String   @id
+  valueJson           Json     @map("value_json") @db.JsonB
+  updatedByAuthUserId String?  @map("updated_by_auth_user_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("system_settings")
   @@schema("platform")
 }

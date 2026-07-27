@@ -61,8 +61,47 @@ describe("Phase 5 organization admin rules", () => {
     );
   });
 
+  it("allows SALES to create organizations", () => {
+    assert.equal(
+      canCreateOrganization(actor({ platformRoles: ["SALES"] })),
+      true,
+    );
+  });
+
+  it("allows ACCOUNT_MANAGER to create organizations", () => {
+    assert.equal(
+      canCreateOrganization(actor({ platformRoles: ["ACCOUNT_MANAGER"] })),
+      true,
+    );
+  });
+
   it("rejects OWNER creating organizations", () => {
     assert.equal(canCreateOrganization(actor()), false);
+  });
+
+  it("allows SALES to manage only assigned portfolio orgs", () => {
+    assert.equal(
+      canManageOrganization(
+        actor({
+          platformRoles: ["SALES"],
+          membershipOrganizationIds: [],
+          managedOrganizationIds: [ORG_A],
+        }),
+        ORG_A,
+      ),
+      true,
+    );
+    assert.equal(
+      canManageOrganization(
+        actor({
+          platformRoles: ["SALES"],
+          membershipOrganizationIds: [],
+          managedOrganizationIds: [ORG_A],
+        }),
+        ORG_B,
+      ),
+      false,
+    );
   });
 
   it("rejects duplicate-looking empty codes via schema", () => {
@@ -221,8 +260,24 @@ describe("Phase 5 permissions and Thai UI", () => {
 
   it("nav is Thai and role-filtered", () => {
     assert.ok(PLATFORM_NAV.some((i) => i.label === TH.nav.users));
+    assert.ok(PLATFORM_NAV.some((i) => i.href === "/staff"));
+    assert.ok(PLATFORM_NAV.some((i) => i.label === TH.nav.staff));
     assert.ok(PLATFORM_NAV.some((i) => i.label === TH.nav.roles));
     assert.ok(PLATFORM_NAV.some((i) => i.label === TH.nav.auditLogs));
+
+    const sales = filterNavForRoles({
+      platformRoles: ["SALES"],
+      organizationRoles: [],
+    });
+    assert.equal(
+      sales.some((i) => i.href === "/staff"),
+      false,
+    );
+    const superNav = filterNavForRoles({
+      platformRoles: ["SUPER_ADMIN"],
+      organizationRoles: [],
+    });
+    assert.ok(superNav.some((i) => i.href === "/staff"));
 
     const billing = filterNavForRoles({
       platformRoles: [],

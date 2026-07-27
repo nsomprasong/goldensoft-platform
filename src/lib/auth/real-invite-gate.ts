@@ -26,7 +26,6 @@ export type RealInviteDecision =
       email: string;
       code:
         | "REAL_INVITE_CONFIRMATION_INVALID"
-        | "REAL_INVITE_TEST_EMAIL_REQUIRED"
         | "REAL_INVITE_EMAIL_NOT_ALLOWED";
       message: string;
     };
@@ -83,7 +82,7 @@ export function evaluateRealInviteSend(input: {
       email,
       code: "REAL_INVITE_PREVIEW",
       message:
-        "โหมดตัวอย่าง: ยังไม่ส่งอีเมลจริง ตั้ง AUTH_REAL_INVITE_CONFIRM=SEND_ONE_REAL_INVITE และอีเมลทดสอบก่อน",
+        "โหมดตัวอย่าง: ยังไม่ส่งอีเมลจริง ตั้ง AUTH_REAL_INVITE_CONFIRM=SEND_ONE_REAL_INVITE ก่อน",
       writeOperations: "NONE",
     };
   }
@@ -97,21 +96,15 @@ export function evaluateRealInviteSend(input: {
     };
   }
 
-  if (!gate.testEmailNormalized) {
-    return {
-      action: "reject",
-      email,
-      code: "REAL_INVITE_TEST_EMAIL_REQUIRED",
-      message: "ต้องกำหนด AUTH_REAL_INVITE_TEST_EMAIL สำหรับการทดสอบส่งจริง",
-    };
-  }
-
-  if (email !== gate.testEmailNormalized) {
+  // Optional allowlist: when set, only that one mailbox may receive real invites.
+  // When omitted (after confirm), any email is allowed — normal production use.
+  if (gate.testEmailNormalized && email !== gate.testEmailNormalized) {
     return {
       action: "reject",
       email,
       code: "REAL_INVITE_EMAIL_NOT_ALLOWED",
-      message: "อนุญาตส่งคำเชิญจริงเฉพาะอีเมลทดสอบที่กำหนดเท่านั้น",
+      message:
+        "อนุญาตส่งคำเชิญจริงเฉพาะอีเมลใน AUTH_REAL_INVITE_TEST_EMAIL — ล้างค่านี้ถ้าต้องการส่งได้ทุกอีเมล",
     };
   }
 

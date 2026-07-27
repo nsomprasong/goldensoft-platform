@@ -20,7 +20,10 @@ import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH, labelStatus } from "@/lib/i18n/th";
 import { logServerTiming, measure } from "@/lib/perf/server-timing";
-import { listOrganizationsForActor } from "@/lib/platform/organizations-admin";
+import {
+  canCreateOrganization,
+  listOrganizationsForActor,
+} from "@/lib/platform/organizations-admin";
 import {
   PLATFORM_PERMISSIONS,
   permissionsForRoles,
@@ -83,7 +86,7 @@ export default async function OrganizationsPage({
   const nextQs = new URLSearchParams(qs);
   nextQs.set("page", String(page + 1));
 
-  const canCreate = actor.platformRoles.includes("SUPER_ADMIN");
+  const canCreate = canCreateOrganization(actor);
 
   return (
     <PlatformShell {...shellProps}>

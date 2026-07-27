@@ -3,7 +3,12 @@ import { z } from "zod";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { TH } from "@/lib/i18n/th";
+import {
+  PLATFORM_PERMISSIONS,
+  permissionsForRoles,
+} from "@/lib/permissions/codes";
 import { writeAuditLog } from "@/lib/platform/audit";
+import { createStaffOrganizationAssignment } from "@/lib/platform/customer-portfolio";
 import { MASTER } from "@/lib/platform/master-codes";
 import { requireActiveMasterId } from "@/lib/platform/master-data";
 
@@ -25,15 +30,45 @@ export class OrganizationAdminError extends Error {
 
 export const createOrganizationSchema = z.object({
   customerCode: z.string().trim().min(2).max(64),
-  slug: z.string().trim().min(2).max(64).regex(/^[a-z0-9-]+$/),
+  slug: z
+    .string()
+    .trim()
+    .min(2)
+    .max(64)
+    .regex(/^[a-z0-9-]+$/)
+    .optional(),
   displayName: z.string().trim().min(1).max(200),
-  legalName: z.string().trim().min(1).max(200),
+  legalName: z.string().trim().min(1).max(200).optional(),
   nameEn: z.string().trim().max(200).optional().nullable(),
   taxId: z.string().trim().max(32).optional().nullable(),
   email: z.string().trim().email().optional().nullable(),
   phone: z.string().trim().max(40).optional().nullable(),
   address: z.string().trim().max(500).optional().nullable(),
 });
+
+/** URL/internal key derived from customer code — not shown in onboarding UI. */
+export function organizationSlugFromCode(customerCode: string): string {
+  const base = customerCode
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 56);
+  return base.length >= 2 ? base : "org";
+}
+
+export async function allocateUniqueOrganizationSlug(
+  db: { organization: { findUnique: (args: { where: { slug: string } }) => Promise<{ id: string } | null> } },
+  customerCode: string,
+): Promise<string> {
+  const base = organizationSlugFromCode(customerCode);
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const slug = attempt === 0 ? base : `${base}-${attempt + 1}`.slice(0, 64);
+    const existing = await db.organization.findUnique({ where: { slug } });
+    if (!existing) return slug;
+  }
+  return `${base}-${Date.now().toString(36)}`.slice(0, 64);
+}
 
 export const updateOrganizationSchema = z.object({
   displayName: z.string().trim().min(1).max(200).optional(),
@@ -59,11 +94,24 @@ export function canManageOrganization(
   organizationId: string,
 ): boolean {
   if (actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN)) return true;
-  return actor.membershipOrganizationIds.includes(organizationId);
+  if (actor.membershipOrganizationIds.includes(organizationId)) return true;
+  return actor.managedOrganizationIds.includes(organizationId);
 }
 
 export function canCreateOrganization(actor: ActorAccess): boolean {
-  return actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN);
+  if (actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN)) return true;
+  return permissionsForRoles({
+    platformRoles: actor.platformRoles,
+    organizationRoles: [],
+  }).includes(PLATFORM_PERMISSIONS.organizationCreate);
+}
+
+export function canViewOrganization(
+  actor: ActorAccess,
+  organizationId: string,
+): boolean {
+  if (canListAllOrganizations(actor)) return true;
+  return canManageOrganization(actor, organizationId);
 }
 
 export function canListAllOrganizations(actor: ActorAccess): boolean {
@@ -85,7 +133,13 @@ export async function listOrganizationsForActor(
 ) {
   const where: Prisma.OrganizationWhereInput = { deletedAt: null };
   if (!canListAllOrganizations(actor)) {
-    where.id = { in: actor.membershipOrganizationIds };
+    const visibleIds = [
+      ...new Set([
+        ...actor.membershipOrganizationIds,
+        ...actor.managedOrganizationIds,
+      ]),
+    ];
+    where.id = { in: visibleIds.length > 0 ? visibleIds : ["00000000-0000-0000-0000-000000000000"] };
   }
   if (filters.statusCode) {
     where.status = { code: filters.statusCode };
@@ -146,6 +200,9 @@ export async function createOrganization(
     throw new OrganizationAdminError("FORBIDDEN", TH.common.forbidden);
   }
   const parsed = createOrganizationSchema.parse(input);
+  const slug =
+    parsed.slug ?? (await allocateUniqueOrganizationSlug(db, parsed.customerCode));
+  const legalName = parsed.legalName?.trim() || parsed.displayName;
 
   try {
     return await db.$transaction(async (tx) => {
@@ -157,11 +214,14 @@ export async function createOrganization(
       const created = await tx.organization.create({
         data: {
           customerCode: parsed.customerCode,
-          slug: parsed.slug,
+          slug,
           displayName: parsed.displayName,
-          legalName: parsed.legalName,
+          legalName,
           taxId: parsed.taxId ?? null,
-          // nameEn/email/phone/address require migration 0002
+          nameEn: parsed.nameEn ?? null,
+          email: parsed.email ?? null,
+          phone: parsed.phone ?? null,
+          address: parsed.address ?? null,
           statusId,
         },
       });
@@ -176,6 +236,27 @@ export async function createOrganization(
           displayName: created.displayName,
         },
       });
+
+      const shouldAutoBind =
+        !actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN) &&
+        (actor.platformRoles.includes(MASTER.platformRole.SALES) ||
+          actor.platformRoles.includes(MASTER.platformRole.ACCOUNT_MANAGER));
+      if (shouldAutoBind) {
+        const profile = await tx.userProfile.findUnique({
+          where: { authUserId: actor.authUserId },
+          select: { id: true },
+        });
+        if (profile) {
+          await createStaffOrganizationAssignment(tx, {
+            staffUserProfileId: profile.id,
+            organizationId: created.id,
+            assignedByAuthUserId: actor.authUserId,
+            note: "ผูกอัตโนมัติเมื่อพนักงานขายสร้างองค์กรลูกค้า",
+            autoAssigned: true,
+          });
+        }
+      }
+
       return created;
     });
   } catch (error) {

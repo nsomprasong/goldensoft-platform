@@ -1,10 +1,13 @@
 import { Settings } from "lucide-react";
 
 import { PlatformShell } from "@/components/platform-shell";
+import { SystemSettingsToggles } from "@/components/system-settings-toggles";
 import { DetailList, PageHeader, SectionHeader } from "@/components/ui/admin-ui";
 import { AccessDenied } from "@/components/ui/admin-ui";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
+import { getAuthFlexibilitySettings } from "@/lib/platform/system-settings";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,15 @@ export default async function SettingsPage() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const redirectPath =
     process.env.SUPABASE_INVITE_REDIRECT_PATH ?? "/auth/accept-invite";
+  let authSettings = {
+    invitationsSendEnabled: true,
+    phoneLoginEnabled: false,
+  };
+  try {
+    authSettings = await getAuthFlexibilitySettings(prisma);
+  } catch {
+    // Table may not be migrated yet — show safe defaults.
+  }
 
   return (
     <PlatformShell {...shellProps}>
@@ -46,6 +58,14 @@ export default async function SettingsPage() {
       />
 
       <div className="grid gap-4">
+        <section className="card">
+          <SectionHeader
+            title={TH.settings.authFlexibilityTitle}
+            description={TH.settings.authFlexibilityBody}
+          />
+          <SystemSettingsToggles initial={authSettings} />
+        </section>
+
         <section className="card">
           <SectionHeader title="ข้อมูลระบบ" />
           <DetailList
@@ -77,10 +97,19 @@ export default async function SettingsPage() {
         </section>
 
         <section className="card">
-          <SectionHeader title="การเชิญผู้ใช้งาน" />
+          <SectionHeader
+            title="การเชิญผู้ใช้งาน (ค่าแวดล้อม)"
+            description="โหมด mock/real ตั้งจาก environment ของเซิร์ฟเวอร์ — แยกจากสวิตช์เปิด-ปิดด้านบน"
+          />
           <DetailList
             items={[
               { label: "โหมดคำเชิญ", value: inviteMode },
+              {
+                label: "ส่งคำเชิญ (สวิตช์ระบบ)",
+                value: authSettings.invitationsSendEnabled
+                  ? TH.settings.statusOn
+                  : TH.settings.statusOff,
+              },
               { label: "URL แอป", value: appUrl },
               { label: "เส้นทางรับคำเชิญ", value: redirectPath },
             ]}
@@ -124,9 +153,6 @@ export default async function SettingsPage() {
               },
             ]}
           />
-          <p className="mt-3 text-[length:var(--text-helper)] text-[var(--text-muted)]">
-            การแก้ค่าเริ่มต้นอัตโนมัติจากหน้านี้: ยังไม่เปิดใช้งาน
-          </p>
         </section>
 
         <section className="card">

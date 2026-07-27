@@ -114,6 +114,16 @@ describe("Phase 5C real invite environment", () => {
     assert.equal(env.redirectPath, "/auth/accept-invite");
     assert.equal(env.appUrl.href.endsWith("/"), true);
   });
+
+  it("allows LAN IP app URL in development", () => {
+    const env = resolveInviteEnvironment({
+      NODE_ENV: "development",
+      AUTH_INVITE_MODE: "mock",
+      NEXT_PUBLIC_APP_URL: "http://192.168.1.177:3000",
+      SUPABASE_INVITE_REDIRECT_PATH: "/auth/accept-invite",
+    });
+    assert.equal(env.redirectTo, "http://192.168.1.177:3000/auth/accept-invite");
+  });
 });
 
 describe("Phase 5C first-real-invite safety gate", () => {
@@ -145,13 +155,25 @@ describe("Phase 5C first-real-invite safety gate", () => {
     }
   });
 
-  it("allows flow only when confirmation and test email match", () => {
+  it("allows flow when confirmation and test email match", () => {
     const decision = evaluateRealInviteSend({
       mode: "real",
       email: "Tester@Example.com",
       env: {
         AUTH_REAL_INVITE_CONFIRM: REAL_INVITE_CONFIRM_VALUE,
         AUTH_REAL_INVITE_TEST_EMAIL: "tester@example.com",
+      },
+    });
+    assert.equal(decision.action, "allow");
+  });
+
+  it("allows any email when confirmation is set and allowlist is empty", () => {
+    const decision = evaluateRealInviteSend({
+      mode: "real",
+      email: "anyone@example.com",
+      env: {
+        AUTH_REAL_INVITE_CONFIRM: REAL_INVITE_CONFIRM_VALUE,
+        AUTH_REAL_INVITE_TEST_EMAIL: "",
       },
     });
     assert.equal(decision.action, "allow");

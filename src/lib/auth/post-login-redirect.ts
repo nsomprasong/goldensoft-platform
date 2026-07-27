@@ -1,3 +1,6 @@
+import { filterNavForRoles, PLATFORM_NAV } from "@/lib/auth/access";
+import { permissionsForRoles } from "@/lib/permissions/codes";
+
 /**
  * Safe post-login redirects for Central Login.
  * Relative paths always allowed; absolute URLs must match CUSTOMER_APP_ORIGINS.
@@ -33,4 +36,55 @@ export function resolvePostLoginRedirect(raw: string | null | undefined): string
     return fallback;
   }
   return fallback;
+}
+
+/**
+ * Drop `next` targets the signed-in user cannot open (e.g. /staff after a
+ * Super Admin session expired on that URL and a SALES user signed in).
+ */
+export function resolveAccessiblePostLoginPath(
+  rawPath: string,
+  input: {
+    platformRoles: string[];
+    organizationRoles: string[];
+  },
+): string {
+  const path = resolvePostLoginRedirect(rawPath);
+  if (!path.startsWith("/") || path.startsWith("//")) {
+    return path; // absolute customer-app URL already validated
+  }
+  const pathname = path.split("?")[0] ?? "/";
+  if (
+    pathname === "/" ||
+    pathname.startsWith("/select-organization") ||
+    pathname.startsWith("/organizations/new") ||
+    pathname.startsWith("/access")
+  ) {
+    return path;
+  }
+
+  const permissions = permissionsForRoles({
+    platformRoles: input.platformRoles,
+    organizationRoles: input.organizationRoles,
+  });
+  const allowedNav = filterNavForRoles({
+    platformRoles: input.platformRoles,
+    organizationRoles: input.organizationRoles,
+    permissions,
+    items: PLATFORM_NAV,
+  });
+
+  const matched = allowedNav.some((item) => {
+    if (item.href === "/") return false;
+    return pathname === item.href || pathname.startsWith(`${item.href}/`);
+  });
+  // Also allow org detail / branch paths under organizations when user can read orgs.
+  if (
+    !matched &&
+    pathname.startsWith("/organizations/") &&
+    permissions.includes("platform.organization.read")
+  ) {
+    return path;
+  }
+  return matched ? path : "/";
 }

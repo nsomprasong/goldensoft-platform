@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { PlatformShell } from "@/components/platform-shell";
 import {
+  AccessDenied,
   DetailList,
   PageHeader,
   SectionHeader,
@@ -18,7 +19,10 @@ import {
   detectEntitlementConsistency,
   listEntitlementsForOrganization,
 } from "@/lib/platform/entitlements";
-import { canManageOrganization } from "@/lib/platform/organizations-admin";
+import {
+  canManageOrganization,
+  canViewOrganization,
+} from "@/lib/platform/organizations-admin";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -74,22 +78,34 @@ export default async function OrganizationDetailPage({ params }: Props) {
 
   if (!org || org.deletedAt) notFound();
 
+  const shellProps = {
+    displayName: ctx.bundle.profile?.displayName ?? TH.common.user,
+    platformRoles: ctx.bundle.platformRoles,
+    organizationRoles: ctx.organizationRoles,
+    organizations: ctx.bundle.memberships.map((m) => ({
+      id: m.organizationId,
+      name: m.organizationName,
+    })),
+    branches: ctx.branches,
+    activeOrganization: ctx.activeOrganization,
+    activeBranch: ctx.activeBranch,
+    contextMode: ctx.contextMode,
+    canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
+  };
+
+  if (!canViewOrganization(actor, id)) {
+    return (
+      <PlatformShell {...shellProps}>
+        <AccessDenied title={TH.access.deniedTitle} body={TH.access.deniedBody} />
+      </PlatformShell>
+    );
+  }
+
   const canManage = canManageOrganization(actor, id);
   const isSuper = actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN);
 
   return (
-    <PlatformShell
-      displayName={ctx.bundle.profile?.displayName ?? TH.common.user}
-      platformRoles={ctx.bundle.platformRoles}
-      organizationRoles={ctx.organizationRoles}
-      organizations={ctx.bundle.memberships.map((m) => ({
-        id: m.organizationId,
-        name: m.organizationName,
-      }))}
-      branches={ctx.branches}
-      activeOrganization={ctx.activeOrganization}
-      activeBranch={ctx.activeBranch}
-    >
+    <PlatformShell {...shellProps}>
       <div className="grid gap-4">
         <section className="card">
           <PageHeader

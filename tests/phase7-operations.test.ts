@@ -112,7 +112,23 @@ describe("Phase 7 custom roles and assignment surface", () => {
     assert.ok(exists("src/app/roles/new/page.tsx"));
     assert.ok(exists("src/app/roles/[id]/page.tsx"));
     assert.ok(exists("src/app/roles/[id]/edit/page.tsx"));
-    assert.match(read("src/lib/platform/custom-roles.ts"), /SYSTEM_ROLE_IMMUTABLE/);
+    assert.match(
+      read("src/lib/platform/custom-roles.ts"),
+      /SYSTEM_ROLE_IMMUTABLE|allowSystemPermissionEdit|resolveActorPermissionCodes/,
+    );
+    assert.match(
+      read("src/app/roles/[id]/edit/page.tsx"),
+      /allowSystemPermissionEdit|แก้ไขสิทธิ์/,
+    );
+    assert.ok(exists("src/app/roles/platform/[id]/edit/page.tsx"));
+    assert.match(
+      read("src/lib/platform/platform-roles.ts"),
+      /updatePlatformRole|loadPlatformRolePermissionOverrides/,
+    );
+    assert.match(
+      read("prisma/migrations/0012_platform_role_permissions/migration.sql"),
+      /platform_role_permissions/,
+    );
     assert.match(read("src/lib/platform/custom-roles.ts"), /organizationId: input.organizationId/);
     assert.match(
       read("src/lib/platform/membership-roles.ts"),
@@ -176,6 +192,19 @@ describe("Phase 7 organization selector and onboarding", () => {
     assert.match(
       read("src/app/organizations/new/page.tsx"),
       /OrganizationOnboardingWizard/,
+    );
+    const wizard = read("src/components/organization-onboarding-wizard.tsx");
+    assert.doesNotMatch(wizard, /\bslug\b/);
+    assert.match(wizard, /customerCodeHint|TH\.org\.customerCodeHint/);
+    assert.match(wizard, /organizationEntityType|INDIVIDUAL|StaffIdentityFields/);
+    assert.match(wizard, /stepProductPlan|selections/);
+    assert.match(
+      read("src/lib/platform/organization-onboarding.ts"),
+      /allocateUniqueOrganizationSlug|selections/,
+    );
+    assert.match(
+      read("prisma/migrations/0011_organization_entity_type/migration.sql"),
+      /entity_type/,
     );
     assert.match(
       read("src/components/context-switcher.tsx"),

@@ -3,19 +3,29 @@ import { LoginForm } from "@/components/login-form";
 import { resolvePostLoginRedirect } from "@/lib/auth/post-login-redirect";
 import { getAuthUser } from "@/lib/auth/session";
 import { TH } from "@/lib/i18n/th";
+import { isPhoneLoginEnabled } from "@/lib/platform/system-settings";
+import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; password?: string }>;
 }) {
   const user = await getAuthUser();
   const params = await searchParams;
   const nextPath = resolvePostLoginRedirect(params.next);
+  const passwordJustSet = params.password === "set";
 
   if (user) {
     redirect(nextPath);
+  }
+
+  let phoneLoginEnabled = false;
+  try {
+    phoneLoginEnabled = await isPhoneLoginEnabled(prisma);
+  } catch {
+    phoneLoginEnabled = false;
   }
 
   return (
@@ -28,8 +38,22 @@ export default async function LoginPage({
         <p className="mt-2 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
           ใช้บัญชีที่ยืนยันตัวตนผ่านระบบกลาง — Customer App และ Platform Admin
           ใช้ Login นี้ชุดเดียว
+          {phoneLoginEnabled
+            ? " — รองรับทั้งอีเมลและเบอร์โทรศัพท์"
+            : ""}
         </p>
-        <LoginForm nextPath={nextPath} />
+        {passwordJustSet ? (
+          <p
+            className="mt-4 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[length:var(--text-helper)] text-[var(--success)]"
+            role="status"
+          >
+            {TH.login.passwordSetSuccess}
+          </p>
+        ) : null}
+        <LoginForm
+          nextPath={nextPath}
+          phoneLoginEnabled={phoneLoginEnabled}
+        />
       </section>
     </div>
   );

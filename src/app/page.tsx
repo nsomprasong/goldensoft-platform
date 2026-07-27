@@ -127,8 +127,11 @@ export default async function DashboardPage() {
   logServerTiming();
 
   const hour = new Date().getHours();
-  const canCreateOrg = isSuper;
-  const canInvite = perms.includes(PLATFORM_PERMISSIONS.userInvite);
+  const canCreateOrg =
+    isSuper || perms.includes(PLATFORM_PERMISSIONS.organizationCreate);
+  const canInvite =
+    Boolean(ctx.activeOrganization) &&
+    perms.includes(PLATFORM_PERMISSIONS.userInvite);
   const canCreateBranch =
     Boolean(ctx.activeOrganization) &&
     perms.includes(PLATFORM_PERMISSIONS.branchManage);
@@ -151,21 +154,30 @@ export default async function DashboardPage() {
     canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
   };
 
-  const primaryAction = canInvite
+  // Sales staff with an empty portfolio should land on “create customer org”
+  // rather than invite (invite requires an active managed organization).
+  const primaryAction = canCreateOrg && !ctx.activeOrganization
     ? {
-        href: "/users/invite",
-        title: TH.users.invite,
-        body: "ส่งคำเชิญและกำหนดบทบาทให้ผู้ใช้ใหม่",
-        icon: <Users size={20} />,
+        href: "/organizations/new",
+        title: TH.org.add,
+        body: "สร้างองค์กรใหม่บนแพลตฟอร์ม",
+        icon: <Building2 size={20} />,
       }
-    : canCreateOrg
+    : canInvite
       ? {
-          href: "/organizations/new",
-          title: TH.org.add,
-          body: "สร้างองค์กรใหม่บนแพลตฟอร์ม",
-          icon: <Building2 size={20} />,
+          href: "/users/invite",
+          title: TH.users.invite,
+          body: "ส่งคำเชิญและกำหนดบทบาทให้ผู้ใช้ใหม่",
+          icon: <Users size={20} />,
         }
-      : null;
+      : canCreateOrg
+        ? {
+            href: "/organizations/new",
+            title: TH.org.add,
+            body: "สร้างองค์กรใหม่บนแพลตฟอร์ม",
+            icon: <Building2 size={20} />,
+          }
+        : null;
 
   const secondaryActions = [
     canCreateOrg && primaryAction?.href !== "/organizations/new"

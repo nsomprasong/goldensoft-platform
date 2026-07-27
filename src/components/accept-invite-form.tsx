@@ -67,6 +67,15 @@ export function AcceptInviteForm() {
     };
   }, [supabase]);
 
+  async function goHomeIfSignedIn(): Promise<boolean> {
+    const me = await fetch("/api/auth/me", { method: "GET" }).catch(() => null);
+    if (!me?.ok) return false;
+    setState("success");
+    router.replace("/");
+    router.refresh();
+    return true;
+  }
+
   async function submit() {
     setError(null);
     const validationError = validateInvitePassword(password, confirmation);
@@ -84,18 +93,27 @@ export function AcceptInviteForm() {
     const response = await fetch("/api/auth/accept-invite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: "{}",
     });
-    const result = (await response.json()) as { message?: string };
+    const result = (await response.json().catch(() => null)) as {
+      message?: string;
+    } | null;
     setPending(false);
     if (response.status === 409) {
       setState("setup-incomplete");
       return;
     }
     if (!response.ok) {
-      setError(result.message ?? "ดำเนินการไม่สำเร็จ");
+      // Password may already be saved. Staff / recovered sessions can enter the
+      // app even if invitation completion is skipped (e.g. CSRF false negative).
+      if (await goHomeIfSignedIn()) {
+        return;
+      }
+      setError(result?.message ?? "ดำเนินการไม่สำเร็จ");
       return;
     }
     setState("success");
+    router.replace("/");
     router.refresh();
   }
 
@@ -127,12 +145,12 @@ export function AcceptInviteForm() {
     return (
       <div className="space-y-4">
         <p className="text-[length:var(--text-helper)] text-[var(--success)]">
-          ตั้งรหัสผ่านสำเร็จ
+          ตั้งรหัสผ่านสำเร็จ — กำลังเข้าสู่ระบบ
         </p>
         <IconTextLink
           href="/"
           icon={<LogIn aria-hidden="true" />}
-          label={goLoginLabel}
+          label="เข้าใช้งาน"
         />
       </div>
     );

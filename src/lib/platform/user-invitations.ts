@@ -7,6 +7,12 @@ import type {
   AuthInviteResult,
 } from "@/lib/auth/auth-invite-adapter";
 import { AuthInviteError } from "@/lib/auth/auth-invite-adapter";
+import {
+  createStaffAuthAdapter,
+  generateUnguessablePassword,
+  StaffAuthError,
+  type StaffAuthPort,
+} from "@/lib/auth/staff-auth-adapter";
 import { TH } from "@/lib/i18n/th";
 import {
   canAssignOrganizationRole,
@@ -16,6 +22,11 @@ import { writeAuditLog } from "@/lib/platform/audit";
 import { canManageCustomerOrganization } from "@/lib/platform/customer-portfolio";
 import { MASTER } from "@/lib/platform/master-codes";
 import type { ActorAccess } from "@/lib/platform/organizations-admin";
+import { PASSWORD_RESET_TTL_MINUTES } from "@/lib/platform/staff";
+import {
+  resolveLoginEmail,
+  toE164ThaiMobile,
+} from "@/lib/platform/system-settings";
 
 type Actor = ActorAccess & {
   organizationRoles: string[];
@@ -26,9 +37,31 @@ type Db = PrismaClient | Prisma.TransactionClient;
 const MAX_INVITE_ATTEMPTS = 5;
 const RESEND_COOLDOWN_MS = 5 * 60 * 1000;
 
+const optionalEmail = z
+  .string()
+  .trim()
+  .optional()
+  .nullable()
+  .transform((value) => {
+    const trimmed = value?.trim().toLowerCase() ?? "";
+    return trimmed.length > 0 ? trimmed : null;
+  })
+  .refine((value) => value === null || z.string().email().safeParse(value).success, {
+    message: "รูปแบบอีเมลไม่ถูกต้อง",
+  });
+
 export const realInviteUserSchema = z
   .object({
-    email: z.string().trim().email().transform((value) => value.toLowerCase()),
+    email: optionalEmail,
+    phone: z
+      .string()
+      .trim()
+      .optional()
+      .nullable()
+      .transform((value) => {
+        const trimmed = value?.trim() ?? "";
+        return trimmed.length > 0 ? trimmed : null;
+      }),
     displayName: z.string().trim().min(1).max(200),
     organizationId: z.string().uuid(),
     organizationRoleCode: z.enum(["OWNER", "ADMIN", "BILLING_CONTACT"]),
@@ -37,6 +70,21 @@ export const realInviteUserSchema = z
     idempotencyKey: z.string().uuid(),
   })
   .superRefine((value, context) => {
+    const phoneE164 = value.phone ? toE164ThaiMobile(value.phone) : null;
+    if (!value.email && !phoneE164) {
+      context.addIssue({
+        code: "custom",
+        path: ["email"],
+        message: TH.users.needEmailOrPhone,
+      });
+    }
+    if (value.phone && !phoneE164) {
+      context.addIssue({
+        code: "custom",
+        path: ["phone"],
+        message: TH.login.invalidPhone,
+      });
+    }
     if (value.branchScope === "SELECTED" && value.branchIds.length === 0) {
       context.addIssue({
         code: "custom",
@@ -80,6 +128,11 @@ export type InviteOrganizationUserResult = {
   invited: boolean;
   reused: boolean;
   status: string;
+  /** Present when user should set password immediately (no email invite). */
+  passwordResetId?: string | null;
+  loginEmail?: string | null;
+  phone?: string | null;
+  setPasswordPath?: string | null;
 };
 
 function assertInvitePermission(actor: Actor, organizationId: string, role: string) {
@@ -179,12 +232,20 @@ export async function inviteOrganizationUserReal(
   auth: AuthInviteAdapter,
   redirectTo: string,
 ): Promise<InviteOrganizationUserResult> {
-  const input = realInviteUserSchema.parse(rawInput);
+  const parsed = realInviteUserSchema.parse(rawInput);
+  const inviteEmail = parsed.email;
+  if (!inviteEmail) {
+    throw new UserInvitationError(
+      "FORBIDDEN",
+      TH.users.needEmailOrPhone,
+    );
+  }
+  const input = { ...parsed, email: inviteEmail };
   assertInvitePermission(actor, input.organizationId, input.organizationRoleCode);
   const masters = await resolveInviteMasters(db, {
     ...input,
     actorAuthUserId: actor.authUserId,
-  } as z.infer<typeof realInviteUserSchema> & { actorAuthUserId: string });
+  } as typeof input & { actorAuthUserId: string });
 
   const byKey = await db.userInvitation.findUnique({
     where: {
@@ -409,7 +470,7 @@ export async function inviteOrganizationUserReal(
 async function completePlatformSetup(
   db: PrismaClient,
   actor: Actor,
-  input: z.infer<typeof realInviteUserSchema>,
+  input: Omit<z.infer<typeof realInviteUserSchema>, "email"> & { email: string },
   invitationId: string,
   authResult: AuthInviteResult,
 ): Promise<InviteOrganizationUserResult> {
@@ -472,6 +533,7 @@ async function completePlatformSetup(
           data: {
             authUserId: authResult.authUserId,
             email: input.email,
+            phone: input.phone ? toE164ThaiMobile(input.phone) : undefined,
             displayName: input.displayName,
             statusId: targetProfileStatus,
           },
@@ -480,6 +542,13 @@ async function completePlatformSetup(
         await tx.userProfile.update({
           where: { id: profile.id },
           data: { statusId: targetProfileStatus },
+        });
+      }
+      const phoneE164 = input.phone ? toE164ThaiMobile(input.phone) : null;
+      if (phoneE164 && profile.phone !== phoneE164) {
+        await tx.userProfile.update({
+          where: { id: profile.id },
+          data: { phone: phoneE164 },
         });
       }
 
@@ -795,6 +864,19 @@ export async function acceptInvitationForAuthUser(
     orderBy: { createdAt: "desc" },
   });
   if (!invitation || !invitation.platformSetupCompletedAt) {
+    // GoldenSoft staff are provisioned without an org invitation row. Password
+    // was already updated by the accept-invite form — treat as success.
+    const staffAssignment = await db.platformRoleAssignment.findFirst({
+      where: {
+        userProfile: { authUserId, deletedAt: null },
+        revokedAt: null,
+        status: { code: MASTER.assignmentStatus.ACTIVE },
+      },
+      select: { id: true },
+    });
+    if (staffAssignment) {
+      return { ok: true as const };
+    }
     throw new UserInvitationError(
       "INVITE_NOT_READY",
       "บัญชีอยู่ระหว่างจัดเตรียม กรุณาติดต่อผู้ดูแลระบบ",
@@ -850,4 +932,195 @@ function maskEmail(email: string): string {
   const [local, domain] = email.split("@");
   if (!local || !domain) return "***";
   return `${local.slice(0, 2)}***@${domain}`;
+}
+
+/**
+ * Add an org user without sending Auth invite email/SMS.
+ * Creates a confirmed Auth user + open password-reset window so the user
+ * (or admin) can set a password immediately and start using the system.
+ */
+export async function provisionOrganizationUserDirect(
+  db: PrismaClient,
+  actor: Actor,
+  rawInput: unknown,
+  auth: StaffAuthPort = createStaffAuthAdapter(),
+): Promise<InviteOrganizationUserResult> {
+  const parsed = realInviteUserSchema.parse(rawInput);
+  const phoneE164 = parsed.phone ? toE164ThaiMobile(parsed.phone) : null;
+  const loginEmail = resolveLoginEmail({
+    email: parsed.email,
+    phoneE164,
+  });
+  if (!loginEmail) {
+    throw new UserInvitationError("FORBIDDEN", TH.users.needEmailOrPhone);
+  }
+
+  assertInvitePermission(
+    actor,
+    parsed.organizationId,
+    parsed.organizationRoleCode,
+  );
+  const masters = await resolveInviteMasters(db, {
+    ...parsed,
+    actorAuthUserId: actor.authUserId,
+  });
+
+  const existingProfile = await db.userProfile.findFirst({
+    where: {
+      deletedAt: null,
+      OR: [
+        { email: loginEmail },
+        ...(phoneE164 ? [{ phone: phoneE164 }] : []),
+      ],
+    },
+    select: { id: true, authUserId: true, email: true },
+  });
+  if (existingProfile) {
+    throw new UserInvitationError(
+      "EMAIL_CONFLICT",
+      "อีเมลหรือเบอร์โทรศัพท์นี้มีผู้ใช้งานอยู่แล้ว",
+    );
+  }
+
+  let authUser;
+  try {
+    authUser = await auth.getUserByEmail(loginEmail);
+    if (!authUser) {
+      authUser = await auth.createUser({
+        email: loginEmail,
+        displayName: parsed.displayName,
+        password: generateUnguessablePassword(),
+        phone: phoneE164,
+      });
+    } else if (phoneE164) {
+      try {
+        await auth.updateUserPhone?.({
+          authUserId: authUser.authUserId,
+          phone: phoneE164,
+        });
+      } catch {
+        // Best-effort; email login still works.
+      }
+    }
+  } catch (error) {
+    if (error instanceof StaffAuthError) {
+      throw new UserInvitationError("PLATFORM_SETUP_FAILED", error.message);
+    }
+    throw error;
+  }
+
+  const completedId = await invitationStatusId(
+    db,
+    MASTER.userInvitationStatus.COMPLETED,
+  );
+  const profileActive = await db.userProfileStatus.findUniqueOrThrow({
+    where: { code: MASTER.userProfileStatus.ACTIVE },
+  });
+  const membershipActive = await db.membershipStatus.findUniqueOrThrow({
+    where: { code: MASTER.membershipStatus.ACTIVE },
+  });
+  const assignmentActive = await db.assignmentStatus.findUniqueOrThrow({
+    where: { code: MASTER.assignmentStatus.ACTIVE },
+  });
+
+  const expiresAt = new Date(
+    Date.now() + PASSWORD_RESET_TTL_MINUTES * 60 * 1000,
+  );
+
+  return db.$transaction(async (tx) => {
+    const invitation = await tx.userInvitation.create({
+      data: {
+        emailNormalized: loginEmail,
+        displayName: parsed.displayName,
+        organizationId: parsed.organizationId,
+        organizationRoleId: masters.role.id,
+        branchScopeTypeId: masters.scope.id,
+        branchIdsJson: [...new Set(parsed.branchIds)],
+        statusId: completedId,
+        invitedByProfileId: masters.inviter.id,
+        idempotencyKey: parsed.idempotencyKey,
+        authUserId: authUser.authUserId,
+        isActive: false,
+        platformSetupCompletedAt: new Date(),
+      },
+    });
+
+    const profile = await tx.userProfile.create({
+      data: {
+        authUserId: authUser.authUserId,
+        email: loginEmail,
+        phone: phoneE164,
+        displayName: parsed.displayName,
+        statusId: profileActive.id,
+      },
+    });
+
+    const membership = await tx.organizationMembership.create({
+      data: {
+        organizationId: parsed.organizationId,
+        userProfileId: profile.id,
+        statusId: membershipActive.id,
+        invitedByAuthUserId: actor.authUserId,
+        joinedAt: new Date(),
+      },
+    });
+
+    await tx.organizationMembershipRole.create({
+      data: {
+        membershipId: membership.id,
+        roleId: masters.role.id,
+        statusId: assignmentActive.id,
+      },
+    });
+
+    const desiredBranchIds =
+      parsed.branchScope === "SELECTED" ? [...new Set(parsed.branchIds)] : [null];
+    for (const branchId of desiredBranchIds) {
+      await tx.organizationMembershipBranchScope.create({
+        data: {
+          membershipId: membership.id,
+          scopeTypeId: masters.scope.id,
+          branchId,
+          statusId: assignmentActive.id,
+        },
+      });
+    }
+
+    const reset = await tx.userPasswordReset.create({
+      data: {
+        userProfileId: profile.id,
+        requestedByAuthUserId: actor.authUserId,
+        expiresAt,
+        note: "ตั้งรหัสผ่านครั้งแรกเมื่อเพิ่มผู้ใช้โดยไม่ส่งคำเชิญ",
+      },
+      select: { id: true },
+    });
+
+    await writeAuditLog(tx, {
+      organizationId: parsed.organizationId,
+      actorAuthUserId: actor.authUserId,
+      actionCode: MASTER.auditActionType.USER_PLATFORM_SETUP_COMPLETED,
+      entityType: "UserInvitation",
+      entityId: invitation.id,
+      after: {
+        emailMasked: maskEmail(loginEmail),
+        phone: phoneE164,
+        passwordResetId: reset.id,
+        directProvision: true,
+      },
+    });
+
+    return {
+      invitationId: invitation.id,
+      profileId: profile.id,
+      membershipId: membership.id,
+      invited: false,
+      reused: false,
+      status: MASTER.userInvitationStatus.COMPLETED,
+      passwordResetId: reset.id,
+      loginEmail,
+      phone: phoneE164,
+      setPasswordPath: "/auth/set-password",
+    };
+  });
 }

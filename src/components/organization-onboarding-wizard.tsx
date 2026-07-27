@@ -1,43 +1,110 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Check } from "lucide-react";
-import { useState, useTransition } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Building2,
+  Check,
+  FileText,
+  Hash,
+  IdCard,
+  Mail,
+  MapPin,
+  Package,
+  Phone,
+  Store,
+  UserRound,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 
+import {
+  EMPTY_STAFF_IDENTITY,
+  StaffIdentityFields,
+  type StaffIdentityFormValues,
+} from "@/components/staff-identity-fields";
+import { FormField, SectionHeader } from "@/components/ui/admin-ui";
 import { IconTextButton } from "@/components/ui/labeled-icon-button";
 import { Input } from "@/components/ui/input";
+import { TH } from "@/lib/i18n/th";
+import { MASTER } from "@/lib/platform/master-codes";
+import {
+  composeStaffDisplayName,
+  individualCustomerIdentitySchema,
+} from "@/lib/platform/staff-identity";
+import { cn } from "@/lib/utils";
 
 type ProductOption = { code: string; name: string };
 type PlanOption = { code: string; name: string; productCode: string };
+type ContactRole = "OWNER" | "ADMIN";
+type EntityType =
+  (typeof MASTER.organizationEntityType)[keyof typeof MASTER.organizationEntityType];
 
-const STEPS = [
-  "ข้อมูลองค์กร",
-  "สาขาหลัก",
-  "เจ้าขององค์กร",
-  "ผลิตภัณฑ์",
-  "แพ็กเกจ",
-  "ยืนยัน",
-] as const;
+function StepIcon(props: { children: ReactNode; active?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex size-7 items-center justify-center rounded-full border",
+        props.active
+          ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]"
+          : "border-[var(--border)] text-[var(--text-muted)]",
+      )}
+      aria-hidden="true"
+    >
+      {props.children}
+    </span>
+  );
+}
+
+function FieldIcon(props: { children: ReactNode }) {
+  return (
+    <span
+      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+      aria-hidden="true"
+    >
+      {props.children}
+    </span>
+  );
+}
 
 export function OrganizationOnboardingWizard(props: {
   products: ProductOption[];
   plans: PlanOption[];
+  /** SUPER_ADMIN creates OWNER; sales creates ADMIN for the customer. */
+  contactRole?: ContactRole;
 }) {
+  const contactRole: ContactRole = props.contactRole ?? "OWNER";
+  const contactLabel =
+    contactRole === "ADMIN" ? "ผู้ดูแลองค์กร (ADMIN)" : "เจ้าขององค์กร (OWNER)";
+  const STEPS = [
+    TH.org.stepOrg,
+    TH.org.stepBranch,
+    contactLabel,
+    TH.org.stepProductPlan,
+    TH.org.stepConfirm,
+  ] as const;
+
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [idempotencyKey] = useState(
-    () => `onboard-${crypto.randomUUID()}`,
-  );
+  const [idempotencyKey] = useState(() => `onboard-${crypto.randomUUID()}`);
 
+  const [entityType, setEntityType] = useState<EntityType>(
+    MASTER.organizationEntityType.LEGAL_ENTITY,
+  );
   const [organization, setOrganization] = useState({
     customerCode: "",
-    slug: "",
     displayName: "",
     legalName: "",
+    nameEn: "",
     taxId: "",
     email: "",
+    phone: "",
+    address: "",
+  });
+  const [person, setPerson] = useState<StaffIdentityFormValues>({
+    ...EMPTY_STAFF_IDENTITY,
   });
   const [primaryBranch, setPrimaryBranch] = useState({
     code: "HQ",
@@ -48,18 +115,114 @@ export function OrganizationOnboardingWizard(props: {
     email: "",
     displayName: "",
   });
-  const [productCode, setProductCode] = useState(props.products[0]?.code ?? "");
-  const [planCode, setPlanCode] = useState("");
+  const [selectedProductCodes, setSelectedProductCodes] = useState<string[]>(
+    () => (props.products[0] ? [props.products[0].code] : []),
+  );
+  const [planByProduct, setPlanByProduct] = useState<Record<string, string>>(
+    {},
+  );
   const [subscriptionMode, setSubscriptionMode] = useState<"TRIAL" | "ACTIVE">(
     "TRIAL",
   );
 
-  const plansForProduct = props.plans.filter((p) => p.productCode === productCode);
+  const isIndividual =
+    entityType === MASTER.organizationEntityType.INDIVIDUAL;
+  const individualDisplayName = useMemo(
+    () =>
+      person.firstNameTh.trim() && person.lastNameTh.trim()
+        ? composeStaffDisplayName(person)
+        : "",
+    [person],
+  );
+
+  const productSelections = useMemo(
+    () =>
+      selectedProductCodes.map((productCode) => ({
+        productCode,
+        planCode: planByProduct[productCode] ?? "",
+        productName:
+          props.products.find((p) => p.code === productCode)?.name ?? productCode,
+        plans: props.plans.filter((p) => p.productCode === productCode),
+      })),
+    [selectedProductCodes, planByProduct, props.products, props.plans],
+  );
+
+  const selectionsReady =
+    productSelections.length > 0 &&
+    productSelections.every((row) => row.planCode.length > 0);
+
+  function toggleProduct(code: string) {
+    setSelectedProductCodes((prev) => {
+      if (prev.includes(code)) {
+        setPlanByProduct((plans) => {
+          const next = { ...plans };
+          delete next[code];
+          return next;
+        });
+        return prev.filter((item) => item !== code);
+      }
+      return [...prev, code];
+    });
+    setError(null);
+  }
+
+  function validateStep(current: number): string | null {
+    if (current === 0) {
+      if (organization.customerCode.trim().length < 2) {
+        return TH.org.needCustomerCode;
+      }
+      if (isIndividual) {
+        // TEMP: tax-payer block may be left empty for testing.
+        const hasPersonInput =
+          person.firstNameTh.trim().length > 0 ||
+          person.lastNameTh.trim().length > 0 ||
+          person.nationalId.trim().length > 0 ||
+          person.dateOfBirth.trim().length > 0 ||
+          person.addressLine.trim().length > 0 ||
+          person.phone.trim().length > 0;
+        if (hasPersonInput) {
+          const parsed = individualCustomerIdentitySchema.safeParse(person);
+          if (!parsed.success) {
+            return (
+              parsed.error.issues[0]?.message ?? TH.org.needPersonIdentity
+            );
+          }
+        }
+      } else if (organization.displayName.trim().length < 2) {
+        return TH.org.needDisplayName;
+      }
+    }
+    if (current === 1) {
+      if (!primaryBranch.code.trim() || !primaryBranch.name.trim()) {
+        return "กรุณากรอกรหัสและชื่อสาขาหลัก";
+      }
+    }
+    if (current === 2) {
+      if (!owner.email.trim() || !owner.displayName.trim()) {
+        return "กรุณากรอกอีเมลและชื่อผู้ติดต่อ";
+      }
+    }
+    if (current === 3) {
+      if (selectedProductCodes.length === 0) {
+        return TH.org.needProductSelection;
+      }
+      if (!selectionsReady) {
+        return TH.org.needPlanForProduct;
+      }
+    }
+    return null;
+  }
 
   function next() {
+    const message = validateStep(step);
+    if (message) {
+      setError(message);
+      return;
+    }
     setError(null);
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
   }
+
   function back() {
     setError(null);
     setStep((s) => Math.max(s - 1, 0));
@@ -68,30 +231,68 @@ export function OrganizationOnboardingWizard(props: {
   function submit() {
     setError(null);
     start(async () => {
+      const hasPersonInput =
+        person.firstNameTh.trim().length > 0 ||
+        person.lastNameTh.trim().length > 0 ||
+        person.nationalId.trim().length > 0 ||
+        person.dateOfBirth.trim().length > 0 ||
+        person.addressLine.trim().length > 0 ||
+        person.phone.trim().length > 0;
+      const organizationPayload = isIndividual
+        ? {
+            customerCode: organization.customerCode.trim(),
+            entityType,
+            email: organization.email.trim() || null,
+            // TEMP: omit empty tax-payer identity for testing.
+            person: hasPersonInput ? person : null,
+          }
+        : {
+            customerCode: organization.customerCode.trim(),
+            entityType,
+            displayName: organization.displayName.trim(),
+            legalName: organization.legalName.trim() || null,
+            nameEn: organization.nameEn.trim() || null,
+            taxId: organization.taxId.trim() || null,
+            email: organization.email.trim() || null,
+            phone: organization.phone.trim() || null,
+            address: organization.address.trim() || null,
+          };
+
       const res = await fetch("/api/platform/organizations/onboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           idempotencyKey,
-          organization: {
-            ...organization,
-            taxId: organization.taxId || null,
-            email: organization.email || null,
-          },
+          organization: organizationPayload,
           primaryBranch: {
             ...primaryBranch,
             address: primaryBranch.address || null,
           },
           owner,
-          productCode,
-          planCode,
+          selections: productSelections.map((row) => ({
+            productCode: row.productCode,
+            planCode: row.planCode,
+          })),
           subscriptionMode,
         }),
       });
-      const data = (await res.json()) as {
+      const raw = await res.text();
+      let data: {
         message?: string;
         onboarding?: { organizationId?: string };
-      };
+      } = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as typeof data;
+        } catch {
+          setError(
+            res.ok
+              ? "สร้างสำเร็จแต่ตอบกลับผิดรูปแบบ"
+              : "สร้างองค์กรไม่สำเร็จ กรุณาลองใหม่",
+          );
+          return;
+        }
+      }
       if (!res.ok) {
         setError(data.message ?? "สร้างองค์กรไม่สำเร็จ");
         return;
@@ -103,177 +304,665 @@ export function OrganizationOnboardingWizard(props: {
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5">
       <ol className="flex flex-wrap gap-2 text-[length:var(--text-caption)]">
         {STEPS.map((label, index) => (
           <li
             key={label}
-            className={`rounded-full border px-3 py-1 ${
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5",
               index === step
                 ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]"
-                : "border-[var(--border)] text-[var(--text-muted)]"
-            }`}
+                : index < step
+                  ? "border-[var(--border)] text-[var(--foreground)]"
+                  : "border-[var(--border)] text-[var(--text-muted)]",
+            )}
           >
-            {index + 1}. {label}
+            <StepIcon active={index === step}>
+              {index < step ? (
+                <Check className="size-3.5" />
+              ) : (
+                <span className="text-[10px] font-semibold">{index + 1}</span>
+              )}
+            </StepIcon>
+            {label}
           </li>
         ))}
       </ol>
 
       {step === 0 ? (
-        <section className="card grid gap-3">
-          {(
-            [
-              ["customerCode", "รหัสลูกค้า"],
-              ["slug", "Slug"],
-              ["displayName", "ชื่อที่แสดง"],
-              ["legalName", "ชื่อทางกฎหมาย"],
-              ["taxId", "เลขผู้เสียภาษี"],
-              ["email", "อีเมลองค์กร"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="grid gap-1 text-[length:var(--text-label)]">
-              {label}
-              <Input
-                value={organization[key]}
-                onChange={(e) =>
-                  setOrganization((prev) => ({ ...prev, [key]: e.target.value }))
+        <section className="card space-y-6 p-5 sm:p-6">
+          <div className="flex items-start gap-3">
+            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
+              <Building2 className="size-5" aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-[var(--foreground)]">
+                {TH.org.stepOrg}
+              </h2>
+              <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+                {TH.org.entityTypeHint}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <SectionHeader title={TH.org.entityType} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setEntityType(MASTER.organizationEntityType.LEGAL_ENTITY)
+                }
+                className={cn(
+                  "flex items-start gap-3 rounded-[var(--radius-lg)] border p-4 text-left transition-colors",
+                  !isIndividual
+                    ? "border-[var(--primary)] bg-[var(--primary-soft)]"
+                    : "border-[var(--border)] hover:border-[var(--primary)]/50",
+                )}
+              >
+                <Building2
+                  className="mt-0.5 size-5 shrink-0 text-[var(--primary)]"
+                  aria-hidden="true"
+                />
+                <span>
+                  <span className="block font-medium text-[var(--foreground)]">
+                    {TH.org.entityLegal}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
+                    {TH.org.entityLegalHint}
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setEntityType(MASTER.organizationEntityType.INDIVIDUAL)
+                }
+                className={cn(
+                  "flex items-start gap-3 rounded-[var(--radius-lg)] border p-4 text-left transition-colors",
+                  isIndividual
+                    ? "border-[var(--primary)] bg-[var(--primary-soft)]"
+                    : "border-[var(--border)] hover:border-[var(--primary)]/50",
+                )}
+              >
+                <UserRound
+                  className="mt-0.5 size-5 shrink-0 text-[var(--primary)]"
+                  aria-hidden="true"
+                />
+                <span>
+                  <span className="block font-medium text-[var(--foreground)]">
+                    {TH.org.entityIndividual}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
+                    {TH.org.entityIndividualHint}
+                  </span>
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4 border-t border-[var(--border)] pt-5">
+            <SectionHeader
+              title={TH.org.requiredSection}
+              description={TH.org.requiredSectionHint}
+              badge={
+                <span className="rounded-full bg-[var(--primary-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--primary)]">
+                  จำเป็น
+                </span>
+              }
+            />
+            <FormField
+              label={TH.org.customerCode}
+              htmlFor="customerCode"
+              required
+              hint={TH.org.customerCodeHint}
+            >
+              <div className="relative max-w-md">
+                <FieldIcon>
+                  <Hash className="size-4" />
+                </FieldIcon>
+                <Input
+                  id="customerCode"
+                  className="pl-10"
+                  placeholder="เช่น CUST-001"
+                  autoComplete="off"
+                  value={organization.customerCode}
+                  onChange={(e) =>
+                    setOrganization((prev) => ({
+                      ...prev,
+                      customerCode: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </FormField>
+          </div>
+
+          {isIndividual ? (
+            <div className="space-y-4 border-t border-[var(--border)] pt-5">
+              <SectionHeader
+                title={TH.org.personSection}
+                description={TH.org.personSectionHint}
+                badge={
+                  <span className="rounded-full bg-[var(--primary-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--primary)]">
+                    ใบกำกับภาษี
+                  </span>
                 }
               />
-            </label>
-          ))}
+              <StaffIdentityFields
+                idPrefix="org-"
+                requireNationalId={false}
+                nationalIdHint={TH.org.nationalIdInvoiceHint}
+                values={person}
+                onChange={(patch) =>
+                  setPerson((current) => ({ ...current, ...patch }))
+                }
+              />
+              <FormField
+                label={TH.org.email}
+                htmlFor="orgEmailIndividual"
+                hint={TH.org.emailHint}
+              >
+                <div className="relative max-w-md">
+                  <FieldIcon>
+                    <Mail className="size-4" />
+                  </FieldIcon>
+                  <Input
+                    id="orgEmailIndividual"
+                    className="pl-10"
+                    type="email"
+                    placeholder="contact@example.com"
+                    value={organization.email}
+                    onChange={(e) =>
+                      setOrganization((prev) => ({
+                        ...prev,
+                        email: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </FormField>
+              {individualDisplayName ? (
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  ชื่อบนใบกำกับภาษี:{" "}
+                  <span className="font-medium text-[var(--foreground)]">
+                    {individualDisplayName}
+                  </span>
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4 border-t border-[var(--border)] pt-5">
+                <FormField
+                  label={TH.org.displayName}
+                  htmlFor="displayName"
+                  required
+                  hint={TH.org.displayNameHint}
+                >
+                  <div className="relative">
+                    <FieldIcon>
+                      <Building2 className="size-4" />
+                    </FieldIcon>
+                    <Input
+                      id="displayName"
+                      className="pl-10"
+                      placeholder="เช่น บริษัท ตัวอย่าง จำกัด"
+                      value={organization.displayName}
+                      onChange={(e) =>
+                        setOrganization((prev) => ({
+                          ...prev,
+                          displayName: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </FormField>
+              </div>
+
+              <div className="space-y-4 border-t border-[var(--border)] pt-5">
+                <SectionHeader
+                  title={TH.org.detailSection}
+                  description={TH.org.detailSectionHint}
+                  badge={
+                    <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)]">
+                      ไม่บังคับ
+                    </span>
+                  }
+                />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    label={TH.org.legalName}
+                    htmlFor="legalName"
+                    hint={TH.org.legalNameHint}
+                  >
+                    <div className="relative">
+                      <FieldIcon>
+                        <FileText className="size-4" />
+                      </FieldIcon>
+                      <Input
+                        id="legalName"
+                        className="pl-10"
+                        placeholder="ชื่อตามหนังสือรับรอง"
+                        value={organization.legalName}
+                        onChange={(e) =>
+                          setOrganization((prev) => ({
+                            ...prev,
+                            legalName: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </FormField>
+                  <FormField
+                    label={TH.org.nameEn}
+                    htmlFor="nameEn"
+                    hint={TH.org.nameEnHint}
+                  >
+                    <Input
+                      id="nameEn"
+                      placeholder="Example Co., Ltd."
+                      value={organization.nameEn}
+                      onChange={(e) =>
+                        setOrganization((prev) => ({
+                          ...prev,
+                          nameEn: e.target.value,
+                        }))
+                      }
+                    />
+                  </FormField>
+                  <FormField
+                    label={TH.org.taxId}
+                    htmlFor="taxId"
+                    hint={TH.org.taxIdHint}
+                  >
+                    <div className="relative">
+                      <FieldIcon>
+                        <IdCard className="size-4" />
+                      </FieldIcon>
+                      <Input
+                        id="taxId"
+                        className="pl-10"
+                        inputMode="numeric"
+                        placeholder="0-0000-00000-00-0"
+                        value={organization.taxId}
+                        onChange={(e) =>
+                          setOrganization((prev) => ({
+                            ...prev,
+                            taxId: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </FormField>
+                  <FormField
+                    label={TH.org.phone}
+                    htmlFor="orgPhone"
+                    hint={TH.org.phoneHint}
+                  >
+                    <div className="relative">
+                      <FieldIcon>
+                        <Phone className="size-4" />
+                      </FieldIcon>
+                      <Input
+                        id="orgPhone"
+                        className="pl-10"
+                        type="tel"
+                        placeholder="02-000-0000"
+                        value={organization.phone}
+                        onChange={(e) =>
+                          setOrganization((prev) => ({
+                            ...prev,
+                            phone: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </FormField>
+                  <FormField
+                    label={TH.org.email}
+                    htmlFor="orgEmail"
+                    hint={TH.org.emailHint}
+                  >
+                    <div className="relative">
+                      <FieldIcon>
+                        <Mail className="size-4" />
+                      </FieldIcon>
+                      <Input
+                        id="orgEmail"
+                        className="pl-10"
+                        type="email"
+                        placeholder="contact@example.com"
+                        value={organization.email}
+                        onChange={(e) =>
+                          setOrganization((prev) => ({
+                            ...prev,
+                            email: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </FormField>
+                </div>
+                <FormField
+                  label={TH.org.address}
+                  htmlFor="orgAddress"
+                  hint={TH.org.addressHint}
+                >
+                  <div className="relative">
+                    <MapPin
+                      className="pointer-events-none absolute left-3 top-3 size-4 text-[var(--muted-foreground)]"
+                      aria-hidden="true"
+                    />
+                    <textarea
+                      id="orgAddress"
+                      className="textarea min-h-24 pl-10"
+                      placeholder="เลขที่ ถนน แขวง/ตำบล เขต/อำเภอ จังหวัด รหัสไปรษณีย์"
+                      value={organization.address}
+                      onChange={(e) =>
+                        setOrganization((prev) => ({
+                          ...prev,
+                          address: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </FormField>
+              </div>
+            </>
+          )}
         </section>
       ) : null}
 
       {step === 1 ? (
-        <section className="card grid gap-3">
-          <label className="grid gap-1 text-[length:var(--text-label)]">
-            รหัสสาขาหลัก
-            <Input
-              value={primaryBranch.code}
-              onChange={(e) =>
-                setPrimaryBranch((p) => ({ ...p, code: e.target.value }))
-              }
-            />
-          </label>
-          <label className="grid gap-1 text-[length:var(--text-label)]">
-            ชื่อสาขาหลัก
-            <Input
-              value={primaryBranch.name}
-              onChange={(e) =>
-                setPrimaryBranch((p) => ({ ...p, name: e.target.value }))
-              }
-            />
-          </label>
-          <label className="grid gap-1 text-[length:var(--text-label)]">
-            ที่อยู่
+        <section className="card space-y-4 p-5 sm:p-6">
+          <div className="flex items-start gap-3">
+            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
+              <Store className="size-5" aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold">{TH.org.stepBranch}</h2>
+              <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+                สาขาแรกขององค์กร — ใช้เป็นสาขาหลักในการเริ่มต้นใช้งาน
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              label="รหัสสาขาหลัก"
+              htmlFor="branchCode"
+              required
+              hint="รหัสสั้นสำหรับอ้างอิงในระบบ เช่น HQ"
+            >
+              <Input
+                id="branchCode"
+                value={primaryBranch.code}
+                onChange={(e) =>
+                  setPrimaryBranch((p) => ({ ...p, code: e.target.value }))
+                }
+              />
+            </FormField>
+            <FormField
+              label="ชื่อสาขาหลัก"
+              htmlFor="branchName"
+              required
+              hint="ชื่อที่แสดงในสวิตช์สาขาและรายงาน"
+            >
+              <Input
+                id="branchName"
+                value={primaryBranch.name}
+                onChange={(e) =>
+                  setPrimaryBranch((p) => ({ ...p, name: e.target.value }))
+                }
+              />
+            </FormField>
+          </div>
+          <FormField
+            label="ที่อยู่สาขา"
+            htmlFor="branchAddress"
+            hint="ไม่บังคับ — ที่ตั้งของสาขาหลัก"
+          >
             <textarea
-              className="textarea"
+              id="branchAddress"
+              className="textarea min-h-24"
               value={primaryBranch.address}
               onChange={(e) =>
                 setPrimaryBranch((p) => ({ ...p, address: e.target.value }))
               }
             />
-          </label>
+          </FormField>
         </section>
       ) : null}
 
       {step === 2 ? (
-        <section className="card grid gap-3">
-          <label className="grid gap-1 text-[length:var(--text-label)]">
-            อีเมลเจ้าของ
-            <Input
-              type="email"
-              value={owner.email}
-              onChange={(e) => setOwner((o) => ({ ...o, email: e.target.value }))}
-            />
-          </label>
-          <label className="grid gap-1 text-[length:var(--text-label)]">
-            ชื่อเจ้าของ
-            <Input
-              value={owner.displayName}
-              onChange={(e) =>
-                setOwner((o) => ({ ...o, displayName: e.target.value }))
-              }
-            />
-          </label>
-          <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">
-            หากยังไม่มี Auth user ระบบจะสร้างคำเชิญ OWNER (ไม่ส่ง invite จริงในโหมด mock)
-          </p>
+        <section className="card space-y-4 p-5 sm:p-6">
+          <div className="flex items-start gap-3">
+            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
+              <UserRound className="size-5" aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold">{contactLabel}</h2>
+              <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+                {contactRole === "ADMIN"
+                  ? "ระบบจะสร้างคำเชิญบทบาท ADMIN ขององค์กรลูกค้า และผูกองค์กรนี้กับพอร์ตโฟลิโอของคุณอัตโนมัติ"
+                  : "หากยังไม่มีบัญชี ระบบจะสร้างคำเชิญ OWNER ให้เจ้าขององค์กร"}
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              label={`อีเมล${contactRole === "ADMIN" ? "ผู้ดูแล" : "เจ้าของ"}`}
+              htmlFor="ownerEmail"
+              required
+              hint="ใช้อีเมลนี้สำหรับเข้าสู่ระบบและรับคำเชิญ"
+            >
+              <div className="relative">
+                <FieldIcon>
+                  <Mail className="size-4" />
+                </FieldIcon>
+                <Input
+                  id="ownerEmail"
+                  className="pl-10"
+                  type="email"
+                  value={owner.email}
+                  onChange={(e) =>
+                    setOwner((o) => ({ ...o, email: e.target.value }))
+                  }
+                />
+              </div>
+            </FormField>
+            <FormField
+              label={`ชื่อ${contactRole === "ADMIN" ? "ผู้ดูแล" : "เจ้าของ"}`}
+              htmlFor="ownerName"
+              required
+              hint="ชื่อที่แสดงในรายชื่อสมาชิกองค์กร"
+            >
+              <Input
+                id="ownerName"
+                value={owner.displayName}
+                onChange={(e) =>
+                  setOwner((o) => ({ ...o, displayName: e.target.value }))
+                }
+              />
+            </FormField>
+          </div>
         </section>
       ) : null}
 
       {step === 3 ? (
-        <section className="card grid gap-3">
-          <label className="grid gap-1 text-[length:var(--text-label)]">
-            ผลิตภัณฑ์
-            <select
-              className="select"
-              value={productCode}
-              onChange={(e) => {
-                setProductCode(e.target.value);
-                setPlanCode("");
-              }}
-            >
-              {props.products.map((p) => (
-                <option key={p.code} value={p.code}>
-                  {p.name} ({p.code})
-                </option>
-              ))}
-            </select>
-          </label>
-        </section>
-      ) : null}
+        <section className="card space-y-5 p-5 sm:p-6">
+          <div className="flex items-start gap-3">
+            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
+              <Package className="size-5" aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold">
+                {TH.org.stepProductPlan}
+              </h2>
+              <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+                {TH.org.stepProductPlanHint}
+              </p>
+            </div>
+          </div>
 
-      {step === 4 ? (
-        <section className="card grid gap-3">
-          <label className="grid gap-1 text-[length:var(--text-label)]">
-            แพ็กเกจ
+          <div className="grid gap-3">
+            {props.products.map((product) => {
+              const selected = selectedProductCodes.includes(product.code);
+              const plans = props.plans.filter(
+                (plan) => plan.productCode === product.code,
+              );
+              return (
+                <div
+                  key={product.code}
+                  className={cn(
+                    "rounded-[var(--radius-lg)] border p-4 transition-colors",
+                    selected
+                      ? "border-[var(--primary)] bg-[var(--primary-soft)]/40"
+                      : "border-[var(--border)]",
+                  )}
+                >
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 size-4 accent-[var(--primary)]"
+                      checked={selected}
+                      onChange={() => toggleProduct(product.code)}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium text-[var(--foreground)]">
+                        {product.name}
+                      </span>
+                      <span className="text-xs text-[var(--muted-foreground)]">
+                        {product.code}
+                      </span>
+                    </span>
+                  </label>
+                  {selected ? (
+                    <div className="mt-3 pl-7">
+                      <FormField
+                        label={`${TH.org.stepPlan} — ${product.name}`}
+                        htmlFor={`plan-${product.code}`}
+                        required
+                        hint={
+                          plans.length === 0
+                            ? "ยังไม่มีแพ็กเกจที่เผยแพร่สำหรับผลิตภัณฑ์นี้"
+                            : "เลือกแพ็กเกจที่ใช้เริ่มต้นกับผลิตภัณฑ์นี้"
+                        }
+                      >
+                        <select
+                          id={`plan-${product.code}`}
+                          className="select"
+                          value={planByProduct[product.code] ?? ""}
+                          onChange={(e) =>
+                            setPlanByProduct((prev) => ({
+                              ...prev,
+                              [product.code]: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">เลือกแพ็กเกจ</option>
+                          {plans.map((plan) => (
+                            <option key={plan.code} value={plan.code}>
+                              {plan.name} ({plan.code})
+                            </option>
+                          ))}
+                        </select>
+                      </FormField>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+
+          <FormField
+            label="โหมดการสมัคร"
+            htmlFor="subscriptionMode"
+            hint="ใช้โหมดเดียวกันกับทุกผลิตภัณฑ์ที่เลือก — ทดลองใช้เหมาะกับการเริ่มต้น"
+          >
             <select
-              className="select"
-              value={planCode}
-              onChange={(e) => setPlanCode(e.target.value)}
-            >
-              <option value="">เลือกแพ็กเกจ</option>
-              {plansForProduct.map((p) => (
-                <option key={p.code} value={p.code}>
-                  {p.name} ({p.code}) — ราคาตัวอย่าง
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-[length:var(--text-label)]">
-            โหมดการสมัคร
-            <select
-              className="select"
+              id="subscriptionMode"
+              className="select max-w-md"
               value={subscriptionMode}
               onChange={(e) =>
                 setSubscriptionMode(e.target.value as "TRIAL" | "ACTIVE")
               }
             >
-              <option value="TRIAL">ทดลองใช้</option>
-              <option value="ACTIVE">เปิดใช้งาน</option>
+              <option value="TRIAL">ทดลองใช้ (TRIAL)</option>
+              <option value="ACTIVE">เปิดใช้งาน (ACTIVE)</option>
             </select>
-          </label>
+          </FormField>
         </section>
       ) : null}
 
-      {step === 5 ? (
-        <section className="card grid gap-2 text-[length:var(--text-helper)]">
-          <p>
-            <strong>องค์กร:</strong> {organization.displayName} ({organization.customerCode})
-          </p>
-          <p>
-            <strong>สาขาหลัก:</strong> {primaryBranch.name} ({primaryBranch.code})
-          </p>
-          <p>
-            <strong>เจ้าของ:</strong> {owner.displayName} · {owner.email}
-          </p>
-          <p>
-            <strong>ผลิตภัณฑ์/แพ็กเกจ:</strong> {productCode} / {planCode} ·{" "}
-            {subscriptionMode}
-          </p>
-          <p className="text-[var(--text-muted)]">
-            SUPER_ADMIN ไม่ต้องเป็นสมาชิกองค์กรใหม่ — สลับเข้าโหมดผู้ดูแลแพลตฟอร์มได้หลังสร้าง
+      {step === 4 ? (
+        <section className="card space-y-4 p-5 sm:p-6">
+          <div className="flex items-start gap-3">
+            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
+              <Check className="size-5" aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold">{TH.org.stepConfirm}</h2>
+              <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+                ตรวจสอบสรุปก่อนสร้างองค์กรในระบบ
+              </p>
+            </div>
+          </div>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--muted)]/40 p-3">
+              <dt className="text-[var(--muted-foreground)]">องค์กร</dt>
+              <dd className="mt-1 text-xs text-[var(--muted-foreground)]">
+                {isIndividual ? TH.org.entityIndividual : TH.org.entityLegal}
+              </dd>
+              <dd className="mt-1 font-medium">
+                {isIndividual
+                  ? individualDisplayName || "—"
+                  : organization.displayName}{" "}
+                ({organization.customerCode})
+              </dd>
+              {!isIndividual && organization.legalName ? (
+                <dd className="mt-1 text-[var(--muted-foreground)]">
+                  ชื่อทางกฎหมาย: {organization.legalName}
+                </dd>
+              ) : null}
+              {isIndividual && person.nationalId ? (
+                <dd className="mt-1 text-[var(--muted-foreground)]">
+                  เลขบัตรประชาชน: {person.nationalId}
+                </dd>
+              ) : null}
+            </div>
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--muted)]/40 p-3">
+              <dt className="text-[var(--muted-foreground)]">สาขาหลัก</dt>
+              <dd className="mt-1 font-medium">
+                {primaryBranch.name} ({primaryBranch.code})
+              </dd>
+            </div>
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--muted)]/40 p-3">
+              <dt className="text-[var(--muted-foreground)]">
+                {contactRole === "ADMIN" ? "ผู้ดูแล" : "เจ้าของ"}
+              </dt>
+              <dd className="mt-1 font-medium">
+                {owner.displayName} · {owner.email}
+              </dd>
+            </div>
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--muted)]/40 p-3 sm:col-span-2">
+              <dt className="text-[var(--muted-foreground)]">
+                ผลิตภัณฑ์ / แพ็กเกจ · {subscriptionMode}
+              </dt>
+              <dd className="mt-2 grid gap-1.5">
+                {productSelections.map((row) => (
+                  <div key={row.productCode} className="font-medium">
+                    {row.productName} ({row.productCode}) → {row.planCode || "—"}
+                  </div>
+                ))}
+              </dd>
+            </div>
+          </dl>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            {contactRole === "ADMIN"
+              ? "องค์กรนี้จะปรากฏในพอร์ตโฟลิโอของคุณ พนักงานขายคนอื่นจะมองไม่เห็น"
+              : "SUPER_ADMIN ไม่ต้องเป็นสมาชิกองค์กรใหม่ — สลับเข้าโหมดผู้ดูแลแพลตฟอร์มได้หลังสร้าง"}
           </p>
         </section>
       ) : null}
@@ -292,7 +981,7 @@ export function OrganizationOnboardingWizard(props: {
             onClick={back}
             disabled={pending}
             icon={<ArrowLeft aria-hidden="true" />}
-            label="ย้อนกลับ"
+            label={TH.org.back}
           />
         ) : null}
         {step < STEPS.length - 1 ? (
@@ -301,20 +990,20 @@ export function OrganizationOnboardingWizard(props: {
             onClick={next}
             disabled={pending}
             icon={<ArrowRight aria-hidden="true" />}
-            label="ถัดไป"
+            label={TH.org.next}
           />
         ) : (
           <IconTextButton
             type="button"
             onClick={submit}
-            disabled={pending || !planCode}
+            disabled={pending || !selectionsReady}
             icon={
               <Check
                 className={pending ? "animate-pulse" : undefined}
                 aria-hidden="true"
               />
             }
-            label={pending ? "กำลังสร้าง..." : "ยืนยันและสร้างองค์กร"}
+            label={pending ? TH.org.creating : TH.org.confirmCreate}
           />
         )}
       </div>

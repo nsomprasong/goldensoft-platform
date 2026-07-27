@@ -24,8 +24,11 @@ import { TH } from "@/lib/i18n/th";
 import {
   UserInvitationError,
   inviteOrganizationUserReal,
+  provisionOrganizationUserDirect,
   realInviteUserSchema,
 } from "@/lib/platform/user-invitations";
+import { isInvitationSendEnabled } from "@/lib/platform/system-settings";
+import { toE164ThaiMobile } from "@/lib/platform/system-settings";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
@@ -46,15 +49,36 @@ export async function POST(request: NextRequest) {
       );
     }
     const actor = await loadActorAccess(prisma, user.id);
-    const environment = resolveInviteEnvironment();
     const parsed = realInviteUserSchema.parse({
       ...body,
       idempotencyKey: headerKey,
     });
+    const phoneE164 = parsed.phone ? toE164ThaiMobile(parsed.phone) : null;
+    const sendEnabled = await isInvitationSendEnabled(prisma);
+    // Direct provision (set password immediately) when:
+    // - invite send is disabled, or
+    // - no email (phone-only account)
+    const useDirectProvision = !sendEnabled || !parsed.email;
 
+    if (useDirectProvision) {
+      const result = await provisionOrganizationUserDirect(
+        prisma,
+        actor,
+        parsed,
+      );
+      return NextResponse.json(
+        {
+          message: TH.users.provisionSuccess,
+          ...result,
+        },
+        { status: result.reused ? 200 : 201 },
+      );
+    }
+
+    const environment = resolveInviteEnvironment();
     const gateDecision = evaluateRealInviteSend({
       mode: environment.mode,
-      email: parsed.email,
+      email: parsed.email!,
       gate: resolveRealInviteGate(),
     });
     if (gateDecision.action === "preview") {
@@ -86,13 +110,17 @@ export async function POST(request: NextRequest) {
     const result = await inviteOrganizationUserReal(
       prisma,
       actor,
-      parsed,
+      { ...parsed, phone: phoneE164 },
       auth,
       environment.redirectTo,
     );
     return NextResponse.json(
       {
-        message: TH.users.inviteSuccess,
+        message:
+          environment.mode === "mock"
+            ? TH.users.inviteMockSuccess
+            : TH.users.inviteSuccess,
+        inviteMode: environment.mode,
         ...result,
       },
       { status: result.reused ? 200 : 201 },
@@ -123,8 +151,12 @@ export async function POST(request: NextRequest) {
       );
     }
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: TH.common.failed }, { status: 400 });
+      return NextResponse.json(
+        { message: error.issues[0]?.message ?? TH.common.failed },
+        { status: 400 },
+      );
     }
+    console.error("invite user failed", error);
     return NextResponse.json({ message: TH.common.failed }, { status: 500 });
   }
 }

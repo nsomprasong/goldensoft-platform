@@ -8,21 +8,18 @@ import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
 import {
   PLATFORM_PERMISSIONS,
-  permissionsForRoles,
 } from "@/lib/permissions/codes";
+import { displayPermissionCodesForRole } from "@/lib/platform/custom-roles";
+import { MASTER } from "@/lib/platform/master-codes";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ id: string }> };
 
-export default async function EditCustomRolePage({ params }: Props) {
+export default async function EditOrganizationRolePage({ params }: Props) {
   const ctx = await requirePlatformPage();
   const { id } = await params;
-  const perms = permissionsForRoles({
-    platformRoles: ctx.bundle.platformRoles,
-    organizationRoles: ctx.organizationRoles,
-  });
   const shellProps = {
     displayName: ctx.bundle.profile?.displayName ?? TH.common.user,
     platformRoles: ctx.bundle.platformRoles,
@@ -49,10 +46,16 @@ export default async function EditCustomRolePage({ params }: Props) {
   });
   if (!role) notFound();
 
-  const canEdit =
+  const isSuper = ctx.bundle.platformRoles.includes(
+    MASTER.platformRole.SUPER_ADMIN,
+  );
+  const canManage = ctx.permissionCodes.includes(PLATFORM_PERMISSIONS.roleManage);
+  const canEditCustom =
     !role.isSystem &&
-    perms.includes(PLATFORM_PERMISSIONS.roleManage) &&
+    canManage &&
     role.organizationId === ctx.activeOrganization?.id;
+  const canEditSystem = role.isSystem && isSuper;
+  const canEdit = canEditCustom || canEditSystem;
 
   if (!canEdit) {
     return (
@@ -62,23 +65,34 @@ export default async function EditCustomRolePage({ params }: Props) {
     );
   }
 
+  const permissionCodes = displayPermissionCodesForRole({
+    isSystem: role.isSystem,
+    code: role.code,
+    dbPermissionCodes: role.permissions.map((p) => p.permission.code),
+  });
+
   return (
     <PlatformShell {...shellProps}>
       <PageHeader
-        title={`แก้ไขบทบาท: ${role.nameTh}`}
-        description={role.code}
+        title={`แก้ไขสิทธิ์: ${role.nameTh}`}
+        description={
+          role.isSystem
+            ? "บทบาทระบบ — เลือกสิทธิ์ที่จะให้ผู้ใช้ที่มีบทบาทนี้"
+            : role.code
+        }
         icon={<Shield size={24} />}
       />
       <CustomRoleForm
         mode="edit"
         roleId={role.id}
-        organizationId={role.organizationId!}
+        organizationId={role.organizationId}
+        allowSystemPermissionEdit={canEditSystem}
         initial={{
           code: role.code,
           nameTh: role.nameTh,
           nameEn: role.nameEn,
           description: role.description ?? "",
-          permissionCodes: role.permissions.map((p) => p.permission.code),
+          permissionCodes,
           isSystem: role.isSystem,
         }}
       />

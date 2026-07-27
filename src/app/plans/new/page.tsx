@@ -17,7 +17,11 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewPlanPage() {
+export default async function NewPlanPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ productId?: string }>;
+}) {
   const ctx = await requirePlatformPage();
   const actor = await loadActorAccess(prisma, ctx.user.id);
   const perms = permissionsForRoles({
@@ -43,6 +47,7 @@ export default async function NewPlanPage() {
       </PlatformShell>
     );
   }
+  const sp = await searchParams;
   const [products, billingCycles] = await Promise.all([
     prisma.product.findMany({
       where: { status: { code: MASTER.productStatus.ACTIVE } },
@@ -74,13 +79,21 @@ export default async function NewPlanPage() {
       defaultLimitValue: f.defaultLimitValue,
     }));
   }
+  const preselectedProductId =
+    sp.productId && products.some((p) => p.id === sp.productId)
+      ? sp.productId
+      : undefined;
   return (
     <PlatformShell {...shellProps}>
       <PageHeader
         title="เพิ่มแพ็กเกจ"
         actions={
           <IconTextLink
-            href="/plans"
+            href={
+              preselectedProductId
+                ? `/products/${preselectedProductId}`
+                : "/plans"
+            }
             variant="outline"
             label={TH.common.back}
             icon={<ArrowLeft className="size-5" />}
@@ -93,6 +106,17 @@ export default async function NewPlanPage() {
           products={products}
           billingCycles={billingCycles}
           featureCatalogByProductId={featureCatalogByProductId}
+          initial={
+            preselectedProductId
+              ? {
+                  productId: preselectedProductId,
+                  code: "",
+                  name: "",
+                  description: null,
+                  sortOrder: 0,
+                }
+              : undefined
+          }
         />
       </section>
     </PlatformShell>

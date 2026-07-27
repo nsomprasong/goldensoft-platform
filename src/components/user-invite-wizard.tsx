@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ChevronRight, Send } from "lucide-react";
+import { ArrowLeft, ChevronRight, KeyRound, Send } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -25,12 +25,15 @@ export function UserInviteWizard(props: {
   organizations: OrgOption[];
   branchesByOrg: Record<string, BranchOption[]>;
   showTestModeBadge?: boolean;
+  invitationsSendEnabled?: boolean;
 }) {
   const router = useRouter();
+  const invitationsSendEnabled = props.invitationsSendEnabled ?? true;
   const [step, setStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [organizationId, setOrganizationId] = useState(
     props.organizations[0]?.id ?? "",
@@ -49,6 +52,10 @@ export function UserInviteWizard(props: {
     [props.branchesByOrg, organizationId],
   );
 
+  const hasContact = email.trim().length > 0 || phone.trim().length > 0;
+  const willDirectProvision =
+    !invitationsSendEnabled || email.trim().length === 0;
+
   async function submit() {
     setPending(true);
     setError(null);
@@ -59,7 +66,8 @@ export function UserInviteWizard(props: {
         "Idempotency-Key": idempotencyKey.current,
       },
       body: JSON.stringify({
-        email,
+        email: email.trim() || null,
+        phone: phone.trim() || null,
         displayName,
         organizationId,
         organizationRoleCode: organizationRole,
@@ -68,12 +76,49 @@ export function UserInviteWizard(props: {
         idempotencyKey: idempotencyKey.current,
       }),
     });
-    const data = (await res.json()) as { message?: string };
-    setPending(false);
+    const data = (await res.json()) as {
+      message?: string;
+      passwordResetId?: string | null;
+      setPasswordPath?: string | null;
+      preview?: boolean;
+    };
     if (!res.ok) {
+      setPending(false);
       setError(data.message ?? TH.common.failed);
       return;
     }
+
+    if (data.preview) {
+      setPending(false);
+      pushToast(data.message ?? "โหมดพรีวิว — ยังไม่ส่งคำเชิญจริง");
+      return;
+    }
+
+    if (data.passwordResetId) {
+      const begin = await fetch("/api/auth/password-reset/begin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passwordResetId: data.passwordResetId }),
+      });
+      const beginData = (await begin.json()) as {
+        message?: string;
+        setPasswordPath?: string;
+      };
+      setPending(false);
+      if (!begin.ok) {
+        pushToast(data.message ?? TH.users.provisionSuccess);
+        setError(
+          beginData.message ??
+            "เพิ่มผู้ใช้แล้ว แต่เปิดหน้าตั้งรหัสผ่านไม่ได้ — ให้ผู้ใช้เข้าสู่ระบบโดยเว้นรหัสผ่านว่าง",
+        );
+        return;
+      }
+      pushToast(data.message ?? TH.users.provisionSuccess);
+      window.location.href = beginData.setPasswordPath ?? "/auth/set-password";
+      return;
+    }
+
+    setPending(false);
     pushToast(data.message ?? TH.users.inviteSuccess);
     router.push("/users");
     router.refresh();
@@ -88,6 +133,12 @@ export function UserInviteWizard(props: {
             คำเชิญจะไม่ถูกส่งจริงในโหมดนี้
           </span>
         </div>
+      ) : null}
+
+      {!invitationsSendEnabled ? (
+        <p className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+          {TH.settings.invitationsDisabled}
+        </p>
       ) : null}
 
       <ol
@@ -126,17 +177,40 @@ export function UserInviteWizard(props: {
       </ol>
 
       {step === 1 ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <FormField label={TH.users.email} htmlFor="email" required>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-            />
-          </FormField>
-          <FormField label={TH.users.displayName} htmlFor="displayName" required>
+        <div className="space-y-3">
+          <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">
+            {TH.users.contactHint}
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FormField label={TH.users.email} htmlFor="email">
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+              />
+            </FormField>
+            <FormField
+              label={TH.users.phone}
+              htmlFor="phone"
+              hint={TH.users.phoneHint}
+            >
+              <Input
+                id="phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                autoComplete="tel"
+                placeholder="08x-xxx-xxxx"
+              />
+            </FormField>
+          </div>
+          <FormField
+            label={TH.users.displayName}
+            htmlFor="displayName"
+            required
+          >
             <Input
               id="displayName"
               value={displayName}
@@ -242,7 +316,11 @@ export function UserInviteWizard(props: {
         <dl className="grid gap-2 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)]/50 p-4 text-[length:var(--text-label)] sm:grid-cols-2">
           <div>
             <dt className="text-[var(--text-muted)]">{TH.users.email}</dt>
-            <dd className="font-medium">{email}</dd>
+            <dd className="font-medium">{email.trim() || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--text-muted)]">{TH.users.phone}</dt>
+            <dd className="font-medium">{phone.trim() || "—"}</dd>
           </div>
           <div>
             <dt className="text-[var(--text-muted)]">{TH.users.displayName}</dt>
@@ -258,7 +336,7 @@ export function UserInviteWizard(props: {
             <dt className="text-[var(--text-muted)]">บทบาท</dt>
             <dd className="font-medium">{labelRole(organizationRole)}</dd>
           </div>
-          <div className="sm:col-span-2">
+          <div>
             <dt className="text-[var(--text-muted)]">ขอบเขตสาขา</dt>
             <dd className="font-medium">
               {branchScope === "ALL_BRANCHES"
@@ -266,6 +344,14 @@ export function UserInviteWizard(props: {
                 : branchScope === "NONE"
                   ? TH.users.scopeNone
                   : `${TH.users.scopeSelected} (${branchIds.length})`}
+            </dd>
+          </div>
+          <div className="sm:col-span-2">
+            <dt className="text-[var(--text-muted)]">ขั้นตอนถัดไป</dt>
+            <dd className="font-medium">
+              {willDirectProvision
+                ? "เพิ่มผู้ใช้แล้วเปิดหน้าตั้งรหัสผ่านทันที (ไม่ส่งอีเมลคำเชิญ)"
+                : "ส่งคำเชิญทางอีเมลให้ผู้ใช้ตอบรับ"}
             </dd>
           </div>
         </dl>
@@ -292,9 +378,16 @@ export function UserInviteWizard(props: {
         {step < 5 ? (
           <IconTextButton
             type="button"
-            onClick={() => setStep((s) => s + 1)}
+            onClick={() => {
+              if (step === 1 && !hasContact) {
+                setError(TH.users.needEmailOrPhone);
+                return;
+              }
+              setError(null);
+              setStep((s) => s + 1);
+            }}
             disabled={
-              (step === 1 && (!email || !displayName)) ||
+              (step === 1 && (!hasContact || !displayName.trim())) ||
               (step === 2 && !organizationId) ||
               (step === 4 && branchScope === "SELECTED" && branchIds.length === 0)
             }
@@ -307,12 +400,25 @@ export function UserInviteWizard(props: {
             disabled={pending}
             onClick={submit}
             icon={
-              <Send
-                className={pending ? "animate-pulse" : undefined}
-                aria-hidden="true"
-              />
+              willDirectProvision ? (
+                <KeyRound
+                  className={pending ? "animate-pulse" : undefined}
+                  aria-hidden="true"
+                />
+              ) : (
+                <Send
+                  className={pending ? "animate-pulse" : undefined}
+                  aria-hidden="true"
+                />
+              )
             }
-            label={pending ? TH.common.loading : TH.users.invite}
+            label={
+              pending
+                ? TH.common.loading
+                : willDirectProvision
+                  ? TH.users.submitAdd
+                  : TH.users.submitInvite
+            }
           />
         )}
       </div>

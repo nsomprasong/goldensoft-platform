@@ -156,6 +156,7 @@ describe("permissionsForRoles: SALES / ACCOUNT_MANAGER", () => {
     for (const expected of [
       PLATFORM_PERMISSIONS.organizationRead,
       PLATFORM_PERMISSIONS.branchRead,
+      PLATFORM_PERMISSIONS.branchManage,
       PLATFORM_PERMISSIONS.userRead,
       PLATFORM_PERMISSIONS.userInvite,
       PLATFORM_PERMISSIONS.userManage,
@@ -175,6 +176,7 @@ describe("permissionsForRoles: SALES / ACCOUNT_MANAGER", () => {
     });
     assert.ok(perms.includes(PLATFORM_PERMISSIONS.userInvite));
     assert.ok(perms.includes(PLATFORM_PERMISSIONS.roleAssign));
+    assert.ok(perms.includes(PLATFORM_PERMISSIONS.branchManage));
   });
 
   it("commission is out of scope: SALES / ACCOUNT_MANAGER receive no billing permissions", () => {
@@ -241,6 +243,51 @@ describe("Staff portfolio UI has no fake buttons", () => {
 });
 
 describe("Access decisions respect managed-org context mode", () => {
+  it("decideAccess lets SALES enter the platform with an empty portfolio (no memberships)", () => {
+    const decision = decideAccess({
+      authenticated: true,
+      profile: {
+        statusCode: "ACTIVE",
+        displayName: "Sales",
+        email: "sales@example.com",
+      },
+      memberships: [],
+      platformRoles: ["SALES"],
+      managedOrganizationIds: [],
+    });
+    assert.equal(decision.kind, "select_organization");
+  });
+
+  it("decideAccess lets ACCOUNT_MANAGER enter with an empty portfolio", () => {
+    const decision = decideAccess({
+      authenticated: true,
+      profile: {
+        statusCode: "ACTIVE",
+        displayName: "AM",
+        email: "am@example.com",
+      },
+      memberships: [],
+      platformRoles: ["ACCOUNT_MANAGER"],
+      managedOrganizationIds: [],
+    });
+    assert.equal(decision.kind, "select_organization");
+  });
+
+  it("decideAccess still blocks users with neither memberships nor platform staff roles", () => {
+    const decision = decideAccess({
+      authenticated: true,
+      profile: {
+        statusCode: "ACTIVE",
+        displayName: "Customer",
+        email: "c@example.com",
+      },
+      memberships: [],
+      platformRoles: [],
+      managedOrganizationIds: [],
+    });
+    assert.equal(decision.kind, "no_membership");
+  });
+
   it("decideAccess grants ready state for a managed_org claim without membership", () => {
     const decision = decideAccess({
       authenticated: true,

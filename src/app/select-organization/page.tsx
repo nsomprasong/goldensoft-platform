@@ -7,12 +7,18 @@ import { decideAccess } from "@/lib/auth/access";
 import { getAuthUser } from "@/lib/auth/session";
 import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
 import { TH } from "@/lib/i18n/th";
+import { listActiveManagedOrganizationIds } from "@/lib/platform/customer-portfolio";
+import { prisma } from "@/lib/prisma";
 
 export default async function SelectOrganizationPage() {
   const user = await getAuthUser();
   if (!user) redirect("/login");
 
   const bundle = await loadPlatformUserBundle(user.id);
+  const managedOrganizationIds = bundle.profile
+    ? await listActiveManagedOrganizationIds(prisma, bundle.profile.id)
+    : [];
+
   const decision = decideAccess({
     authenticated: true,
     profile: bundle.profile
@@ -23,6 +29,8 @@ export default async function SelectOrganizationPage() {
         }
       : null,
     memberships: bundle.memberships,
+    platformRoles: bundle.platformRoles,
+    managedOrganizationIds,
   });
 
   if (decision.kind === "no_profile") redirect("/access?reason=no_profile");
@@ -36,8 +44,34 @@ export default async function SelectOrganizationPage() {
     redirect("/");
   }
 
-  const organizations =
+  const membershipOrgs =
     decision.kind === "select_organization" ? decision.organizations : [];
+
+  // Portfolio staff pick from managed customer orgs (they are not members).
+  let organizations = membershipOrgs;
+  if (organizations.length === 0 && managedOrganizationIds.length > 0) {
+    const managed = await prisma.organization.findMany({
+      where: {
+        id: { in: managedOrganizationIds },
+        deletedAt: null,
+        status: { code: "ACTIVE" },
+      },
+      select: { id: true, displayName: true },
+      orderBy: { displayName: "asc" },
+    });
+    organizations = managed.map((org) => ({
+      id: org.id,
+      name: org.displayName,
+    }));
+  }
+
+  // Super Admin does not need an organization to use Platform Admin.
+  if (
+    organizations.length === 0 &&
+    bundle.platformRoles.includes("SUPER_ADMIN")
+  ) {
+    redirect("/");
+  }
 
   return (
     <div className="auth-shell">

@@ -6,6 +6,7 @@ import { requireAuthUser } from "@/lib/auth/request-auth";
 import { TH } from "@/lib/i18n/th";
 import {
   CustomRoleError,
+  deleteCustomRole,
   updateCustomRole,
 } from "@/lib/platform/custom-roles";
 import { prisma } from "@/lib/prisma";
@@ -118,6 +119,54 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         { status },
       );
     }
-    throw error;
+    console.error("updateCustomRole failed", error);
+    return NextResponse.json(
+      {
+        code: "INTERNAL_ERROR",
+        message: "บันทึกบทบาทไม่สำเร็จ กรุณาลองใหม่",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: Params) {
+  const user = await requireAuthUser(request);
+  if (!user) {
+    return NextResponse.json(
+      { code: "UNAUTHENTICATED", message: TH.common.sessionExpired },
+      { status: 401 },
+    );
+  }
+  const { id } = await params;
+  const actor = await loadActorAccess(prisma, user.id);
+  try {
+    const role = await deleteCustomRole(prisma, {
+      actor,
+      actorAuthUserId: user.id,
+      roleId: id,
+    });
+    return NextResponse.json({ ok: true, role });
+  } catch (error) {
+    if (error instanceof CustomRoleError) {
+      const status =
+        error.code === "FORBIDDEN"
+          ? 403
+          : error.code === "NOT_FOUND"
+            ? 404
+            : 400;
+      return NextResponse.json(
+        { code: error.code, message: error.message },
+        { status },
+      );
+    }
+    console.error("deleteCustomRole failed", error);
+    return NextResponse.json(
+      {
+        code: "INTERNAL_ERROR",
+        message: "ลบบทบาทไม่สำเร็จ กรุณาลองใหม่",
+      },
+      { status: 500 },
+    );
   }
 }

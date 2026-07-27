@@ -6,7 +6,9 @@ import {
 
 // Env is loaded by the db-preflight import (project files win over ambient stubs).
 
-export const EXPECTED_PLATFORM_TABLE_COUNT = 64;
+// 64 after 0006, +1 staff_organization_assignments (0007),
+// +1 user_password_resets (0008), +1 staff_profiles (0009).
+export const EXPECTED_PLATFORM_TABLE_COUNT = 67;
 
 export const INVITATION_MIGRATION_NAME = "0003_user_invitations";
 

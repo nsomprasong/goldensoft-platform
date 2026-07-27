@@ -171,6 +171,9 @@ describe("HR permission catalog seed script", () => {
       "0005_phase7b_subscription_history",
       "0006_billing_credit_foundation",
       "0007_staff_customer_portfolio",
+      "0008_staff_password_reset",
+      "0009_staff_identity_profiles",
+      "0010_staff_national_id_optional",
     ]);
 
     for (const dir of dirs) {

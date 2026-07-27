@@ -454,17 +454,25 @@ export function MobileRecordCard(props: {
               {props.subtitle}
             </div>
           ) : null}
-          {props.meta ? (
-            <div className="mt-1.5 text-sm leading-relaxed text-[var(--muted-foreground)]">
-              {props.meta}
-            </div>
-          ) : null}
         </div>
         {props.status ? (
           <div className="shrink-0 self-start">{props.status}</div>
         ) : null}
       </div>
-      {props.actions ? <div className="mt-3 w-full">{props.actions}</div> : null}
+      {props.meta || props.actions ? (
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          {props.meta ? (
+            <div className="min-w-0 flex-1 text-sm leading-relaxed text-[var(--muted-foreground)]">
+              {props.meta}
+            </div>
+          ) : (
+            <div className="min-w-0 flex-1" />
+          )}
+          {props.actions ? (
+            <div className="shrink-0">{props.actions}</div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

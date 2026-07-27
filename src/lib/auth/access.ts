@@ -42,6 +42,22 @@ export type AccessDecision =
       autoBranchId: string | null;
     };
 
+/**
+ * GoldenSoft internal staff who work via platform roles / customer portfolio
+ * rather than organization membership. They must be able to enter the shell
+ * even before any customer organization exists (so they can create the first one).
+ */
+export function isPlatformStaffWithoutMembershipRequirement(
+  platformRoles: string[] | undefined,
+): boolean {
+  const roles = platformRoles ?? [];
+  return (
+    roles.includes("SUPER_ADMIN") ||
+    roles.includes("SALES") ||
+    roles.includes("ACCOUNT_MANAGER")
+  );
+}
+
 export function decideAccess(input: ProfileAccessInput): AccessDecision {
   if (!input.authenticated) {
     return { kind: "unauthenticated", redirectTo: "/login" };
@@ -72,6 +88,9 @@ export function decideAccess(input: ProfileAccessInput): AccessDecision {
     input.contextMode === "managed_org" &&
     !!input.claimedOrganizationId &&
     managedOrganizationIds.includes(input.claimedOrganizationId);
+  const isPlatformStaff = isPlatformStaffWithoutMembershipRequirement(
+    input.platformRoles,
+  );
 
   if (activeOrgs.length === 0) {
     if (
@@ -96,10 +115,11 @@ export function decideAccess(input: ProfileAccessInput): AccessDecision {
         autoBranchId: null,
       };
     }
-    if (isSuper || managedOrganizationIds.length > 0) {
-      // SUPER_ADMIN without memberships can still use the platform shell and
-      // pick an organization in platform-admin mode. Staff with a customer
-      // portfolio but no memberships can pick one of their assigned orgs.
+    if (isPlatformStaff || managedOrganizationIds.length > 0) {
+      // SUPER_ADMIN / SALES / ACCOUNT_MANAGER are not organization members.
+      // They enter the platform shell (empty portfolio → create first customer;
+      // existing portfolio → pick a managed org). Plain customer users without
+      // memberships still hit the access wall below.
       return {
         kind: "select_organization",
         organizations: [],
@@ -243,6 +263,11 @@ export const PLATFORM_NAV: NavItem[] = [
     permission: "platform.user.read",
   },
   {
+    href: "/staff",
+    label: TH.nav.staff,
+    anyPlatformRoles: ["SUPER_ADMIN"],
+  },
+  {
     href: "/roles",
     label: TH.nav.roles,
     permission: "platform.role.read",
@@ -329,9 +354,14 @@ export function filterNavForRoles(input: {
   });
 }
 
+/** Where an administrator-initiated password reset is completed. */
+export const SET_PASSWORD_PATH = "/auth/set-password";
+
 export function isProtectedPath(pathname: string): boolean {
   if (pathname.startsWith("/login")) return false;
   if (pathname.startsWith("/auth/accept-invite")) return false;
+  if (pathname.startsWith(SET_PASSWORD_PATH)) return false;
+  if (pathname.startsWith(`/api${SET_PASSWORD_PATH}`)) return false;
   if (pathname.startsWith("/access")) return false;
   if (pathname.startsWith("/api/health")) return false;
   if (pathname.startsWith("/_next")) return false;

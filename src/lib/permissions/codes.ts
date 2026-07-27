@@ -1,12 +1,14 @@
 export const PLATFORM_PERMISSIONS = {
   organizationRead: "platform.organization.read",
   organizationManage: "platform.organization.manage",
+  organizationCreate: "platform.organization.create",
   branchRead: "platform.branch.read",
   branchManage: "platform.branch.manage",
   userRead: "platform.user.read",
   userInvite: "platform.user.invite",
   userSuspend: "platform.user.suspend",
   userManage: "platform.user.manage",
+  userPasswordReset: "platform.user.password_reset",
   roleRead: "platform.role.read",
   roleManage: "platform.role.manage",
   roleAssign: "platform.role.assign",
@@ -41,12 +43,14 @@ export type PlatformPermission =
 export const PLATFORM_PERMISSION_LABELS: Record<PlatformPermission, string> = {
   [PLATFORM_PERMISSIONS.organizationRead]: "ดูข้อมูลองค์กร",
   [PLATFORM_PERMISSIONS.organizationManage]: "จัดการองค์กร",
+  [PLATFORM_PERMISSIONS.organizationCreate]: "สร้างองค์กรลูกค้า",
   [PLATFORM_PERMISSIONS.branchRead]: "ดูข้อมูลสาขา",
   [PLATFORM_PERMISSIONS.branchManage]: "จัดการสาขา",
   [PLATFORM_PERMISSIONS.userRead]: "ดูผู้ใช้งาน",
   [PLATFORM_PERMISSIONS.userInvite]: "เชิญผู้ใช้งาน",
   [PLATFORM_PERMISSIONS.userSuspend]: "ระงับผู้ใช้งาน",
   [PLATFORM_PERMISSIONS.userManage]: "จัดการผู้ใช้งาน",
+  [PLATFORM_PERMISSIONS.userPasswordReset]: "รีเซ็ตรหัสผ่านผู้ใช้",
   [PLATFORM_PERMISSIONS.roleRead]: "ดูบทบาทและสิทธิ์",
   [PLATFORM_PERMISSIONS.roleManage]: "จัดการบทบาท",
   [PLATFORM_PERMISSIONS.roleAssign]: "กำหนดบทบาท",
@@ -80,12 +84,16 @@ export const PLATFORM_PERMISSION_DESCRIPTIONS: Record<
 > = {
   [PLATFORM_PERMISSIONS.organizationRead]: "ดูรายการและรายละเอียดองค์กร",
   [PLATFORM_PERMISSIONS.organizationManage]: "สร้าง แก้ไข และระงับองค์กร",
+  [PLATFORM_PERMISSIONS.organizationCreate]:
+    "สร้างองค์กรลูกค้าใหม่ พร้อมผูกกับพนักงานขายผู้สร้าง",
   [PLATFORM_PERMISSIONS.branchRead]: "ดูรายการและรายละเอียดสาขา",
   [PLATFORM_PERMISSIONS.branchManage]: "สร้าง แก้ไข และระงับสาขา",
   [PLATFORM_PERMISSIONS.userRead]: "ดูสมาชิกและคำเชิญ",
   [PLATFORM_PERMISSIONS.userInvite]: "ส่งคำเชิญเข้าองค์กร",
   [PLATFORM_PERMISSIONS.userSuspend]: "ระงับการเข้าถึงของผู้ใช้",
   [PLATFORM_PERMISSIONS.userManage]: "แก้ไขสถานะและข้อมูลสมาชิก",
+  [PLATFORM_PERMISSIONS.userPasswordReset]:
+    "เปิดสิทธิ์ให้ผู้ใช้ตั้งรหัสผ่านใหม่ด้วยตนเอง โดยผู้ดูแลไม่ทราบรหัสผ่าน",
   [PLATFORM_PERMISSIONS.roleRead]: "ดูบทบาทและเมทริกซ์สิทธิ์",
   [PLATFORM_PERMISSIONS.roleManage]: "สร้างและแก้ไขบทบาทกำหนดเอง",
   [PLATFORM_PERMISSIONS.roleAssign]: "กำหนดหรือถอดบทบาทจากผู้ใช้",
@@ -139,107 +147,162 @@ export function permissionResourceGroup(code: string): string {
   return parts.length >= 2 ? parts[1]! : "other";
 }
 
+/** Default grants for system organization roles (used until DB overrides exist). */
+export function defaultPermissionsForOrganizationRole(
+  roleCode: string,
+): PlatformPermission[] {
+  if (roleCode === "OWNER") {
+    return [
+      PLATFORM_PERMISSIONS.organizationRead,
+      PLATFORM_PERMISSIONS.organizationManage,
+      PLATFORM_PERMISSIONS.branchRead,
+      PLATFORM_PERMISSIONS.branchManage,
+      PLATFORM_PERMISSIONS.userRead,
+      PLATFORM_PERMISSIONS.userInvite,
+      PLATFORM_PERMISSIONS.userSuspend,
+      PLATFORM_PERMISSIONS.userManage,
+      PLATFORM_PERMISSIONS.roleRead,
+      PLATFORM_PERMISSIONS.roleManage,
+      PLATFORM_PERMISSIONS.roleAssign,
+      PLATFORM_PERMISSIONS.productRead,
+      PLATFORM_PERMISSIONS.planRead,
+      PLATFORM_PERMISSIONS.subscriptionRead,
+      PLATFORM_PERMISSIONS.auditRead,
+      // Account/subscription summary only — no credit/invoice/payment by default.
+      PLATFORM_PERMISSIONS.billingSubscriptionRead,
+    ];
+  }
+  if (roleCode === "ADMIN") {
+    return [
+      PLATFORM_PERMISSIONS.organizationRead,
+      PLATFORM_PERMISSIONS.branchRead,
+      PLATFORM_PERMISSIONS.branchManage,
+      PLATFORM_PERMISSIONS.userRead,
+      PLATFORM_PERMISSIONS.userInvite,
+      PLATFORM_PERMISSIONS.userSuspend,
+      PLATFORM_PERMISSIONS.userManage,
+      PLATFORM_PERMISSIONS.roleRead,
+      PLATFORM_PERMISSIONS.productRead,
+      PLATFORM_PERMISSIONS.planRead,
+      PLATFORM_PERMISSIONS.subscriptionRead,
+      PLATFORM_PERMISSIONS.auditRead,
+      // ADMIN does not receive billing permissions by default.
+    ];
+  }
+  if (roleCode === "BILLING_CONTACT") {
+    return [
+      PLATFORM_PERMISSIONS.organizationRead,
+      PLATFORM_PERMISSIONS.subscriptionRead,
+      PLATFORM_PERMISSIONS.productRead,
+      PLATFORM_PERMISSIONS.planRead,
+      PLATFORM_PERMISSIONS.billingAccountRead,
+      PLATFORM_PERMISSIONS.billingCreditRead,
+      PLATFORM_PERMISSIONS.billingInvoiceRead,
+      PLATFORM_PERMISSIONS.billingPaymentRead,
+      PLATFORM_PERMISSIONS.billingContactRead,
+      PLATFORM_PERMISSIONS.billingContactManage,
+      PLATFORM_PERMISSIONS.billingSubscriptionRead,
+      // Commercial subscription lifecycle stays on OWNER/BILLING_ADMIN.
+    ];
+  }
+  return [];
+}
+
+/** Default grants for platform staff roles (used until DB overrides exist). */
+export function defaultPermissionsForPlatformRole(
+  roleCode: string,
+): PlatformPermission[] {
+  if (roleCode === "SUPER_ADMIN") {
+    return Object.values(PLATFORM_PERMISSIONS);
+  }
+  if (roleCode === "BILLING_ADMIN") {
+    return [
+      PLATFORM_PERMISSIONS.subscriptionRead,
+      PLATFORM_PERMISSIONS.subscriptionManage,
+      PLATFORM_PERMISSIONS.organizationRead,
+      PLATFORM_PERMISSIONS.productRead,
+      PLATFORM_PERMISSIONS.planRead,
+      PLATFORM_PERMISSIONS.auditRead,
+      ...ALL_BILLING_PERMISSIONS,
+    ];
+  }
+  if (roleCode === "SUPPORT") {
+    return [
+      PLATFORM_PERMISSIONS.organizationRead,
+      PLATFORM_PERMISSIONS.branchRead,
+      PLATFORM_PERMISSIONS.userRead,
+      PLATFORM_PERMISSIONS.productRead,
+      PLATFORM_PERMISSIONS.planRead,
+      PLATFORM_PERMISSIONS.subscriptionRead,
+      PLATFORM_PERMISSIONS.auditRead,
+      PLATFORM_PERMISSIONS.billingAccountRead,
+      PLATFORM_PERMISSIONS.billingSubscriptionRead,
+    ];
+  }
+  // SALES / ACCOUNT_MANAGER: portfolio-scoped at runtime (managed orgs only).
+  if (roleCode === "SALES" || roleCode === "ACCOUNT_MANAGER") {
+    return [
+      PLATFORM_PERMISSIONS.organizationRead,
+      PLATFORM_PERMISSIONS.organizationCreate,
+      PLATFORM_PERMISSIONS.branchRead,
+      PLATFORM_PERMISSIONS.branchManage,
+      PLATFORM_PERMISSIONS.userRead,
+      PLATFORM_PERMISSIONS.userInvite,
+      PLATFORM_PERMISSIONS.userManage,
+      PLATFORM_PERMISSIONS.roleRead,
+      PLATFORM_PERMISSIONS.roleManage,
+      PLATFORM_PERMISSIONS.roleAssign,
+      PLATFORM_PERMISSIONS.productRead,
+      PLATFORM_PERMISSIONS.planRead,
+      PLATFORM_PERMISSIONS.subscriptionRead,
+    ];
+  }
+  return [];
+}
+
 export function permissionsForRoles(input: {
   platformRoles: string[];
   organizationRoles: string[];
   /** Extra permission codes from custom org roles (already resolved). */
   customPermissionCodes?: string[];
+  /**
+   * Optional DB overrides for system organization roles.
+   * When a role code is present (even as []), use it instead of defaults.
+   */
+  organizationRolePermissionOverrides?: Record<string, string[]>;
+  /** Optional DB overrides for platform staff roles (except SUPER_ADMIN). */
+  platformRolePermissionOverrides?: Record<string, string[]>;
 }): string[] {
   const set = new Set<string>();
+  const platformOverrides = input.platformRolePermissionOverrides;
 
-  if (input.platformRoles.includes("SUPER_ADMIN")) {
-    Object.values(PLATFORM_PERMISSIONS).forEach((p) => set.add(p));
-  }
-  if (input.platformRoles.includes("BILLING_ADMIN")) {
-    set.add(PLATFORM_PERMISSIONS.subscriptionRead);
-    set.add(PLATFORM_PERMISSIONS.subscriptionManage);
-    set.add(PLATFORM_PERMISSIONS.organizationRead);
-    set.add(PLATFORM_PERMISSIONS.productRead);
-    set.add(PLATFORM_PERMISSIONS.planRead);
-    set.add(PLATFORM_PERMISSIONS.auditRead);
-    for (const code of ALL_BILLING_PERMISSIONS) set.add(code);
-  }
-  if (input.platformRoles.includes("SUPPORT")) {
-    set.add(PLATFORM_PERMISSIONS.organizationRead);
-    set.add(PLATFORM_PERMISSIONS.branchRead);
-    set.add(PLATFORM_PERMISSIONS.userRead);
-    set.add(PLATFORM_PERMISSIONS.productRead);
-    set.add(PLATFORM_PERMISSIONS.planRead);
-    set.add(PLATFORM_PERMISSIONS.subscriptionRead);
-    set.add(PLATFORM_PERMISSIONS.auditRead);
-    set.add(PLATFORM_PERMISSIONS.billingAccountRead);
-    set.add(PLATFORM_PERMISSIONS.billingSubscriptionRead);
+  for (const roleCode of input.platformRoles) {
+    // SUPER_ADMIN always retains full access — cannot be locked out via DB edits.
+    if (roleCode === "SUPER_ADMIN") {
+      Object.values(PLATFORM_PERMISSIONS).forEach((p) => set.add(p));
+      continue;
+    }
+    if (
+      platformOverrides &&
+      Object.prototype.hasOwnProperty.call(platformOverrides, roleCode)
+    ) {
+      for (const code of platformOverrides[roleCode] ?? []) set.add(code);
+      continue;
+    }
+    for (const code of defaultPermissionsForPlatformRole(roleCode)) {
+      set.add(code);
+    }
   }
 
-  // SALES / ACCOUNT_MANAGER: static, read-mostly access scoped at runtime to
-  // their assigned customer-portfolio organizations (see
-  // src/lib/platform/customer-portfolio.ts). No billing/commission access —
-  // commission is out of scope for this phase.
-  if (
-    input.platformRoles.includes("SALES") ||
-    input.platformRoles.includes("ACCOUNT_MANAGER")
-  ) {
-    set.add(PLATFORM_PERMISSIONS.organizationRead);
-    set.add(PLATFORM_PERMISSIONS.branchRead);
-    set.add(PLATFORM_PERMISSIONS.userRead);
-    set.add(PLATFORM_PERMISSIONS.userInvite);
-    set.add(PLATFORM_PERMISSIONS.userManage);
-    set.add(PLATFORM_PERMISSIONS.roleRead);
-    set.add(PLATFORM_PERMISSIONS.roleManage);
-    set.add(PLATFORM_PERMISSIONS.roleAssign);
-    set.add(PLATFORM_PERMISSIONS.productRead);
-  }
-
-  if (input.organizationRoles.includes("OWNER")) {
-    set.add(PLATFORM_PERMISSIONS.organizationRead);
-    set.add(PLATFORM_PERMISSIONS.organizationManage);
-    set.add(PLATFORM_PERMISSIONS.branchRead);
-    set.add(PLATFORM_PERMISSIONS.branchManage);
-    set.add(PLATFORM_PERMISSIONS.userRead);
-    set.add(PLATFORM_PERMISSIONS.userInvite);
-    set.add(PLATFORM_PERMISSIONS.userSuspend);
-    set.add(PLATFORM_PERMISSIONS.userManage);
-    set.add(PLATFORM_PERMISSIONS.roleRead);
-    set.add(PLATFORM_PERMISSIONS.roleManage);
-    set.add(PLATFORM_PERMISSIONS.roleAssign);
-    set.add(PLATFORM_PERMISSIONS.productRead);
-    set.add(PLATFORM_PERMISSIONS.planRead);
-    set.add(PLATFORM_PERMISSIONS.subscriptionRead);
-    set.add(PLATFORM_PERMISSIONS.auditRead);
-    // Account/subscription summary only — no credit/invoice/payment by default.
-    set.add(PLATFORM_PERMISSIONS.billingSubscriptionRead);
-  }
-
-  if (input.organizationRoles.includes("ADMIN")) {
-    set.add(PLATFORM_PERMISSIONS.organizationRead);
-    set.add(PLATFORM_PERMISSIONS.branchRead);
-    set.add(PLATFORM_PERMISSIONS.branchManage);
-    set.add(PLATFORM_PERMISSIONS.userRead);
-    set.add(PLATFORM_PERMISSIONS.userInvite);
-    set.add(PLATFORM_PERMISSIONS.userSuspend);
-    set.add(PLATFORM_PERMISSIONS.userManage);
-    set.add(PLATFORM_PERMISSIONS.roleRead);
-    set.add(PLATFORM_PERMISSIONS.productRead);
-    set.add(PLATFORM_PERMISSIONS.planRead);
-    set.add(PLATFORM_PERMISSIONS.subscriptionRead);
-    set.add(PLATFORM_PERMISSIONS.auditRead);
-    // ADMIN does not receive billing permissions by default.
-  }
-
-  if (input.organizationRoles.includes("BILLING_CONTACT")) {
-    set.add(PLATFORM_PERMISSIONS.organizationRead);
-    set.add(PLATFORM_PERMISSIONS.subscriptionRead);
-    set.add(PLATFORM_PERMISSIONS.productRead);
-    set.add(PLATFORM_PERMISSIONS.planRead);
-    set.add(PLATFORM_PERMISSIONS.billingAccountRead);
-    set.add(PLATFORM_PERMISSIONS.billingCreditRead);
-    set.add(PLATFORM_PERMISSIONS.billingInvoiceRead);
-    set.add(PLATFORM_PERMISSIONS.billingPaymentRead);
-    set.add(PLATFORM_PERMISSIONS.billingContactRead);
-    set.add(PLATFORM_PERMISSIONS.billingContactManage);
-    set.add(PLATFORM_PERMISSIONS.billingSubscriptionRead);
-    // Remove prior accidental subscription.manage for BILLING_CONTACT —
-    // commercial subscription lifecycle stays on OWNER/BILLING_ADMIN.
+  const overrides = input.organizationRolePermissionOverrides;
+  for (const roleCode of input.organizationRoles) {
+    if (overrides && Object.prototype.hasOwnProperty.call(overrides, roleCode)) {
+      for (const code of overrides[roleCode] ?? []) set.add(code);
+      continue;
+    }
+    for (const code of defaultPermissionsForOrganizationRole(roleCode)) {
+      set.add(code);
+    }
   }
 
   for (const code of input.customPermissionCodes ?? []) {

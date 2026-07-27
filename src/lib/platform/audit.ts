@@ -76,6 +76,26 @@ const AUDIT_LABELS: Record<string, { nameTh: string; nameEn: string }> = {
     nameTh: "จัดเตรียมสิทธิ์ไม่สำเร็จ",
     nameEn: "User platform setup failed",
   },
+  [MASTER.auditActionType.USER_PASSWORD_RESET_REQUEST]: {
+    nameTh: "เปิดคำขอรีเซ็ตรหัสผ่าน",
+    nameEn: "Request password reset",
+  },
+  [MASTER.auditActionType.USER_PASSWORD_RESET_COMPLETE]: {
+    nameTh: "ตั้งรหัสผ่านใหม่สำเร็จ",
+    nameEn: "Password reset completed",
+  },
+  [MASTER.auditActionType.USER_PASSWORD_RESET_CANCEL]: {
+    nameTh: "ยกเลิกคำขอรีเซ็ตรหัสผ่าน",
+    nameEn: "Cancel password reset",
+  },
+  [MASTER.auditActionType.STAFF_CREATE]: {
+    nameTh: "เพิ่มพนักงาน GoldenSoft",
+    nameEn: "Create GoldenSoft staff",
+  },
+  [MASTER.auditActionType.STAFF_UPDATE]: {
+    nameTh: "แก้ไขข้อมูลพนักงาน GoldenSoft",
+    nameEn: "Update GoldenSoft staff",
+  },
   [MASTER.auditActionType.USER_ACTIVATE]: {
     nameTh: "เปิดใช้งานบัญชี",
     nameEn: "Activate user",
@@ -115,6 +135,14 @@ const AUDIT_LABELS: Record<string, { nameTh: string; nameEn: string }> = {
   [MASTER.auditActionType.STAFF_PORTFOLIO_REVOKE]: {
     nameTh: "ถอดองค์กรลูกค้าจากพนักงาน",
     nameEn: "Revoke customer organization from staff",
+  },
+  [MASTER.auditActionType.ORGANIZATION_ONBOARD]: {
+    nameTh: "เริ่มใช้งานองค์กรใหม่",
+    nameEn: "Onboard organization",
+  },
+  [MASTER.auditActionType.ENTITLEMENT_GENERATE]: {
+    nameTh: "สร้างสิทธิ์การใช้งาน",
+    nameEn: "Generate entitlements",
   },
 };
 

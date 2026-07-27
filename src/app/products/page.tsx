@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Package, Pencil, Plus, Search } from "lucide-react";
+import { Layers, Package, Plus, Search } from "lucide-react";
 
 import { PlatformShell } from "@/components/platform-shell";
 import {
@@ -59,12 +59,14 @@ export default async function ProductsPage({
   }
 
   const sp = await searchParams;
+  const statusFilter = sp.status ?? "ACTIVE";
   const { rows } = await listProducts(prisma, actor, {
     q: sp.q,
-    statusCode: sp.status,
+    statusCode: statusFilter || undefined,
     take: 100,
   });
   const canManage = perms.includes(PLATFORM_PERMISSIONS.productManage);
+  const canReadPlans = perms.includes(PLATFORM_PERMISSIONS.planRead);
 
   return (
     <PlatformShell {...shellProps}>
@@ -91,12 +93,12 @@ export default async function ProductsPage({
         />
         <select
           name="status"
-          defaultValue={sp.status ?? ""}
+          defaultValue={statusFilter}
           className="input max-w-[10rem]"
         >
-          <option value="">ทุกสถานะ</option>
           <option value="ACTIVE">ใช้งาน</option>
           <option value="RETIRED">เลิกใช้</option>
+          <option value="">ทุกสถานะ</option>
         </select>
         <IconTextButton
           type="submit"
@@ -112,19 +114,34 @@ export default async function ProductsPage({
           <ul className="grid gap-3 sm:grid-cols-2">
             {rows.map((p) => (
               <li key={p.id}>
-                <Link href={`/products/${p.id}`} className="block">
-                  <MobileRecordCard
-                    title={p.nameTh ?? p.name}
-                    subtitle={p.code}
-                    status={
-                      <StatusBadge
-                        label={labelStatus(p.status.code)}
-                        code={p.status.code}
+                <MobileRecordCard
+                  title={
+                    <Link
+                      href={`/products/${p.id}`}
+                      className="transition-colors hover:text-[var(--primary)]"
+                    >
+                      {p.nameTh ?? p.name}
+                    </Link>
+                  }
+                  subtitle={p.code}
+                  status={
+                    <StatusBadge
+                      label={labelStatus(p.status.code)}
+                      code={p.status.code}
+                    />
+                  }
+                  meta={`${p._count.plans} ${TH.nav.plans} · ${p._count.subscriptions} การสมัคร`}
+                  actions={
+                    canReadPlans ? (
+                      <IconTextLink
+                        href={`/products/${p.id}#plans`}
+                        size="sm"
+                        label={`ดูแพ็กเกจ (${p._count.plans})`}
+                        icon={<Layers className="size-3.5" />}
                       />
-                    }
-                    meta={`${p._count.plans} ${TH.nav.plans} · ${p._count.subscriptions} การสมัคร`}
-                  />
-                </Link>
+                    ) : undefined
+                  }
+                />
               </li>
             ))}
           </ul>

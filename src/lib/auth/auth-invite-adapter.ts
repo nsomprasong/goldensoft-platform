@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
-import type { InviteEnvironment } from "@/lib/auth/invite-env";
+import {
+  isAllowedDevHttpHostname,
+  type InviteEnvironment,
+} from "@/lib/auth/invite-env";
 
 export const AUTH_INVITE_ERROR_CODES = [
   "AUTH_INVITE_EMAIL_INVALID",
@@ -54,6 +57,12 @@ export type AuthUserLookupResult =
       emailConfirmed: boolean;
     };
 
+export type AuthInviteChannel = "invite" | "resend" | "recovery";
+
+export type AuthInviteOrRemindResult = AuthInviteResult & {
+  channel: AuthInviteChannel;
+};
+
 export interface AuthInviteAdapter {
   inviteUser(input: {
     email: string;
@@ -65,6 +74,15 @@ export interface AuthInviteAdapter {
     redirectTo: string;
   }): Promise<AuthInviteResult>;
   getUserByEmail(email: string): Promise<AuthUserLookupResult>;
+  /**
+   * Send onboarding email for a staff/user who may already exist:
+   * invite (new) → resend (unconfirmed) → recovery (confirmed).
+   */
+  inviteOrRemind(input: {
+    email: string;
+    displayName: string;
+    redirectTo: string;
+  }): Promise<AuthInviteOrRemindResult>;
 }
 
 type MockUser = {
@@ -104,6 +122,27 @@ export class MockAuthInviteAdapter implements AuthInviteAdapter {
     redirectTo: string;
   }): Promise<AuthInviteResult> {
     return this.send(input.email, input.redirectTo, true);
+  }
+
+  async inviteOrRemind(input: {
+    email: string;
+    displayName: string;
+    redirectTo: string;
+  }): Promise<AuthInviteOrRemindResult> {
+    const existing = await this.getUserByEmail(input.email);
+    if (!existing.found) {
+      const invited = await this.inviteUser(input);
+      return { ...invited, channel: "invite" };
+    }
+    if (!existing.emailConfirmed) {
+      const resent = await this.resendInvite({
+        email: input.email,
+        redirectTo: input.redirectTo,
+      });
+      return { ...resent, channel: "resend" };
+    }
+    const reminded = await this.send(input.email, input.redirectTo, true);
+    return { ...reminded, channel: "recovery" };
   }
 
   private async send(
@@ -252,6 +291,61 @@ export class SupabaseAuthInviteAdapter implements AuthInviteAdapter {
     };
   }
 
+  async inviteOrRemind(input: {
+    email: string;
+    displayName: string;
+    redirectTo: string;
+  }): Promise<AuthInviteOrRemindResult> {
+    const existing = await this.getUserByEmail(input.email);
+    if (!existing.found) {
+      try {
+        const invited = await this.inviteUser(input);
+        return { ...invited, channel: "invite" };
+      } catch (error) {
+        if (
+          !(error instanceof AuthInviteError) ||
+          error.code !== "AUTH_INVITE_ALREADY_EXISTS"
+        ) {
+          throw error;
+        }
+      }
+    }
+    const lookup = existing.found
+      ? existing
+      : await this.getUserByEmail(input.email);
+    if (!lookup.found) {
+      throw new AuthInviteError("AUTH_INVITE_FAILED");
+    }
+    if (!lookup.emailConfirmed) {
+      const resent = await this.resendInvite({
+        email: lookup.email,
+        redirectTo: input.redirectTo,
+      });
+      return { ...resent, channel: "resend" };
+    }
+    await this.sendRecoveryEmail(lookup.email, input.redirectTo);
+    return {
+      authUserId: lookup.authUserId,
+      email: lookup.email,
+      invited: true,
+      reused: true,
+      emailConfirmed: true,
+      channel: "recovery",
+    };
+  }
+
+  private async sendRecoveryEmail(
+    email: string,
+    redirectTo: string,
+  ): Promise<void> {
+    const redirect = validateRedirect(redirectTo);
+    const query = new URLSearchParams({ redirect_to: redirect.toString() });
+    await this.request(`/auth/v1/recover?${query}`, {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }
+
   private async send(
     rawEmail: string,
     redirectTo: string,
@@ -320,7 +414,10 @@ function validateRedirect(redirectTo: string): URL {
   }
   if (
     redirect.protocol !== "https:" &&
-    !(redirect.protocol === "http:" && redirect.hostname === "localhost")
+    !(
+      redirect.protocol === "http:" &&
+      isAllowedDevHttpHostname(redirect.hostname)
+    )
   ) {
     throw new AuthInviteError("AUTH_INVITE_REDIRECT_INVALID");
   }

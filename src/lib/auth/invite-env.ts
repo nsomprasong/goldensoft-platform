@@ -36,6 +36,22 @@ export class InviteEnvironmentError extends Error {
 
 const modeSchema = z.enum(["mock", "real"]);
 
+/** Local / LAN hosts allowed for HTTP app URLs outside production. */
+export function isAllowedDevHttpHostname(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1") return true;
+  const parts = host.split(".").map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return false;
+  }
+  const [a, b] = parts as [number, number, number, number];
+  // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+  if (a === 10) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
+
 function normalizeAppUrl(
   raw: string,
   nodeEnv: string,
@@ -73,11 +89,14 @@ function normalizeAppUrl(
   if (
     nodeEnv !== "production" &&
     parsed.protocol !== "https:" &&
-    !(parsed.protocol === "http:" && parsed.hostname === "localhost")
+    !(
+      parsed.protocol === "http:" &&
+      isAllowedDevHttpHostname(parsed.hostname)
+    )
   ) {
     throw new InviteEnvironmentError(
       "AUTH_INVITE_APP_URL_INVALID",
-      "NEXT_PUBLIC_APP_URL ใน development อนุญาตเฉพาะ HTTPS หรือ http://localhost",
+      "NEXT_PUBLIC_APP_URL ใน development อนุญาต HTTPS, localhost หรือ IP ในเครือข่ายภายใน (เช่น 192.168.x.x)",
     );
   }
 

@@ -146,9 +146,22 @@ export async function getProduct(db: PrismaClient, id: string) {
     include: {
       status: true,
       plans: {
-        include: { status: true, _count: { select: { subscriptions: true } } },
+        include: {
+          status: { select: { code: true, nameTh: true } },
+          versions: {
+            orderBy: { versionNumber: "desc" },
+            take: 1,
+            select: {
+              versionNumber: true,
+              priceAmount: true,
+              currency: true,
+              status: { select: { code: true } },
+            },
+          },
+          _count: { select: { subscriptions: true } },
+        },
         orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
-        take: 50,
+        take: 100,
       },
       _count: { select: { plans: true, features: true, subscriptions: true } },
     },

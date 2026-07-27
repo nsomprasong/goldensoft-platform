@@ -4,9 +4,14 @@ import { canManageCustomerOrganization } from "@/lib/platform/customer-portfolio
 import type { ActorAccess } from "@/lib/platform/organizations-admin";
 import { MASTER } from "@/lib/platform/master-codes";
 import {
+  PLATFORM_PERMISSION_DESCRIPTIONS,
+  PLATFORM_PERMISSION_LABELS,
   PLATFORM_PERMISSIONS,
+  defaultPermissionsForOrganizationRole,
   permissionsForRoles,
+  type PlatformPermission,
 } from "@/lib/permissions/codes";
+import { loadPlatformRolePermissionOverrides } from "@/lib/platform/platform-roles";
 
 export class CustomRoleError extends Error {
   constructor(
@@ -49,40 +54,163 @@ export async function canManageCustomRoles(
   );
 }
 
-async function writeAudit(
+async function resolveAuditActionTypeId(
   db: Prisma.TransactionClient | PrismaClient,
-  input: {
-    organizationId: string;
-    actorAuthUserId: string;
-    actionCode: string;
-    entityId: string;
-    beforeJson?: unknown;
-    afterJson?: unknown;
-  },
-) {
+  actionCode: string,
+): Promise<string> {
   const action = await db.auditActionType.upsert({
-    where: { code: input.actionCode },
+    where: { code: actionCode },
     create: {
-      code: input.actionCode,
-      nameTh: input.actionCode,
-      nameEn: input.actionCode,
+      code: actionCode,
+      nameTh: actionCode,
+      nameEn: actionCode,
       sortOrder: 100,
       isActive: true,
       isSystem: true,
     },
     update: {},
+    select: { id: true },
   });
+  return action.id;
+}
+
+async function writeAudit(
+  db: Prisma.TransactionClient | PrismaClient,
+  input: {
+    organizationId: string | null;
+    actorAuthUserId: string;
+    actionTypeId: string;
+    entityId: string;
+    beforeJson?: unknown;
+    afterJson?: unknown;
+  },
+) {
   await db.auditLog.create({
     data: {
       organizationId: input.organizationId,
       actorAuthUserId: input.actorAuthUserId,
-      actionTypeId: action.id,
+      actionTypeId: input.actionTypeId,
       entityType: "organization_role",
       entityId: input.entityId,
       beforeJson: input.beforeJson as Prisma.InputJsonValue | undefined,
       afterJson: input.afterJson as Prisma.InputJsonValue | undefined,
     },
   });
+}
+
+async function ensurePermissionCatalog(
+  db: Prisma.TransactionClient | PrismaClient,
+  codes: string[],
+) {
+  const unique = [...new Set(codes)];
+  if (unique.length === 0) return;
+  const existing = await db.permission.findMany({
+    where: { code: { in: unique } },
+    select: { code: true, isActive: true },
+  });
+  const existingCodes = new Set(existing.map((row) => row.code));
+  const inactive = existing.filter((row) => !row.isActive).map((row) => row.code);
+  const missing = unique.filter((code) => !existingCodes.has(code));
+
+  if (inactive.length > 0) {
+    await db.permission.updateMany({
+      where: { code: { in: inactive } },
+      data: { isActive: true },
+    });
+  }
+  if (missing.length === 0) return;
+
+  await db.permission.createMany({
+    data: missing.map((code, index) => {
+      const parts = code.split(".");
+      const resource = parts[1] ?? "other";
+      const action = parts[2] ?? "read";
+      const label =
+        code in PLATFORM_PERMISSION_LABELS
+          ? PLATFORM_PERMISSION_LABELS[code as PlatformPermission]
+          : code;
+      const description =
+        code in PLATFORM_PERMISSION_DESCRIPTIONS
+          ? PLATFORM_PERMISSION_DESCRIPTIONS[code as PlatformPermission]
+          : null;
+      return {
+        code,
+        nameTh: label,
+        nameEn: code,
+        descriptionTh: description,
+        productCode: "PLATFORM",
+        resource,
+        action,
+        sortOrder: 100 + index,
+        isSystem: true,
+        isActive: true,
+      };
+    }),
+    skipDuplicates: true,
+  });
+}
+
+async function syncRolePermissions(
+  db: Prisma.TransactionClient,
+  input: {
+    roleId: string;
+    currentPermissions: Array<{
+      id: string;
+      permission: { id: string; code: string };
+    }>;
+    permissionCodes: string[];
+    activePermissions: Array<{ id: string; code: string }>;
+  },
+) {
+  const uniquePerms = [...new Set(input.permissionCodes)];
+  if (input.activePermissions.length !== uniquePerms.length) {
+    throw new CustomRoleError(
+      "INACTIVE_PERMISSION",
+      "มีสิทธิ์ที่ไม่ใช้งานหรือไม่พบในระบบ",
+    );
+  }
+
+  const currentCodes = new Set(
+    input.currentPermissions.map((p) => p.permission.code),
+  );
+  const nextCodes = new Set(uniquePerms);
+  const toAdd = input.activePermissions.filter((p) => !currentCodes.has(p.code));
+  const toRemove = input.currentPermissions.filter(
+    (p) => !nextCodes.has(p.permission.code),
+  );
+
+  if (toRemove.length > 0) {
+    await db.organizationRolePermission.updateMany({
+      where: { id: { in: toRemove.map((row) => row.id) } },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  for (const permission of toAdd) {
+    const existing = await db.organizationRolePermission.findUnique({
+      where: {
+        organizationRoleId_permissionId: {
+          organizationRoleId: input.roleId,
+          permissionId: permission.id,
+        },
+      },
+    });
+    if (existing?.revokedAt) {
+      await db.organizationRolePermission.update({
+        where: { id: existing.id },
+        data: { revokedAt: null, grantedAt: new Date() },
+      });
+    } else if (!existing) {
+      await db.organizationRolePermission.create({
+        data: {
+          organizationRoleId: input.roleId,
+          permissionId: permission.id,
+        },
+      });
+    }
+  }
+
+  return uniquePerms;
 }
 
 export async function listOrganizationRoles(
@@ -169,74 +297,71 @@ export async function createCustomRole(
     );
   }
 
-  return db.$transaction(async (tx) => {
-    const activePermissions = await tx.permission.findMany({
-      where: { code: { in: uniquePerms }, isActive: true },
-      select: { id: true, code: true },
-    });
-    if (activePermissions.length !== uniquePerms.length) {
-      throw new CustomRoleError(
-        "INACTIVE_PERMISSION",
-        "มีสิทธิ์ที่ไม่ใช้งานหรือไม่พบในระบบ",
+  return db.$transaction(
+    async (tx) => {
+      const activePermissions = await tx.permission.findMany({
+        where: { code: { in: uniquePerms }, isActive: true },
+        select: { id: true, code: true },
+      });
+      if (activePermissions.length !== uniquePerms.length) {
+        throw new CustomRoleError(
+          "INACTIVE_PERMISSION",
+          "มีสิทธิ์ที่ไม่ใช้งานหรือไม่พบในระบบ",
+        );
+      }
+
+      const existing = await tx.organizationRole.findFirst({
+        where: { organizationId: input.organizationId, code },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new CustomRoleError(
+          "ROLE_CODE_EXISTS",
+          "รหัสบทบาทนี้มีอยู่แล้วในองค์กร",
+        );
+      }
+
+      const role = await tx.organizationRole.create({
+        data: {
+          code,
+          nameTh: input.nameTh.trim(),
+          nameEn: input.nameEn.trim(),
+          description: input.description?.trim() || null,
+          organizationId: input.organizationId,
+          isSystem: false,
+          isActive: true,
+          codeLocked: false,
+          sortOrder: 100,
+        },
+      });
+
+      await tx.organizationRolePermission.createMany({
+        data: activePermissions.map((p) => ({
+          organizationRoleId: role.id,
+          permissionId: p.id,
+        })),
+      });
+
+      const createActionId = await resolveAuditActionTypeId(
+        tx,
+        MASTER.auditActionType.CUSTOM_ROLE_CREATE,
       );
-    }
-
-    const existing = await tx.organizationRole.findFirst({
-      where: { organizationId: input.organizationId, code },
-      select: { id: true },
-    });
-    if (existing) {
-      throw new CustomRoleError(
-        "ROLE_CODE_EXISTS",
-        "รหัสบทบาทนี้มีอยู่แล้วในองค์กร",
-      );
-    }
-
-    const role = await tx.organizationRole.create({
-      data: {
-        code,
-        nameTh: input.nameTh.trim(),
-        nameEn: input.nameEn.trim(),
-        description: input.description?.trim() || null,
-        organizationId: input.organizationId,
-        isSystem: false,
-        isActive: true,
-        codeLocked: false,
-        sortOrder: 100,
-      },
-    });
-
-    await tx.organizationRolePermission.createMany({
-      data: activePermissions.map((p) => ({
-        organizationRoleId: role.id,
-        permissionId: p.id,
-      })),
-    });
-
-    await writeAudit(tx, {
-      organizationId: input.organizationId,
-      actorAuthUserId: input.actorAuthUserId,
-      actionCode: MASTER.auditActionType.CUSTOM_ROLE_CREATE,
-      entityId: role.id,
-      afterJson: {
-        code: role.code,
-        nameTh: role.nameTh,
-        permissionCodes: uniquePerms,
-      },
-    });
-
-    for (const permission of activePermissions) {
       await writeAudit(tx, {
         organizationId: input.organizationId,
         actorAuthUserId: input.actorAuthUserId,
-        actionCode: MASTER.auditActionType.CUSTOM_ROLE_PERMISSION_ADD,
+        actionTypeId: createActionId,
         entityId: role.id,
-        afterJson: { permissionCode: permission.code },
+        afterJson: {
+          code: role.code,
+          nameTh: role.nameTh,
+          permissionCodes: uniquePerms,
+        },
       });
-    }
 
-    return role;
-  });
+      return role;
+    },
+    { maxWait: 10_000, timeout: 20_000 },
+  );
 }
 
 export async function updateCustomRole(
@@ -261,139 +386,301 @@ export async function updateCustomRole(
       },
     },
   });
-  if (!role || !role.organizationId) {
+  if (!role) {
     throw new CustomRoleError("NOT_FOUND", "ไม่พบบทบาท");
   }
+
+  const isSuper = input.actor.platformRoles.includes(
+    MASTER.platformRole.SUPER_ADMIN,
+  );
+
   if (role.isSystem) {
+    if (!isSuper) {
+      throw new CustomRoleError(
+        "SYSTEM_ROLE_IMMUTABLE",
+        "เฉพาะผู้ดูแลระบบสูงสุดเท่านั้นที่แก้ไขสิทธิ์บทบาทระบบได้",
+      );
+    }
+    if (input.isActive === false) {
+      throw new CustomRoleError(
+        "SYSTEM_ROLE_IMMUTABLE",
+        "ไม่สามารถปิดใช้งานบทบาทระบบได้",
+      );
+    }
+    if (!input.permissionCodes || input.permissionCodes.length === 0) {
+      throw new CustomRoleError(
+        "PERMISSIONS_REQUIRED",
+        "กรุณาเลือกสิทธิ์อย่างน้อยหนึ่งรายการ",
+      );
+    }
+  } else {
+    if (!role.organizationId) {
+      throw new CustomRoleError("NOT_FOUND", "ไม่พบบทบาท");
+    }
+    if (!(await canManageCustomRoles(input.actor, role.organizationId))) {
+      throw new CustomRoleError("FORBIDDEN", "ไม่มีสิทธิ์จัดการบทบาท");
+    }
+  }
+
+  let activePermissions: Array<{ id: string; code: string }> = [];
+  if (input.permissionCodes) {
+    const uniquePerms = [...new Set(input.permissionCodes)];
+    await ensurePermissionCatalog(db, uniquePerms);
+    activePermissions = await db.permission.findMany({
+      where: { code: { in: uniquePerms }, isActive: true },
+      select: { id: true, code: true },
+    });
+    if (activePermissions.length !== uniquePerms.length) {
+      throw new CustomRoleError(
+        "INACTIVE_PERMISSION",
+        "มีสิทธิ์ที่ไม่ใช้งานหรือไม่พบในระบบ",
+      );
+    }
+  }
+
+  return db.$transaction(
+    async (tx) => {
+      const before = {
+        nameTh: role.nameTh,
+        nameEn: role.nameEn,
+        description: role.description,
+        isActive: role.isActive,
+        permissionCodes: role.permissions.map((p) => p.permission.code),
+      };
+
+      if (!role.isSystem && input.isActive === false) {
+        const activeAssignments = await tx.organizationMembershipRole.count({
+          where: { roleId: role.id, revokedAt: null },
+        });
+        if (activeAssignments > 0) {
+          throw new CustomRoleError(
+            "ROLE_IN_USE",
+            "ไม่สามารถปิดใช้งานบทบาทที่มีผู้ใช้ได้รับอยู่",
+          );
+        }
+      }
+
+      const updated = await tx.organizationRole.update({
+        where: { id: role.id },
+        data: role.isSystem
+          ? {
+              // System roles: keep code/name locked; description may be clarified.
+              description:
+                input.description === undefined
+                  ? role.description
+                  : input.description?.trim() || null,
+            }
+          : {
+              nameTh: input.nameTh?.trim() ?? role.nameTh,
+              nameEn: input.nameEn?.trim() ?? role.nameEn,
+              description:
+                input.description === undefined
+                  ? role.description
+                  : input.description?.trim() || null,
+              isActive: input.isActive ?? role.isActive,
+            },
+      });
+
+      let nextPermissionCodes = before.permissionCodes;
+      if (input.permissionCodes) {
+        nextPermissionCodes = await syncRolePermissions(tx, {
+          roleId: role.id,
+          currentPermissions: role.permissions,
+          permissionCodes: input.permissionCodes,
+          activePermissions,
+        });
+      }
+
+      const actionTypeId = await resolveAuditActionTypeId(
+        tx,
+        input.isActive === false
+          ? MASTER.auditActionType.CUSTOM_ROLE_DEACTIVATE
+          : MASTER.auditActionType.CUSTOM_ROLE_UPDATE,
+      );
+      await writeAudit(tx, {
+        organizationId: role.organizationId,
+        actorAuthUserId: input.actorAuthUserId,
+        actionTypeId,
+        entityId: role.id,
+        beforeJson: before,
+        afterJson: {
+          nameTh: updated.nameTh,
+          nameEn: updated.nameEn,
+          description: updated.description,
+          isActive: updated.isActive,
+          permissionCodes: nextPermissionCodes,
+        },
+      });
+
+      return updated;
+    },
+    { maxWait: 10_000, timeout: 20_000 },
+  );
+}
+
+/** Permanently remove a custom org role when nothing still depends on it. */
+export async function deleteCustomRole(
+  db: PrismaClient,
+  input: {
+    actor: ActorAccess & { organizationRoles?: string[] };
+    actorAuthUserId: string;
+    roleId: string;
+  },
+) {
+  const role = await db.organizationRole.findUnique({
+    where: { id: input.roleId },
+  });
+  if (!role) {
+    throw new CustomRoleError("NOT_FOUND", "ไม่พบบทบาท");
+  }
+  if (role.isSystem || !role.organizationId) {
     throw new CustomRoleError(
       "SYSTEM_ROLE_IMMUTABLE",
-      "ไม่สามารถแก้ไขบทบาทระบบในเฟสนี้",
+      "ไม่สามารถลบบทบาทระบบได้",
     );
   }
   if (!(await canManageCustomRoles(input.actor, role.organizationId))) {
     throw new CustomRoleError("FORBIDDEN", "ไม่มีสิทธิ์จัดการบทบาท");
   }
 
-  return db.$transaction(async (tx) => {
-    const before = {
-      nameTh: role.nameTh,
-      nameEn: role.nameEn,
-      description: role.description,
-      isActive: role.isActive,
-      permissionCodes: role.permissions.map((p) => p.permission.code),
-    };
-
-    if (input.isActive === false) {
-      const activeAssignments = await tx.organizationMembershipRole.count({
-        where: { roleId: role.id, revokedAt: null },
-      });
-      if (activeAssignments > 0) {
-        throw new CustomRoleError(
-          "ROLE_IN_USE",
-          "ไม่สามารถปิดใช้งานบทบาทที่มีผู้ใช้ได้รับอยู่",
-        );
-      }
-    }
-
-    const updated = await tx.organizationRole.update({
-      where: { id: role.id },
-      data: {
-        nameTh: input.nameTh?.trim() ?? role.nameTh,
-        nameEn: input.nameEn?.trim() ?? role.nameEn,
-        description:
-          input.description === undefined
-            ? role.description
-            : input.description?.trim() || null,
-        isActive: input.isActive ?? role.isActive,
-      },
-    });
-
-    if (input.permissionCodes) {
-      const uniquePerms = [...new Set(input.permissionCodes)];
-      const activePermissions = await tx.permission.findMany({
-        where: { code: { in: uniquePerms }, isActive: true },
-        select: { id: true, code: true },
-      });
-      if (activePermissions.length !== uniquePerms.length) {
-        throw new CustomRoleError(
-          "INACTIVE_PERMISSION",
-          "มีสิทธิ์ที่ไม่ใช้งานหรือไม่พบในระบบ",
-        );
-      }
-
-      const currentCodes = new Set(before.permissionCodes);
-      const nextCodes = new Set(uniquePerms);
-      const toAdd = activePermissions.filter((p) => !currentCodes.has(p.code));
-      const toRemove = role.permissions.filter(
-        (p) => !nextCodes.has(p.permission.code),
-      );
-
-      for (const row of toRemove) {
-        await tx.organizationRolePermission.update({
-          where: { id: row.id },
-          data: { revokedAt: new Date() },
-        });
-        await writeAudit(tx, {
-          organizationId: role.organizationId!,
-          actorAuthUserId: input.actorAuthUserId,
-          actionCode: MASTER.auditActionType.CUSTOM_ROLE_PERMISSION_REMOVE,
-          entityId: role.id,
-          beforeJson: { permissionCode: row.permission.code },
-        });
-      }
-
-      for (const permission of toAdd) {
-        const existing = await tx.organizationRolePermission.findUnique({
-          where: {
-            organizationRoleId_permissionId: {
-              organizationRoleId: role.id,
-              permissionId: permission.id,
-            },
-          },
-        });
-        if (existing?.revokedAt) {
-          await tx.organizationRolePermission.update({
-            where: { id: existing.id },
-            data: { revokedAt: null, grantedAt: new Date() },
-          });
-        } else if (!existing) {
-          await tx.organizationRolePermission.create({
-            data: {
-              organizationRoleId: role.id,
-              permissionId: permission.id,
-            },
-          });
-        }
-        await writeAudit(tx, {
-          organizationId: role.organizationId!,
-          actorAuthUserId: input.actorAuthUserId,
-          actionCode: MASTER.auditActionType.CUSTOM_ROLE_PERMISSION_ADD,
-          entityId: role.id,
-          afterJson: { permissionCode: permission.code },
-        });
-      }
-    }
-
-    await writeAudit(tx, {
-      organizationId: role.organizationId!,
-      actorAuthUserId: input.actorAuthUserId,
-      actionCode:
-        input.isActive === false
-          ? MASTER.auditActionType.CUSTOM_ROLE_DEACTIVATE
-          : MASTER.auditActionType.CUSTOM_ROLE_UPDATE,
-      entityId: role.id,
-      beforeJson: before,
-      afterJson: {
-        nameTh: updated.nameTh,
-        nameEn: updated.nameEn,
-        description: updated.description,
-        isActive: updated.isActive,
-        permissionCodes: input.permissionCodes ?? before.permissionCodes,
-      },
-    });
-
-    return updated;
+  const activeAssignments = await db.organizationMembershipRole.count({
+    where: { roleId: role.id, revokedAt: null },
   });
+  if (activeAssignments > 0) {
+    throw new CustomRoleError(
+      "ROLE_IN_USE",
+      "ไม่สามารถลบบทบาทที่มีผู้ใช้ได้รับอยู่ — ถอดบทบาทออกจากผู้ใช้ก่อน",
+    );
+  }
+
+  const invitationCount = await db.userInvitation.count({
+    where: { organizationRoleId: role.id },
+  });
+  if (invitationCount > 0) {
+    throw new CustomRoleError(
+      "ROLE_IN_USE",
+      "ไม่สามารถลบบทบาทที่มีคำเชิญอ้างอิงอยู่",
+    );
+  }
+
+  return db.$transaction(
+    async (tx) => {
+      const before = {
+        code: role.code,
+        nameTh: role.nameTh,
+        nameEn: role.nameEn,
+        isActive: role.isActive,
+      };
+
+      await tx.organizationMembershipRole.deleteMany({
+        where: { roleId: role.id },
+      });
+      await tx.organizationRole.delete({ where: { id: role.id } });
+
+      const actionTypeId = await resolveAuditActionTypeId(
+        tx,
+        MASTER.auditActionType.CUSTOM_ROLE_DELETE,
+      );
+      await writeAudit(tx, {
+        organizationId: role.organizationId,
+        actorAuthUserId: input.actorAuthUserId,
+        actionTypeId,
+        entityId: role.id,
+        beforeJson: before,
+        afterJson: { deleted: true },
+      });
+
+      return { id: role.id, code: role.code };
+    },
+    { maxWait: 10_000, timeout: 20_000 },
+  );
+}
+
+/** Load active DB permission codes for system org roles (empty = use defaults). */
+export async function loadSystemOrganizationRolePermissionOverrides(
+  db: PrismaClient,
+  roleCodes: string[],
+): Promise<Record<string, string[]>> {
+  const unique = [...new Set(roleCodes)].filter(Boolean);
+  if (unique.length === 0) return {};
+
+  const roles = await db.organizationRole.findMany({
+    where: {
+      code: { in: unique },
+      isSystem: true,
+      organizationId: null,
+      isActive: true,
+    },
+    select: {
+      code: true,
+      permissions: {
+        where: { revokedAt: null, permission: { isActive: true } },
+        select: { permission: { select: { code: true } } },
+      },
+    },
+  });
+
+  const overrides: Record<string, string[]> = {};
+  for (const role of roles) {
+    if (role.permissions.length === 0) continue;
+    overrides[role.code] = role.permissions.map((p) => p.permission.code);
+  }
+  return overrides;
+}
+
+/** Effective permission codes for page/API gates (platform + org system DB/defaults + custom). */
+export async function resolveActorPermissionCodes(
+  db: PrismaClient,
+  input: {
+    platformRoles: string[];
+    organizationRoles: string[];
+    organizationId?: string | null;
+  },
+): Promise<string[]> {
+  if (input.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN)) {
+    return Object.values(PLATFORM_PERMISSIONS).sort();
+  }
+
+  const systemCodes = new Set(Object.values(MASTER.organizationRole));
+  const orgSystemRoles = input.organizationRoles.filter((code) =>
+    systemCodes.has(code as never),
+  );
+  const customRoleCodes = input.organizationRoles.filter(
+    (code) => !systemCodes.has(code as never),
+  );
+
+  const [orgOverrides, platformOverrides] = await Promise.all([
+    loadSystemOrganizationRolePermissionOverrides(db, orgSystemRoles),
+    loadPlatformRolePermissionOverrides(db, input.platformRoles),
+  ]);
+  const customPermissionCodes = input.organizationId
+    ? await resolveCustomPermissionCodes(
+        db,
+        customRoleCodes,
+        input.organizationId,
+      )
+    : [];
+
+  return permissionsForRoles({
+    platformRoles: input.platformRoles,
+    organizationRoles: orgSystemRoles,
+    organizationRolePermissionOverrides: orgOverrides,
+    platformRolePermissionOverrides: platformOverrides,
+    customPermissionCodes,
+  });
+}
+
+/** Display codes for a role detail/edit form (DB first, else system defaults). */
+export function displayPermissionCodesForRole(input: {
+  isSystem: boolean;
+  code: string;
+  dbPermissionCodes: string[];
+}): string[] {
+  if (input.dbPermissionCodes.length > 0) return input.dbPermissionCodes;
+  if (input.isSystem) {
+    return defaultPermissionsForOrganizationRole(input.code);
+  }
+  return [];
 }
 
 export async function resolveCustomPermissionCodes(

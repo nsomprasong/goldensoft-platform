@@ -164,6 +164,7 @@ const NAV_ICON_BY_HREF: Record<string, NavIconKey> = {
   "/organizations": "organization",
   "/branches": "branch",
   "/users": "users",
+  "/staff": "users",
   "/roles": "roles",
   "/products": "products",
   "/plans": "plans",

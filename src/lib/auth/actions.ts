@@ -4,13 +4,26 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { resolvePostLoginRedirect } from "@/lib/auth/post-login-redirect";
+import { SET_PASSWORD_PATH } from "@/lib/auth/access";
+import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
+import { startPasswordResetSession } from "@/lib/auth/password-reset-session";
+import {
+  resolveAccessiblePostLoginPath,
+  resolvePostLoginRedirect,
+} from "@/lib/auth/post-login-redirect";
 import { TH } from "@/lib/i18n/th";
+import {
+  isPhoneLoginEnabled,
+  resolveAuthEmailForPhoneLogin,
+  toE164ThaiMobile,
+} from "@/lib/platform/system-settings";
+import { prisma } from "@/lib/prisma";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { COOKIE_NAME } from "@/lib/context/cookie";
 
 export type LoginActionState = {
   error: string | null;
+  message?: string | null;
 };
 
 export async function signInWithPassword(
@@ -21,25 +34,115 @@ export async function signInWithPassword(
   const password = String(formData.get("password") ?? "");
   const next = resolvePostLoginRedirect(String(formData.get("next") ?? "/"));
 
-  if (!email || !password) {
+  if (!email) {
     return { error: TH.login.invalid };
   }
 
+  // Empty password = first-time / admin-opened password setup window.
+  if (!password) {
+    let opened = false;
+    try {
+      opened = (await startPasswordResetSession(email)) !== null;
+    } catch {
+      return { error: TH.common.connectionError };
+    }
+    if (!opened) {
+      return { error: TH.login.invalid };
+    }
+    redirect(SET_PASSWORD_PATH);
+  }
+
+  let destination = next;
   try {
     const supabase = await createSupabaseServerClient();
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    if (error) {
+    if (error || !data.user) {
       return { error: TH.login.invalid };
     }
+    const bundle = await loadPlatformUserBundle(data.user.id);
+    destination = resolveAccessiblePostLoginPath(next, {
+      platformRoles: bundle.platformRoles,
+      organizationRoles: bundle.memberships.flatMap((m) => m.roles),
+    });
   } catch {
     return { error: TH.common.connectionError };
   }
 
   revalidatePath("/", "layout");
-  redirect(next);
+  redirect(destination);
+}
+
+export async function signInWithPhonePassword(
+  _prev: LoginActionState,
+  formData: FormData,
+): Promise<LoginActionState> {
+  if (!(await isPhoneLoginEnabled(prisma))) {
+    return { error: TH.login.phoneDisabled };
+  }
+
+  const phone = toE164ThaiMobile(String(formData.get("phone") ?? ""));
+  const password = String(formData.get("password") ?? "");
+  const next = resolvePostLoginRedirect(String(formData.get("next") ?? "/"));
+
+  if (!phone) {
+    return { error: TH.login.invalidPhone };
+  }
+
+  // Empty password = first-time setup (same cookie flow as email).
+  if (!password) {
+    let opened = false;
+    try {
+      const email = await resolveAuthEmailForPhoneLogin(prisma, phone);
+      opened = (await startPasswordResetSession(email ?? phone)) !== null;
+    } catch {
+      return { error: TH.common.connectionError };
+    }
+    if (!opened) {
+      return { error: TH.login.invalidPhone };
+    }
+    redirect(SET_PASSWORD_PATH);
+  }
+
+  let destination = next;
+  try {
+    const supabase = await createSupabaseServerClient();
+
+    // 1) Prefer native phone credential when Auth already has the phone.
+    let signedIn = await supabase.auth.signInWithPassword({
+      phone,
+      password,
+    });
+
+    // 2) Email-first accounts: map phone → profile email, then password login.
+    if (signedIn.error || !signedIn.data.user) {
+      const email = await resolveAuthEmailForPhoneLogin(prisma, phone);
+      if (!email) {
+        return { error: TH.login.invalidPhone };
+      }
+      signedIn = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+    }
+
+    if (signedIn.error || !signedIn.data.user) {
+      return { error: TH.login.invalidPhone };
+    }
+
+    const bundle = await loadPlatformUserBundle(signedIn.data.user.id);
+    destination = resolveAccessiblePostLoginPath(next, {
+      platformRoles: bundle.platformRoles,
+      organizationRoles: bundle.memberships.flatMap((m) => m.roles),
+    });
+  } catch {
+    return { error: TH.common.connectionError };
+  }
+
+  revalidatePath("/", "layout");
+  redirect(destination);
 }
 
 export async function signOutAction(): Promise<void> {

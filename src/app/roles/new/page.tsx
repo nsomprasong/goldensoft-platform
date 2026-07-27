@@ -6,19 +6,13 @@ import { AccessDenied, PageHeader } from "@/components/ui/admin-ui";
 import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH } from "@/lib/i18n/th";
-import {
-  PLATFORM_PERMISSIONS,
-  permissionsForRoles,
-} from "@/lib/permissions/codes";
+import { PLATFORM_PERMISSIONS } from "@/lib/permissions/codes";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewCustomRolePage() {
   const ctx = await requirePlatformPage();
-  const perms = permissionsForRoles({
-    platformRoles: ctx.bundle.platformRoles,
-    organizationRoles: ctx.organizationRoles,
-  });
+  const perms = ctx.permissionCodes;
   const shellProps = {
     displayName: ctx.bundle.profile?.displayName ?? TH.common.user,
     platformRoles: ctx.bundle.platformRoles,

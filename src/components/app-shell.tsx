@@ -96,6 +96,7 @@ function groupForHref(href: string): ShellNavItem["group"] {
     href.startsWith("/organizations") ||
     href.startsWith("/branches") ||
     href.startsWith("/users") ||
+    href === "/staff" ||
     href.startsWith("/roles")
   ) {
     return "organization";

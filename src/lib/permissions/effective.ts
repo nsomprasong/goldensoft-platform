@@ -9,6 +9,7 @@ import {
   type PlatformPermission,
 } from "@/lib/permissions/codes";
 import { permissionResourceGroup } from "@/lib/permissions/codes";
+import { loadPlatformRolePermissionOverrides } from "@/lib/platform/platform-roles";
 
 export type EffectivePermissionRow = {
   code: string;
@@ -159,39 +160,37 @@ export const resolveEffectivePermissions = cache(
       rows.push(row);
     };
 
-    // Platform role static map
-    const platformCodes = permissionsForRoles({
+    // Platform role map (DB overrides when present; SUPER_ADMIN always full).
+    const platformOverrides = await loadPlatformRolePermissionOverrides(
+      db,
       platformRoles,
-      organizationRoles: [],
-    });
-    for (const code of platformCodes) {
-      const meta = parsePermissionMeta(code);
-      addRow({
-        code,
-        nameTh: labelFor(code),
-        product: meta.product,
-        resource: meta.resource,
-        action: meta.action,
-        sourceRole: platformRoles[0] ?? "PLATFORM",
-        sourceKind: "platform",
-        organizationId: null,
-        organizationScope: "แพลตฟอร์ม",
-        branchScope: "ทั้งหมด",
+    );
+    for (const roleCode of platformRoles) {
+      const rolePerms = permissionsForRoles({
+        platformRoles: [roleCode],
+        organizationRoles: [],
+        platformRolePermissionOverrides: platformOverrides,
       });
+      for (const code of rolePerms) {
+        const meta = parsePermissionMeta(code);
+        addRow({
+          code,
+          nameTh: labelFor(code),
+          product: meta.product,
+          resource: meta.resource,
+          action: meta.action,
+          sourceRole: roleCode,
+          sourceKind: "platform",
+          organizationId: null,
+          organizationScope: "แพลตฟอร์ม",
+          branchScope: "ทั้งหมด",
+        });
+      }
     }
 
     const branchScopes: EffectivePermissionsResult["branchScopes"] = [];
 
     for (const membership of profile.memberships) {
-      const systemRoleCodes = membership.roles
-        .filter((r) => r.role.isActive && r.role.isSystem)
-        .map((r) => r.role.code);
-
-      const systemCodes = permissionsForRoles({
-        platformRoles: [],
-        organizationRoles: systemRoleCodes,
-      });
-
       const branchLabel =
         membership.branchScopes
           .map((s) => s.scopeType.code)
@@ -205,23 +204,29 @@ export const resolveEffectivePermissions = cache(
         });
       }
 
-      for (const code of systemCodes) {
-        const meta = parsePermissionMeta(code);
-        for (const role of membership.roles.filter(
-          (r) => r.role.isActive && r.role.isSystem,
-        )) {
-          const rolePerms = permissionsForRoles({
-            platformRoles: [],
-            organizationRoles: [role.role.code],
-          });
-          if (!rolePerms.includes(code)) continue;
+      for (const assignment of membership.roles.filter(
+        (r) => r.role.isActive && r.role.isSystem,
+      )) {
+        const role = assignment.role;
+        const dbCodes = role.permissions
+          .filter((link) => link.permission.isActive)
+          .map((link) => link.permission.code);
+        const rolePerms =
+          dbCodes.length > 0
+            ? dbCodes
+            : permissionsForRoles({
+                platformRoles: [],
+                organizationRoles: [role.code],
+              });
+        for (const code of rolePerms) {
+          const meta = parsePermissionMeta(code);
           addRow({
             code,
             nameTh: labelFor(code),
             product: meta.product,
             resource: meta.resource,
             action: meta.action,
-            sourceRole: role.role.code,
+            sourceRole: role.code,
             sourceKind: "organization_system",
             organizationId: membership.organizationId,
             organizationScope:

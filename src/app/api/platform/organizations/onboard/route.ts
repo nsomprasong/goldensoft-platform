@@ -8,35 +8,114 @@ import {
   OnboardingError,
   onboardOrganization,
 } from "@/lib/platform/organization-onboarding";
+import { MASTER } from "@/lib/platform/master-codes";
+import { individualCustomerIdentitySchema } from "@/lib/platform/staff-identity";
 import { prisma } from "@/lib/prisma";
 
-const schema = z.object({
-  idempotencyKey: z.string().min(8).max(120),
-  organization: z.object({
-    customerCode: z.string().min(2).max(40),
-    slug: z.string().min(2).max(60),
-    displayName: z.string().min(2).max(120),
-    legalName: z.string().min(2).max(160),
-    taxId: z.string().max(40).optional().nullable(),
-    nameEn: z.string().max(120).optional().nullable(),
-    email: z.string().email().optional().nullable(),
-    phone: z.string().max(40).optional().nullable(),
-  }),
-  primaryBranch: z.object({
-    code: z.string().min(1).max(20),
-    name: z.string().min(1).max(120),
-    nameEn: z.string().max(120).optional().nullable(),
-    address: z.string().max(300).optional().nullable(),
-  }),
-  owner: z.object({
-    email: z.string().email(),
-    displayName: z.string().min(1).max(120),
-    authUserId: z.string().uuid().optional().nullable(),
-  }),
-  productCode: z.string().min(2).max(40),
-  planCode: z.string().min(2).max(40),
-  subscriptionMode: z.enum(["TRIAL", "ACTIVE"]),
-});
+const optionalTrimmed = z
+  .string()
+  .max(500)
+  .optional()
+  .nullable()
+  .transform((value) => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+  });
+
+const optionalEmail = z
+  .string()
+  .max(200)
+  .optional()
+  .nullable()
+  .transform((value) => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+  })
+  .pipe(z.union([z.string().email(), z.null()]));
+
+const schema = z
+  .object({
+    idempotencyKey: z.string().min(8).max(120),
+    organization: z.object({
+      customerCode: z.string().trim().min(2).max(40),
+      entityType: z.enum([
+        MASTER.organizationEntityType.LEGAL_ENTITY,
+        MASTER.organizationEntityType.INDIVIDUAL,
+      ]),
+      displayName: z.string().trim().max(120).optional().nullable(),
+      legalName: optionalTrimmed,
+      taxId: z
+        .string()
+        .max(40)
+        .optional()
+        .nullable()
+        .transform((value) => {
+          const trimmed = value?.trim();
+          return trimmed ? trimmed : null;
+        }),
+      nameEn: optionalTrimmed,
+      email: optionalEmail,
+      phone: z
+        .string()
+        .max(40)
+        .optional()
+        .nullable()
+        .transform((value) => {
+          const trimmed = value?.trim();
+          return trimmed ? trimmed : null;
+        }),
+      address: optionalTrimmed,
+      person: individualCustomerIdentitySchema.optional().nullable(),
+    }),
+    primaryBranch: z.object({
+      code: z.string().min(1).max(20),
+      name: z.string().min(1).max(120),
+      nameEn: z.string().max(120).optional().nullable(),
+      address: z.string().max(300).optional().nullable(),
+    }),
+    owner: z.object({
+      email: z.string().email(),
+      displayName: z.string().min(1).max(120),
+      authUserId: z.string().uuid().optional().nullable(),
+    }),
+    selections: z
+      .array(
+        z.object({
+          productCode: z.string().trim().min(2).max(40),
+          planCode: z.string().trim().min(2).max(40),
+        }),
+      )
+      .min(1),
+    subscriptionMode: z.enum(["TRIAL", "ACTIVE"]),
+  })
+  .superRefine((data, ctx) => {
+    const seen = new Set<string>();
+    for (const [index, row] of data.selections.entries()) {
+      if (seen.has(row.productCode)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `เลือกผลิตภัณฑ์ซ้ำ: ${row.productCode}`,
+          path: ["selections", index, "productCode"],
+        });
+      }
+      seen.add(row.productCode);
+    }
+    if (
+      data.organization.entityType ===
+      MASTER.organizationEntityType.LEGAL_ENTITY
+    ) {
+      const name = data.organization.displayName?.trim() ?? "";
+      if (name.length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: TH.org.needDisplayName,
+          path: ["organization", "displayName"],
+        });
+      }
+      return;
+    }
+    // TEMP: individual tax-payer identity may be omitted for onboarding tests.
+  });
 
 export async function POST(request: NextRequest) {
   const user = await requireAuthUser(request);
@@ -58,8 +137,10 @@ export async function POST(request: NextRequest) {
   }
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
+    const first =
+      parsed.error.issues[0]?.message ?? TH.common.failed;
     return NextResponse.json(
-      { code: "INVALID_BODY", message: TH.common.failed },
+      { code: "INVALID_BODY", message: first },
       { status: 400 },
     );
   }
@@ -81,6 +162,13 @@ export async function POST(request: NextRequest) {
         { status },
       );
     }
-    throw error;
+    console.error("onboardOrganization failed", error);
+    return NextResponse.json(
+      {
+        code: "ONBOARDING_FAILED",
+        message: "สร้างองค์กรไม่สำเร็จ กรุณาลองใหม่",
+      },
+      { status: 500 },
+    );
   }
 }

@@ -10,6 +10,7 @@ import {
   PLATFORM_PERMISSIONS,
   permissionsForRoles,
 } from "@/lib/permissions/codes";
+import { isInvitationSendEnabled } from "@/lib/platform/system-settings";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -95,18 +96,24 @@ export default async function InviteUserPage() {
   } catch {
     inviteMode = "mock";
   }
+  const invitationsSendEnabled = await isInvitationSendEnabled(prisma);
 
   return (
     <PlatformShell {...shellProps}>
       <section className="card max-w-2xl">
         <PageHeader
           title={TH.users.add}
-          description="กรอกข้อมูลและกำหนดสิทธิ์ก่อนส่งคำเชิญเข้าใช้งาน"
+          description={
+            invitationsSendEnabled
+              ? "กรอกอีเมลหรือเบอร์โทร กำหนดสิทธิ์ แล้วส่งคำเชิญหรือตั้งรหัสผ่านได้ทันที"
+              : "การส่งอีเมลคำเชิญปิดอยู่ — เพิ่มผู้ใช้แล้วตั้งรหัสผ่านได้ทันที"
+          }
         />
         <UserInviteWizard
           organizations={orgIds}
           branchesByOrg={branchesByOrg}
           showTestModeBadge={isSuper && inviteMode === "mock"}
+          invitationsSendEnabled={invitationsSendEnabled}
         />
       </section>
     </PlatformShell>

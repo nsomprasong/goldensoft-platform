@@ -4,7 +4,10 @@ import { MailPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { LabeledIconButton } from "@/components/ui/labeled-icon-button";
+import {
+  LabeledIconButton,
+  labeledActionSoftClassName,
+} from "@/components/ui/labeled-icon-button";
 import { pushToast } from "@/components/ui/toast";
 import { TH } from "@/lib/i18n/th";
 
@@ -37,7 +40,7 @@ export function ResendInviteButton({ invitationId }: { invitationId: string }) {
       variant="outline"
       disabled={pending}
       onClick={resend}
-      className="border-[var(--page-header-border)] bg-[var(--primary-soft)] text-[var(--primary)] hover:border-[var(--primary)]/40 hover:bg-[var(--primary-soft)] hover:text-[var(--primary-hover)]"
+      className={labeledActionSoftClassName}
       icon={
         <MailPlus className={pending ? "animate-pulse" : undefined} aria-hidden="true" />
       }

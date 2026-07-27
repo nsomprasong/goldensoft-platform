@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { Pencil, Shield } from "lucide-react";
 import { notFound } from "next/navigation";
 
+import { DeleteCustomRoleButton } from "@/components/delete-custom-role-button";
 import { PlatformShell } from "@/components/platform-shell";
 import {
   AccessDenied,
@@ -16,9 +16,10 @@ import { TH, labelRole } from "@/lib/i18n/th";
 import {
   PLATFORM_PERMISSIONS,
   PLATFORM_PERMISSION_LABELS,
-  permissionsForRoles,
   type PlatformPermission,
 } from "@/lib/permissions/codes";
+import { displayPermissionCodesForRole } from "@/lib/platform/custom-roles";
+import { MASTER } from "@/lib/platform/master-codes";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -28,10 +29,7 @@ type Props = { params: Promise<{ id: string }> };
 export default async function RoleDetailPage({ params }: Props) {
   const ctx = await requirePlatformPage();
   const { id } = await params;
-  const perms = permissionsForRoles({
-    platformRoles: ctx.bundle.platformRoles,
-    organizationRoles: ctx.organizationRoles,
-  });
+  const perms = ctx.permissionCodes;
   const shellProps = {
     displayName: ctx.bundle.profile?.displayName ?? TH.common.user,
     platformRoles: ctx.bundle.platformRoles,
@@ -79,10 +77,27 @@ export default async function RoleDetailPage({ params }: Props) {
   });
   if (!role) notFound();
 
+  const isSuper = ctx.bundle.platformRoles.includes(
+    MASTER.platformRole.SUPER_ADMIN,
+  );
   const canEdit =
+    (role.isSystem && isSuper) ||
+    (!role.isSystem &&
+      perms.includes(PLATFORM_PERMISSIONS.roleManage) &&
+      role.organizationId === ctx.activeOrganization?.id);
+  const canDelete =
     !role.isSystem &&
     perms.includes(PLATFORM_PERMISSIONS.roleManage) &&
     role.organizationId === ctx.activeOrganization?.id;
+
+  const permissionCodes = displayPermissionCodesForRole({
+    isSystem: role.isSystem,
+    code: role.code,
+    dbPermissionCodes: role.permissions.map((row) => row.permission.code),
+  });
+  const permissionMetaByCode = new Map(
+    role.permissions.map((row) => [row.permission.code, row.permission]),
+  );
 
   return (
     <PlatformShell {...shellProps}>
@@ -97,12 +112,23 @@ export default async function RoleDetailPage({ params }: Props) {
           />
         }
         actions={
-          canEdit ? (
-            <IconTextLink
-              href={`/roles/${role.id}/edit`}
-              label="แก้ไขสิทธิ์"
-              icon={<Pencil className="size-5" />}
-            />
+          canEdit || canDelete ? (
+            <div className="flex flex-wrap items-start gap-2">
+              {canEdit ? (
+                <IconTextLink
+                  href={`/roles/${role.id}/edit`}
+                  label="แก้ไขสิทธิ์"
+                  icon={<Pencil className="size-5" />}
+                />
+              ) : null}
+              {canDelete ? (
+                <DeleteCustomRoleButton
+                  roleId={role.id}
+                  roleName={role.nameTh || role.code}
+                  redirectTo="/roles"
+                />
+              ) : null}
+            </div>
           ) : null
         }
       />
@@ -124,21 +150,40 @@ export default async function RoleDetailPage({ params }: Props) {
         />
       </section>
       <section className="card mb-4">
-        <SectionHeader title="สิทธิ์" />
-        <ul className="grid gap-2">
-          {role.permissions.map((row) => (
-            <li key={row.id} className="rounded-[var(--radius-md)] border border-[var(--border)] p-3">
-              <p className="font-medium">
-                {PLATFORM_PERMISSION_LABELS[
-                  row.permission.code as PlatformPermission
-                ] ?? row.permission.nameTh}
-              </p>
-              <p className="text-[length:var(--text-caption)] text-[var(--text-secondary)]">
-                {row.permission.descriptionTh ?? row.permission.code}
-              </p>
-            </li>
-          ))}
-        </ul>
+        <SectionHeader
+          title="สิทธิ์"
+          description={
+            role.isSystem && role.permissions.length === 0
+              ? "ยังไม่ได้บันทึกในฐานข้อมูล — แสดงค่าเริ่มต้นของระบบ (กดแก้ไขสิทธิ์เพื่อปรับและบันทึก)"
+              : undefined
+          }
+        />
+        {permissionCodes.length === 0 ? (
+          <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">
+            ยังไม่มีสิทธิ์ในบทบาทนี้
+          </p>
+        ) : (
+          <ul className="grid gap-2">
+            {permissionCodes.map((code) => {
+              const meta = permissionMetaByCode.get(code);
+              return (
+                <li
+                  key={code}
+                  className="rounded-[var(--radius-md)] border border-[var(--border)] p-3"
+                >
+                  <p className="font-medium">
+                    {PLATFORM_PERMISSION_LABELS[code as PlatformPermission] ??
+                      meta?.nameTh ??
+                      code}
+                  </p>
+                  <p className="text-[length:var(--text-caption)] text-[var(--text-secondary)]">
+                    {meta?.descriptionTh ?? code}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
       <section className="card">
         <SectionHeader title="ผู้ใช้ที่ได้รับบทบาท" />

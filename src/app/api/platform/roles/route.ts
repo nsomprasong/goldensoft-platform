@@ -93,6 +93,13 @@ export async function POST(request: NextRequest) {
         { status },
       );
     }
-    throw error;
+    console.error("createCustomRole failed", error);
+    return NextResponse.json(
+      {
+        code: "INTERNAL_ERROR",
+        message: "บันทึกบทบาทไม่สำเร็จ กรุณาลองใหม่",
+      },
+      { status: 500 },
+    );
   }
 }

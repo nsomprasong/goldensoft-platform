@@ -2,11 +2,15 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
-import { decideAccess } from "@/lib/auth/access";
+import {
+  decideAccess,
+  isPlatformStaffWithoutMembershipRequirement,
+} from "@/lib/auth/access";
 import { getAuthUser } from "@/lib/auth/session";
 import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
 import { COOKIE_NAME, decodeContextCookie } from "@/lib/context/cookie";
 import { listActiveManagedOrganizationIds } from "@/lib/platform/customer-portfolio";
+import { resolveActorPermissionCodes } from "@/lib/platform/custom-roles";
 import { setServerTimingRoute } from "@/lib/perf/server-timing";
 
 function safeNextPath(raw: string | null | undefined): string {
@@ -14,6 +18,12 @@ function safeNextPath(raw: string | null | undefined): string {
   // Never bounce bootstrap into itself.
   if (raw.startsWith("/api/")) return "/";
   return raw;
+}
+
+/** Cookie writes are forbidden in Server Components — clear via Route Handler. */
+function redirectClearContext(nextPath: string): never {
+  const params = new URLSearchParams({ next: nextPath });
+  redirect(`/api/platform/context/clear?${params.toString()}`);
 }
 
 /**
@@ -28,7 +38,7 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
 
   const bundle = await loadPlatformUserBundle(user.id);
   const jar = await cookies();
-  const cookie = decodeContextCookie(jar.get(COOKIE_NAME)?.value);
+  let cookie = decodeContextCookie(jar.get(COOKIE_NAME)?.value);
   const headerList = await headers();
   const requestPath = safeNextPath(
     headerList.get("x-gs-pathname") ?? headerList.get("next-url"),
@@ -39,6 +49,19 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
   const managedOrganizationIds = bundle.profile
     ? await listActiveManagedOrganizationIds(prisma, bundle.profile.id)
     : [];
+
+  // Drop stale context left by a previous browser user (e.g. Super Admin
+  // platform_admin cookie still present when a SALES staff signs in).
+  const isSuper = bundle.platformRoles.includes("SUPER_ADMIN");
+  if (cookie?.mode === "platform_admin" && !isSuper) {
+    redirectClearContext(requestPath);
+  }
+  if (
+    cookie?.mode === "managed_org" &&
+    !managedOrganizationIds.includes(cookie.organizationId)
+  ) {
+    redirectClearContext(requestPath);
+  }
 
   const decision = decideAccess({
     authenticated: true,
@@ -66,13 +89,16 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     redirect("/access?reason=no_membership");
   }
   if (decision.kind === "select_organization") {
-    // SUPER_ADMIN with zero memberships lands on org list instead of access wall.
-    if (
-      bundle.platformRoles.includes("SUPER_ADMIN") &&
-      bundle.memberships.length === 0
-    ) {
-      // continue without active org — pages must tolerate null activeOrganization
-    } else {
+    // Platform staff are not organization members. Let them into the shell when
+    // there is nothing to pick yet (SUPER_ADMIN always; SALES/ACCOUNT_MANAGER
+    // with an empty customer portfolio so they can create the first org).
+    // Staff who already have managed customers must pick one first.
+    const canContinueWithoutOrg =
+      bundle.memberships.length === 0 &&
+      (bundle.platformRoles.includes("SUPER_ADMIN") ||
+        (isPlatformStaffWithoutMembershipRequirement(bundle.platformRoles) &&
+          managedOrganizationIds.length === 0));
+    if (!canContinueWithoutOrg) {
       redirect("/select-organization");
     }
   }
@@ -109,23 +135,37 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     activeBranchId = decision.autoBranchId;
   }
 
-  const isSuper = bundle.platformRoles.includes("SUPER_ADMIN");
-  const isManagedOrgMode =
+  let isManagedOrgMode =
     cookie?.mode === "managed_org" &&
     !!activeOrgId &&
     managedOrganizationIds.includes(activeOrgId);
   let platformAdminOrganization: { id: string; name: string } | null = null;
 
   if (cookie && !membership) {
-    if (
-      !(isSuper && cookie.mode === "platform_admin" && activeOrgId) &&
-      !isManagedOrgMode
-    ) {
-      redirect("/select-organization");
+    const canUsePlatformAdminContext =
+      isSuper && cookie.mode === "platform_admin" && !!activeOrgId;
+
+    if (!canUsePlatformAdminContext && !isManagedOrgMode) {
+      // Stale membership cookie (common after inviting staff / switching users
+      // on the same browser). Super Admin must reach the main shell without an
+      // organization — not the org picker.
+      const canEnterWithoutOrg =
+        isSuper ||
+        (isPlatformStaffWithoutMembershipRequirement(bundle.platformRoles) &&
+          managedOrganizationIds.length === 0 &&
+          bundle.memberships.length === 0);
+      if (canEnterWithoutOrg) {
+        redirectClearContext(requestPath);
+      } else {
+        redirect("/select-organization");
+      }
     }
+  }
+
+  if (cookie && !membership && (isManagedOrgMode || (isSuper && cookie.mode === "platform_admin"))) {
     const org = await prisma.organization.findFirst({
       where: {
-        id: activeOrgId,
+        id: activeOrgId!,
         deletedAt: null,
         status: { code: "ACTIVE" },
       },
@@ -141,24 +181,32 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
       },
     });
     if (!org) {
-      redirect("/select-organization");
+      // Claimed org gone — drop cookie; Super Admin continues to main.
+      redirectClearContext(requestPath);
+    } else {
+      platformAdminOrganization = { id: org.id, name: org.displayName };
+      const adminBranch = activeBranchId
+        ? (org.branches.find((b) => b.id === activeBranchId) ?? null)
+        : null;
+      const permissionCodes = await resolveActorPermissionCodes(prisma, {
+        platformRoles: bundle.platformRoles,
+        organizationRoles: [],
+        organizationId: org.id,
+      });
+      return {
+        user,
+        bundle,
+        managedOrganizationIds,
+        activeOrganization: platformAdminOrganization,
+        activeBranch: adminBranch,
+        organizationRoles: [],
+        permissionCodes,
+        branches: org.branches,
+        contextMode: isManagedOrgMode
+          ? ("managed_org" as const)
+          : ("platform_admin" as const),
+      };
     }
-    platformAdminOrganization = { id: org.id, name: org.displayName };
-    const adminBranch = activeBranchId
-      ? (org.branches.find((b) => b.id === activeBranchId) ?? null)
-      : null;
-    return {
-      user,
-      bundle,
-      managedOrganizationIds,
-      activeOrganization: platformAdminOrganization,
-      activeBranch: adminBranch,
-      organizationRoles: [],
-      branches: org.branches,
-      contextMode: isManagedOrgMode
-        ? ("managed_org" as const)
-        : ("platform_admin" as const),
-    };
   }
 
   const activeBranch =
@@ -177,6 +225,13 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     redirect(`/api/platform/context/bootstrap?${params.toString()}`);
   }
 
+  const organizationRoles = membership?.roles ?? [];
+  const permissionCodes = await resolveActorPermissionCodes(prisma, {
+    platformRoles: bundle.platformRoles,
+    organizationRoles,
+    organizationId: membership?.organizationId ?? null,
+  });
+
   return {
     user,
     bundle,
@@ -185,7 +240,8 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
       ? { id: membership.organizationId, name: membership.organizationName }
       : null,
     activeBranch,
-    organizationRoles: membership?.roles ?? [],
+    organizationRoles,
+    permissionCodes,
     branches: membership?.branches ?? [],
     contextMode: (cookie?.mode ?? "membership") as
       | "membership"

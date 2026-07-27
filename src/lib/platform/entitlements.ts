@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
+import { ensureAuditActionType } from "@/lib/platform/audit";
 import { MASTER } from "@/lib/platform/master-codes";
 
 type SnapshotFeature = {
@@ -235,17 +236,17 @@ export async function generateEntitlementsForSubscription(
       ? fromSnapshot
       : defaultEntitlementsForProduct(subscription.product.code);
 
-  const created = [];
-  for (const feature of features) {
-    const row = await db.entitlement.upsert({
-      where: {
-        organizationId_subscriptionId_code: {
-          organizationId: subscription.organizationId,
-          subscriptionId: subscription.id,
-          code: feature.code,
-        },
-      },
-      create: {
+  const existingCount = await db.entitlement.count({
+    where: {
+      organizationId: subscription.organizationId,
+      subscriptionId: subscription.id,
+    },
+  });
+
+  if (existingCount === 0) {
+    // Fast path for onboarding / new subscriptions (avoids N upserts in a tx).
+    await db.entitlement.createMany({
+      data: features.map((feature) => ({
         organizationId: subscription.organizationId,
         subscriptionId: subscription.id,
         productId: subscription.productId,
@@ -257,33 +258,59 @@ export async function generateEntitlementsForSubscription(
         startsAt: subscription.startsAt,
         endsAt: subscription.endsAt,
         sourceSnapshotJson: subscription.snapshotJson as Prisma.InputJsonValue,
-      },
-      update: {
-        statusId: activeStatus.id,
-        limitValue: feature.limitValue ?? null,
-        endsAt: subscription.endsAt,
-        sourceSnapshotJson: subscription.snapshotJson as Prisma.InputJsonValue,
-      },
+      })),
+      skipDuplicates: true,
     });
-    created.push(row);
+  } else {
+    for (const feature of features) {
+      await db.entitlement.upsert({
+        where: {
+          organizationId_subscriptionId_code: {
+            organizationId: subscription.organizationId,
+            subscriptionId: subscription.id,
+            code: feature.code,
+          },
+        },
+        create: {
+          organizationId: subscription.organizationId,
+          subscriptionId: subscription.id,
+          productId: subscription.productId,
+          code: feature.code,
+          nameTh: feature.name ?? feature.code,
+          nameEn: feature.name ?? feature.code,
+          limitValue: feature.limitValue ?? null,
+          statusId: activeStatus.id,
+          startsAt: subscription.startsAt,
+          endsAt: subscription.endsAt,
+          sourceSnapshotJson: subscription.snapshotJson as Prisma.InputJsonValue,
+        },
+        update: {
+          statusId: activeStatus.id,
+          limitValue: feature.limitValue ?? null,
+          endsAt: subscription.endsAt,
+          sourceSnapshotJson: subscription.snapshotJson as Prisma.InputJsonValue,
+        },
+      });
+    }
   }
 
-  const action = await db.auditActionType.upsert({
-    where: { code: MASTER.auditActionType.ENTITLEMENT_GENERATE },
-    create: {
-      code: MASTER.auditActionType.ENTITLEMENT_GENERATE,
-      nameTh: "สร้างสิทธิ์การใช้งาน",
-      nameEn: "Generate entitlements",
-      sortOrder: 94,
-      isActive: true,
-      isSystem: true,
+  const created = await db.entitlement.findMany({
+    where: {
+      organizationId: subscription.organizationId,
+      subscriptionId: subscription.id,
     },
-    update: {},
+    orderBy: { code: "asc" },
   });
+
+  // Uses module cache when pre-warmed outside the transaction.
+  const actionTypeId = await ensureAuditActionType(
+    db,
+    MASTER.auditActionType.ENTITLEMENT_GENERATE,
+  );
   await db.auditLog.create({
     data: {
       organizationId: subscription.organizationId,
-      actionTypeId: action.id,
+      actionTypeId,
       entityType: "subscription",
       entityId: subscription.id,
       afterJson: {
