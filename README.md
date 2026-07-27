@@ -16,6 +16,16 @@ Central Auth และ multi-tenant control plane สำหรับ Resident V2
 | New / Expected | `horyhrnqbeaivdztekfv` |
 | Blocked Legacy | `invnwpyshxdadhocueeh` |
 
+## Local ports (fixed)
+
+| App | Port | `npm run dev` |
+|-----|------|----------------|
+| `goldensoft-platform` | **3000** | this package |
+| `goldensoft-hr` | **3001** | HR service |
+| `goldensoft-app` | **3002** | Customer App |
+
+Ports are locked; if the port is already in use, `npm run dev` exits instead of auto-bumping.
+
 ## Quick start (local code)
 
 ```bash

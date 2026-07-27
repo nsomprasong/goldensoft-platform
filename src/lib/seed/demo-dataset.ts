@@ -3,7 +3,10 @@ import type { PrismaClient } from "@prisma/client";
 import { MASTER } from "@/lib/platform/master-codes";
 import { requireActiveMasterId } from "@/lib/platform/master-data";
 import { buildSubscriptionSnapshot } from "@/lib/platform/snapshot";
-import { generateEntitlementsForSubscription } from "@/lib/platform/entitlements";
+import {
+  catalogFeaturesForProduct,
+  generateEntitlementsForSubscription,
+} from "@/lib/platform/entitlements";
 import { resolveSeedMode } from "@/lib/seed/seed-mode";
 
 /** Demo org markers — cleanup only deletes these codes. Never GOLDENSOFT. */
@@ -264,7 +267,9 @@ async function ensureDemoSubscription(
       currency: input.version.currency,
     },
     billingCycleCode: MASTER.billingCycle.MONTHLY,
-    featureCodes: [`${input.product.code.toLowerCase()}.access`],
+    featureCodes: catalogFeaturesForProduct(input.product.code).map(
+      (f) => f.code,
+    ),
     limits: { demo: true },
   });
 

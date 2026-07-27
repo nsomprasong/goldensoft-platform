@@ -203,6 +203,22 @@ describe("Phase 7 organization selector and onboarding", () => {
       /allocateUniqueOrganizationSlug|selections/,
     );
     assert.match(
+      read("src/lib/platform/organization-onboarding.ts"),
+      /resolveOnboardingOwnerAuth|needsPasswordSetup|userPasswordReset/,
+    );
+    assert.match(
+      read("src/components/organization-onboarding-wizard.tsx"),
+      /ownerFirstLoginHint/,
+    );
+    assert.match(
+      read("src/lib/platform/organization-admins.ts"),
+      /listOrganizationAdminContacts|requestOrganizationAdminPasswordReset|addOrganizationAdminContact/,
+    );
+    assert.match(
+      read("src/app/organizations/[id]/page.tsx"),
+      /OrganizationAdminsPanel/,
+    );
+    assert.match(
       read("prisma/migrations/0011_organization_entity_type/migration.sql"),
       /entity_type/,
     );
@@ -217,6 +233,7 @@ describe("Phase 7 products plans subscriptions entitlements", () => {
   it("generates entitlements from subscription snapshots", () => {
     const source = read("src/lib/platform/entitlements.ts");
     assert.match(source, /resident_v2\.access|generateEntitlementsForSubscription/);
+    assert.match(source, /mergeSubscriptionFeatureCatalog|hr\.access/);
     assert.match(source, /assertOrganizationEntitlement/);
     assert.ok(exists("src/app/api/platform/entitlements/check/route.ts"));
     assert.match(

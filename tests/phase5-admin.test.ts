@@ -33,8 +33,10 @@ import {
   filterNavForRoles,
 } from "../src/lib/auth/access";
 import {
+  ORGANIZATION_ASSIGNABLE_PERMISSIONS,
   PLATFORM_PERMISSIONS,
   PLATFORM_PERMISSION_LABELS,
+  isOrganizationAssignablePermission,
   permissionsForRoles,
 } from "../src/lib/permissions/codes";
 import { TH } from "../src/lib/i18n/th";
@@ -407,5 +409,43 @@ describe("Phase 5 security source checks", () => {
         `secret key leaked in ${rel}`,
       );
     }
+  });
+
+  it("keeps org-assignable permissions separate from platform staff grants", () => {
+    assert.equal(
+      isOrganizationAssignablePermission(
+        PLATFORM_PERMISSIONS.organizationCreate,
+      ),
+      false,
+    );
+    assert.equal(
+      isOrganizationAssignablePermission(
+        PLATFORM_PERMISSIONS.customerPortfolioManage,
+      ),
+      false,
+    );
+    assert.equal(
+      isOrganizationAssignablePermission(PLATFORM_PERMISSIONS.userManage),
+      true,
+    );
+    assert.ok(
+      ORGANIZATION_ASSIGNABLE_PERMISSIONS.includes(
+        PLATFORM_PERMISSIONS.roleAssign,
+      ),
+    );
+    assert.match(
+      fs.readFileSync(
+        path.join(process.cwd(), "src/components/custom-role-form.tsx"),
+        "utf8",
+      ),
+      /ORGANIZATION_ASSIGNABLE_PERMISSIONS/,
+    );
+    assert.match(
+      fs.readFileSync(
+        path.join(process.cwd(), "src/app/users/page.tsx"),
+        "utf8",
+      ),
+      /activeOrganizationId/,
+    );
   });
 });

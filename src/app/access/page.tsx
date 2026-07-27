@@ -21,6 +21,9 @@ export default async function AccessPage({
   } else if (reason === "no_membership") {
     title = TH.access.noMembershipTitle;
     body = TH.access.noMembershipBody;
+  } else if (reason === "customer_app") {
+    title = TH.access.customerAppTitle;
+    body = TH.access.customerAppBody;
   }
 
   return (

@@ -745,8 +745,8 @@ export function OrganizationOnboardingWizard(props: {
               <h2 className="text-base font-semibold">{contactLabel}</h2>
               <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
                 {contactRole === "ADMIN"
-                  ? "ระบบจะสร้างคำเชิญบทบาท ADMIN ขององค์กรลูกค้า และผูกองค์กรนี้กับพอร์ตโฟลิโอของคุณอัตโนมัติ"
-                  : "หากยังไม่มีบัญชี ระบบจะสร้างคำเชิญ OWNER ให้เจ้าขององค์กร"}
+                  ? TH.org.ownerStepHintAdmin
+                  : TH.org.ownerStepHintOwner}
               </p>
             </div>
           </div>
@@ -755,7 +755,7 @@ export function OrganizationOnboardingWizard(props: {
               label={`อีเมล${contactRole === "ADMIN" ? "ผู้ดูแล" : "เจ้าของ"}`}
               htmlFor="ownerEmail"
               required
-              hint="ใช้อีเมลนี้สำหรับเข้าสู่ระบบและรับคำเชิญ"
+              hint={TH.org.ownerEmailHint}
             >
               <div className="relative">
                 <FieldIcon>
@@ -959,6 +959,9 @@ export function OrganizationOnboardingWizard(props: {
               </dd>
             </div>
           </dl>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            {TH.org.ownerFirstLoginHint}
+          </p>
           <p className="text-sm text-[var(--muted-foreground)]">
             {contactRole === "ADMIN"
               ? "องค์กรนี้จะปรากฏในพอร์ตโฟลิโอของคุณ พนักงานขายคนอื่นจะมองไม่เห็น"

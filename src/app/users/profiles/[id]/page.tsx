@@ -122,9 +122,10 @@ export default async function UserProfileAdminPage({
   }
 
   const canAssign = permissions.includes(PLATFORM_PERMISSIONS.roleAssign);
-  const canManagePlatformRoles = actor.platformRoles.includes(
-    MASTER.platformRole.SUPER_ADMIN,
-  );
+  const inOrgContext = Boolean(ctx.activeOrganization);
+  const canManagePlatformRoles =
+    !inOrgContext &&
+    actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN);
   const canManageBranchScope =
     permissions.includes(PLATFORM_PERMISSIONS.userManage) ||
     permissions.includes(PLATFORM_PERMISSIONS.roleAssign);
@@ -141,13 +142,30 @@ export default async function UserProfileAdminPage({
       })
     : [];
 
-  const membershipsVisible = isSuper
-    ? profile.memberships
-    : profile.memberships.filter(
-        (m) =>
-          actor.membershipOrganizationIds.includes(m.organizationId) ||
-          actor.managedOrganizationIds.includes(m.organizationId),
-      );
+  const membershipsVisible = (
+    isSuper
+      ? profile.memberships
+      : profile.memberships.filter(
+          (m) =>
+            actor.membershipOrganizationIds.includes(m.organizationId) ||
+            actor.managedOrganizationIds.includes(m.organizationId),
+        )
+  ).filter((m) =>
+    ctx.activeOrganization
+      ? m.organizationId === ctx.activeOrganization.id
+      : true,
+  );
+
+  if (ctx.activeOrganization && membershipsVisible.length === 0) {
+    return (
+      <PlatformShell {...shellProps}>
+        <AccessDenied
+          title={TH.access.deniedTitle}
+          body="ผู้ใช้นี้ไม่ได้เป็นสมาชิกขององค์กรที่เลือกอยู่"
+        />
+      </PlatformShell>
+    );
+  }
 
   const roleOptionsByOrg: Record<
     string,
@@ -235,46 +253,60 @@ export default async function UserProfileAdminPage({
       />
 
       <div className="grid gap-4">
-        <section className="card space-y-3">
-          <h3 className="font-semibold">{TH.roles.platformRoles}</h3>
-          <DetailList
-            items={[
-              { label: "อีเมล", value: profile.email },
-              { label: "Auth User", value: profile.authUserId },
-            ]}
-          />
-          <ul className="space-y-2 text-sm">
-            {profile.platformRoles.length === 0 ? (
-              <li className="text-[var(--text-secondary)]">ยังไม่มีบทบาทแพลตฟอร์ม</li>
-            ) : (
-              profile.platformRoles.map((assignment) => (
-                <li
-                  key={assignment.id}
-                  className="flex items-center justify-between gap-2"
-                >
-                  <span>
-                    {labelRole(assignment.role.code)} · {assignment.role.nameTh}{" "}
-                    ({assignment.role.code})
-                  </span>
-                  {canManagePlatformRoles ? (
-                    <PlatformRoleRevokeButton assignmentId={assignment.id} />
-                  ) : null}
-                </li>
-              ))
-            )}
-          </ul>
-          {canManagePlatformRoles ? (
-            <PlatformRoleAssignForm
-              userProfileId={profile.id}
-              roles={platformRoleOptions}
-              assignedRoleIds={profile.platformRoles.map((row) => row.roleId)}
+        {!inOrgContext ? (
+          <section className="card space-y-3">
+            <h3 className="font-semibold">{TH.roles.platformRoles}</h3>
+            <DetailList
+              items={[
+                { label: "อีเมล", value: profile.email },
+                { label: "Auth User", value: profile.authUserId },
+              ]}
             />
-          ) : (
-            <p className="text-sm text-[var(--text-secondary)]">
-              เฉพาะ Super Admin เท่านั้นที่กำหนดบทบาทแพลตฟอร์มได้
-            </p>
-          )}
-        </section>
+            <ul className="space-y-2 text-sm">
+              {profile.platformRoles.length === 0 ? (
+                <li className="text-[var(--text-secondary)]">
+                  ยังไม่มีบทบาทแพลตฟอร์ม
+                </li>
+              ) : (
+                profile.platformRoles.map((assignment) => (
+                  <li
+                    key={assignment.id}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <span>
+                      {labelRole(assignment.role.code)} ·{" "}
+                      {assignment.role.nameTh} ({assignment.role.code})
+                    </span>
+                    {canManagePlatformRoles ? (
+                      <PlatformRoleRevokeButton assignmentId={assignment.id} />
+                    ) : null}
+                  </li>
+                ))
+              )}
+            </ul>
+            {canManagePlatformRoles ? (
+              <PlatformRoleAssignForm
+                userProfileId={profile.id}
+                roles={platformRoleOptions}
+                assignedRoleIds={profile.platformRoles.map((row) => row.roleId)}
+              />
+            ) : (
+              <p className="text-sm text-[var(--text-secondary)]">
+                เฉพาะ Super Admin เท่านั้นที่กำหนดบทบาทแพลตฟอร์มได้
+              </p>
+            )}
+          </section>
+        ) : (
+          <section className="card space-y-3">
+            <h3 className="font-semibold">ข้อมูลผู้ใช้ · {ctx.activeOrganization?.name}</h3>
+            <DetailList
+              items={[
+                { label: "อีเมล", value: profile.email },
+                { label: "องค์กร", value: ctx.activeOrganization?.name ?? "—" },
+              ]}
+            />
+          </section>
+        )}
 
         {membershipsVisible.map((m) => (
           <section key={m.id} className="card space-y-3">

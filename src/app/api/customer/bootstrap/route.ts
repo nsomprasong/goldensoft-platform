@@ -10,30 +10,13 @@ import {
 import { TH } from "@/lib/i18n/th";
 import { resolveEffectivePermissionCodes } from "@/lib/permissions/effective";
 import { permissionsForRoles } from "@/lib/permissions/codes";
-import { listEntitlementsForOrganization } from "@/lib/platform/entitlements";
+import { CUSTOMER_PRODUCT_CARDS } from "@/lib/platform/customer-products";
+import {
+  canonicalProductCode,
+  listEntitlementsForOrganization,
+} from "@/lib/platform/entitlements";
 import { MASTER } from "@/lib/platform/master-codes";
 import { prisma } from "@/lib/prisma";
-
-const PRODUCT_CARDS = [
-  {
-    productCode: "RESIDENT_V2",
-    labelTh: "ระบบรีสอร์ท",
-    basePath: "/resident",
-    entitlementCode: "resident_v2.access",
-  },
-  {
-    productCode: "GOLDENSOFT_HR",
-    labelTh: "บุคลากร",
-    basePath: "/hr",
-    entitlementCode: "hr.access",
-  },
-  {
-    productCode: "QRSTATION",
-    labelTh: "QR Station",
-    basePath: "/qrstation",
-    entitlementCode: "qrstation.access",
-  },
-] as const;
 
 const responseSchema = z.object({
   user: z.object({
@@ -269,7 +252,7 @@ export async function GET(request: NextRequest) {
 
   const inactiveSub = new Set(["SUSPENDED", "CANCELLED", "EXPIRED"]);
 
-  const products = PRODUCT_CARDS.map((card) => {
+  const products = CUSTOMER_PRODUCT_CARDS.map((card) => {
     const rows = entitlements.filter((e) => e.code === card.entitlementCode);
     const row = rows[0];
     const subStatus = row?.subscription?.status.code ?? null;
@@ -327,7 +310,7 @@ export async function GET(request: NextRequest) {
         (!subscriptionStatus || !inactiveSub.has(subscriptionStatus));
       return {
         code: row.code,
-        productCode: row.product.code,
+        productCode: canonicalProductCode(row.product.code),
         allowed,
         value: row.limitValue,
         subscriptionStatus,

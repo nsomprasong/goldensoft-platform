@@ -45,7 +45,7 @@ export default async function InviteUserPage() {
     );
   }
 
-  const orgIds = actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN)
+  const rawOrgIds = actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN)
     ? (
         await prisma.organization.findMany({
           where: { deletedAt: null },
@@ -61,13 +61,28 @@ export default async function InviteUserPage() {
         ...(actor.managedOrganizationIds.length > 0
           ? (
               await prisma.organization.findMany({
-                where: { id: { in: actor.managedOrganizationIds }, deletedAt: null },
+                where: {
+                  id: { in: actor.managedOrganizationIds },
+                  deletedAt: null,
+                },
                 select: { id: true, displayName: true },
                 orderBy: { displayName: "asc" },
               })
             ).map((o) => ({ id: o.id, name: o.displayName }))
           : []),
       ];
+
+  const orgIds =
+    ctx.activeOrganization
+      ? rawOrgIds.filter((o) => o.id === ctx.activeOrganization!.id)
+      : [...rawOrgIds];
+
+  if (ctx.activeOrganization && orgIds.length === 0) {
+    orgIds.push({
+      id: ctx.activeOrganization.id,
+      name: ctx.activeOrganization.name,
+    });
+  }
 
   const branches = await prisma.branch.findMany({
     where: {

@@ -14,6 +14,7 @@ import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { TH, labelRole } from "@/lib/i18n/th";
 import {
+  ORGANIZATION_ASSIGNABLE_PERMISSIONS,
   PLATFORM_PERMISSIONS,
   PLATFORM_PERMISSION_LABELS,
 } from "@/lib/permissions/codes";
@@ -136,7 +137,9 @@ export default async function RolesPage() {
   }
 
   const [platformRoles, organizationRoles] = await Promise.all([
-    prisma.platformRole.findMany({ orderBy: { sortOrder: "asc" } }),
+    ctx.activeOrganization
+      ? Promise.resolve([])
+      : prisma.platformRole.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.organizationRole.findMany({
       where: {
         OR: [
@@ -152,7 +155,10 @@ export default async function RolesPage() {
   const isSuper = ctx.bundle.platformRoles.includes(
     MASTER.platformRole.SUPER_ADMIN,
   );
-  const permissionCodes = Object.values(PLATFORM_PERMISSIONS);
+  const inOrgContext = Boolean(ctx.activeOrganization);
+  const permissionCodes = inOrgContext
+    ? [...ORGANIZATION_ASSIGNABLE_PERMISSIONS]
+    : Object.values(PLATFORM_PERMISSIONS);
   const canManage = perms.includes(PLATFORM_PERMISSIONS.roleManage);
 
   return (
@@ -177,41 +183,47 @@ export default async function RolesPage() {
       />
 
       <div className="grid gap-5">
-        <section className="card space-y-4">
-          <SectionHeader
-            title={TH.roles.platformRoles}
-            description="บทบาทพนักงาน GoldenSoft ระดับแพลตฟอร์ม"
-          />
-          <ul className="grid gap-3">
-            {platformRoles.map((r) => (
-              <RoleCard
-                key={r.id}
-                href={isSuper ? `/roles/platform/${r.id}` : undefined}
-                title={labelRole(r.code)}
-                subtitle={r.nameTh}
-                meta={isSuper ? r.code : undefined}
-                badge="แพลตฟอร์ม"
-                action={
-                  isSuper ? (
-                    <SoftEditLink
-                      href={`/roles/platform/${r.id}/edit`}
-                      label={
-                        r.code === MASTER.platformRole.SUPER_ADMIN
-                          ? "แก้ไขคำอธิบาย"
-                          : "แก้ไขสิทธิ์"
-                      }
-                    />
-                  ) : null
-                }
-              />
-            ))}
-          </ul>
-        </section>
+        {!inOrgContext ? (
+          <section className="card space-y-4">
+            <SectionHeader
+              title={TH.roles.platformRoles}
+              description="บทบาทพนักงาน GoldenSoft ระดับแพลตฟอร์ม"
+            />
+            <ul className="grid gap-3">
+              {platformRoles.map((r) => (
+                <RoleCard
+                  key={r.id}
+                  href={isSuper ? `/roles/platform/${r.id}` : undefined}
+                  title={labelRole(r.code)}
+                  subtitle={r.nameTh}
+                  meta={isSuper ? r.code : undefined}
+                  badge="แพลตฟอร์ม"
+                  action={
+                    isSuper ? (
+                      <SoftEditLink
+                        href={`/roles/platform/${r.id}/edit`}
+                        label={
+                          r.code === MASTER.platformRole.SUPER_ADMIN
+                            ? "แก้ไขคำอธิบาย"
+                            : "แก้ไขสิทธิ์"
+                        }
+                      />
+                    ) : null
+                  }
+                />
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <section className="card space-y-4">
           <SectionHeader
             title={TH.roles.organizationRoles}
-            description="บทบาทภายในองค์กรลูกค้า — บทบาทกำหนดเองลบได้เมื่อไม่มีผู้ใช้หรือคำเชิญอ้างอิง"
+            description={
+              inOrgContext
+                ? `บทบาทขององค์กร ${ctx.activeOrganization?.name ?? ""} — ไม่รวมสิทธิ์ระดับแพลตฟอร์ม`
+                : "บทบาทภายในองค์กรลูกค้า — บทบาทกำหนดเองลบได้เมื่อไม่มีผู้ใช้หรือคำเชิญอ้างอิง"
+            }
           />
           <ul className="grid gap-3">
             {organizationRoles.map((r) => {
@@ -264,7 +276,11 @@ export default async function RolesPage() {
         <section className="card space-y-4">
           <SectionHeader
             title={TH.roles.permissionMatrix}
-            description="รายการสิทธิ์ที่ระบบรองรับ จัดกลุ่มตามการใช้งาน"
+            description={
+              inOrgContext
+                ? "สิทธิ์ที่กำหนดให้บทบาทองค์กรได้เท่านั้น"
+                : "รายการสิทธิ์ที่ระบบรองรับ จัดกลุ่มตามการใช้งาน"
+            }
           />
           <DataTable
             headers={[

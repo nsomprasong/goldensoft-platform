@@ -5,7 +5,14 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { SET_PASSWORD_PATH } from "@/lib/auth/access";
-import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
+import {
+  isGoldenSoftPlatformStaff,
+  resolveCustomerAppEntryUrl,
+} from "@/lib/auth/customer-app-redirect";
+import {
+  loadPlatformUserBundle,
+  type PlatformUserBundle,
+} from "@/lib/auth/platform-user";
 import { startPasswordResetSession } from "@/lib/auth/password-reset-session";
 import {
   resolveAccessiblePostLoginPath,
@@ -25,6 +32,30 @@ export type LoginActionState = {
   error: string | null;
   message?: string | null;
 };
+
+/**
+ * Platform staff → Platform Admin. Org customers → Customer App (by package).
+ */
+async function resolveLoginDestination(
+  bundle: PlatformUserBundle,
+  requestedNext: string,
+): Promise<string> {
+  if (isGoldenSoftPlatformStaff(bundle.platformRoles)) {
+    return resolveAccessiblePostLoginPath(requestedNext, {
+      platformRoles: bundle.platformRoles,
+      organizationRoles: bundle.memberships.flatMap((m) => m.roles),
+    });
+  }
+
+  const customerUrl = await resolveCustomerAppEntryUrl(prisma, {
+    memberships: bundle.memberships,
+    preferredNext: requestedNext,
+  });
+  if (customerUrl) return customerUrl;
+
+  // Customer App not configured — do not drop them into Platform Admin.
+  return "/access?reason=customer_app";
+}
 
 export async function signInWithPassword(
   _prev: LoginActionState,
@@ -63,10 +94,7 @@ export async function signInWithPassword(
       return { error: TH.login.invalid };
     }
     const bundle = await loadPlatformUserBundle(data.user.id);
-    destination = resolveAccessiblePostLoginPath(next, {
-      platformRoles: bundle.platformRoles,
-      organizationRoles: bundle.memberships.flatMap((m) => m.roles),
-    });
+    destination = await resolveLoginDestination(bundle, next);
   } catch {
     return { error: TH.common.connectionError };
   }
@@ -133,10 +161,7 @@ export async function signInWithPhonePassword(
     }
 
     const bundle = await loadPlatformUserBundle(signedIn.data.user.id);
-    destination = resolveAccessiblePostLoginPath(next, {
-      platformRoles: bundle.platformRoles,
-      organizationRoles: bundle.memberships.flatMap((m) => m.roles),
-    });
+    destination = await resolveLoginDestination(bundle, next);
   } catch {
     return { error: TH.common.connectionError };
   }

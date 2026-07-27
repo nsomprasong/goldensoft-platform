@@ -45,6 +45,36 @@ function featuresFromSnapshot(snapshotJson: unknown): SnapshotFeature[] {
   return result;
 }
 
+/**
+ * Plan snapshots may list only some feature/permission codes. Always merge in
+ * the product’s default catalog so gate entitlements like `hr.access` exist —
+ * otherwise Customer App menus stay hidden even when the org bought the product.
+ */
+export function mergeSubscriptionFeatureCatalog(
+  productCode: string,
+  fromSnapshot: SnapshotFeature[],
+): SnapshotFeature[] {
+  const defaults = defaultEntitlementsForProduct(productCode);
+  if (fromSnapshot.length === 0) return defaults;
+
+  const byCode = new Map<string, SnapshotFeature>();
+  for (const feature of defaults) {
+    byCode.set(feature.code, feature);
+  }
+  for (const feature of fromSnapshot) {
+    const previous = byCode.get(feature.code);
+    byCode.set(feature.code, {
+      code: feature.code,
+      name: feature.name ?? previous?.name ?? feature.code,
+      limitValue:
+        feature.limitValue !== undefined && feature.limitValue !== null
+          ? feature.limitValue
+          : (previous?.limitValue ?? null),
+    });
+  }
+  return [...byCode.values()];
+}
+
 function defaultEntitlementsForProduct(productCode: string): SnapshotFeature[] {
   return catalogFeaturesForProduct(productCode).map((f) => ({
     code: f.code,
@@ -59,6 +89,37 @@ export type FeatureCatalogEntry = {
   valueKind: "boolean" | "numeric" | "text";
   defaultLimitValue: string | null;
 };
+
+/**
+ * Canonical customer/product codes vs shorter catalog codes stored on some
+ * Product rows (e.g. onboarded plans). Entitlement checks must accept both.
+ */
+export function productCodeAliases(productCode: string): string[] {
+  const code = productCode.trim().toUpperCase();
+  if (code === "GOLDENSOFT_HR" || code === "HR") {
+    return ["GOLDENSOFT_HR", "HR"];
+  }
+  if (code === "RESIDENT_V2" || code === "RESIDENT") {
+    return ["RESIDENT_V2", "RESIDENT"];
+  }
+  if (code === "QRSTATION" || code === "QR_STATION") {
+    return ["QRSTATION", "QR_STATION"];
+  }
+  return code.length > 0 ? [code] : [productCode];
+}
+
+/** Prefer the customer-facing product code used by apps and menus. */
+export function canonicalProductCode(productCode: string): string {
+  const aliases = productCodeAliases(productCode);
+  if (aliases.includes("GOLDENSOFT_HR")) return "GOLDENSOFT_HR";
+  if (aliases.includes("RESIDENT_V2")) return "RESIDENT_V2";
+  if (aliases.includes("QRSTATION")) return "QRSTATION";
+  return aliases[0] ?? productCode;
+}
+
+export function productCodesCompatible(left: string, right: string): boolean {
+  return productCodeAliases(left).includes(right.trim().toUpperCase());
+}
 
 export function catalogFeaturesForProduct(
   productCode: string,
@@ -231,10 +292,10 @@ export async function generateEntitlementsForSubscription(
   }
 
   const fromSnapshot = featuresFromSnapshot(subscription.snapshotJson);
-  const features =
-    fromSnapshot.length > 0
-      ? fromSnapshot
-      : defaultEntitlementsForProduct(subscription.product.code);
+  const features = mergeSubscriptionFeatureCatalog(
+    subscription.product.code,
+    fromSnapshot,
+  );
 
   const existingCount = await db.entitlement.count({
     where: {
@@ -374,7 +435,7 @@ export async function assertOrganizationEntitlement(input: {
     where: {
       organizationId: input.organizationId,
       code: input.entitlementCode,
-      product: { code: input.productCode },
+      product: { code: { in: productCodeAliases(input.productCode) } },
       startsAt: { lte: now },
       OR: [{ endsAt: null }, { endsAt: { gt: now } }],
     },

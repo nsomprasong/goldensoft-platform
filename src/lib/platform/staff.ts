@@ -597,10 +597,14 @@ function resetExpiry(now: Date, ttlMinutes = PASSWORD_RESET_TTL_MINUTES): Date {
  * is single-use and expires; the DB row is written first, and rolled back to
  * cancelled if the identity provider rejects the invalidation.
  */
-export async function requestPasswordReset(
+/**
+ * Core reset window opener — callers must authorize first
+ * (platform password-reset permission or org-admin manage scope).
+ */
+export async function openPasswordResetWindow(
   db: PrismaClient,
   input: {
-    actor: StaffActor;
+    actorAuthUserId: string;
     auth: StaffAuthPort;
     userProfileId: string;
     ttlMinutes?: number;
@@ -608,7 +612,6 @@ export async function requestPasswordReset(
     now?: Date;
   },
 ) {
-  assertCanResetUserPassword(input.actor);
   const now = input.now ?? new Date();
 
   const profile = await db.userProfile.findFirst({
@@ -627,14 +630,14 @@ export async function requestPasswordReset(
     const created = await tx.userPasswordReset.create({
       data: {
         userProfileId: profile.id,
-        requestedByAuthUserId: input.actor.authUserId,
+        requestedByAuthUserId: input.actorAuthUserId,
         expiresAt: resetExpiry(now, input.ttlMinutes),
         note: input.note?.trim() || null,
       },
       select: { id: true, expiresAt: true },
     });
     await writeAuditLog(tx, {
-      actorAuthUserId: input.actor.authUserId,
+      actorAuthUserId: input.actorAuthUserId,
       actionCode: MASTER.auditActionType.USER_PASSWORD_RESET_REQUEST,
       entityType: "user_password_reset",
       entityId: created.id,
@@ -659,16 +662,38 @@ export async function requestPasswordReset(
   return reset;
 }
 
-export async function cancelPasswordReset(
+export async function requestPasswordReset(
   db: PrismaClient,
   input: {
     actor: StaffActor;
+    auth: StaffAuthPort;
+    userProfileId: string;
+    ttlMinutes?: number;
+    note?: string | null;
+    now?: Date;
+  },
+) {
+  assertCanResetUserPassword(input.actor);
+  return openPasswordResetWindow(db, {
+    actorAuthUserId: input.actor.authUserId,
+    auth: input.auth,
+    userProfileId: input.userProfileId,
+    ttlMinutes: input.ttlMinutes,
+    note: input.note,
+    now: input.now,
+  });
+}
+
+/** Core cancel — callers must authorize first. */
+export async function cancelPasswordResetWindow(
+  db: PrismaClient,
+  input: {
+    actorAuthUserId: string;
     userProfileId: string;
     resetId: string;
     now?: Date;
   },
 ) {
-  assertCanResetUserPassword(input.actor);
   const now = input.now ?? new Date();
 
   const reset = await db.userPasswordReset.findFirst({
@@ -691,13 +716,31 @@ export async function cancelPasswordReset(
       select: { id: true, cancelledAt: true },
     });
     await writeAuditLog(tx, {
-      actorAuthUserId: input.actor.authUserId,
+      actorAuthUserId: input.actorAuthUserId,
       actionCode: MASTER.auditActionType.USER_PASSWORD_RESET_CANCEL,
       entityType: "user_password_reset",
       entityId: reset.id,
       before: { userProfileId: reset.userProfileId },
     });
     return updated;
+  });
+}
+
+export async function cancelPasswordReset(
+  db: PrismaClient,
+  input: {
+    actor: StaffActor;
+    userProfileId: string;
+    resetId: string;
+    now?: Date;
+  },
+) {
+  assertCanResetUserPassword(input.actor);
+  return cancelPasswordResetWindow(db, {
+    actorAuthUserId: input.actor.authUserId,
+    userProfileId: input.userProfileId,
+    resetId: input.resetId,
+    now: input.now,
   });
 }
 

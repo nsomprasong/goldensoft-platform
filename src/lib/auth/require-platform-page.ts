@@ -6,6 +6,10 @@ import {
   decideAccess,
   isPlatformStaffWithoutMembershipRequirement,
 } from "@/lib/auth/access";
+import {
+  isGoldenSoftPlatformStaff,
+  resolveCustomerAppEntryUrl,
+} from "@/lib/auth/customer-app-redirect";
 import { getAuthUser } from "@/lib/auth/session";
 import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
 import { COOKIE_NAME, decodeContextCookie } from "@/lib/context/cookie";
@@ -46,6 +50,19 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
   setServerTimingRoute(requestPath);
 
   const { prisma } = await import("@/lib/prisma");
+
+  // Platform Admin shell is for GoldenSoft employees only. Org OWNER/ADMIN
+  // customers go to the Customer App for their subscribed products.
+  if (!isGoldenSoftPlatformStaff(bundle.platformRoles)) {
+    const customerUrl = await resolveCustomerAppEntryUrl(prisma, {
+      memberships: bundle.memberships,
+    });
+    if (customerUrl) {
+      redirect(customerUrl);
+    }
+    redirect("/access?reason=customer_app");
+  }
+
   const managedOrganizationIds = bundle.profile
     ? await listActiveManagedOrganizationIds(prisma, bundle.profile.id)
     : [];

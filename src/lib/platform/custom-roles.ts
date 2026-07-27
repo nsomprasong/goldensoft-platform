@@ -8,6 +8,7 @@ import {
   PLATFORM_PERMISSION_LABELS,
   PLATFORM_PERMISSIONS,
   defaultPermissionsForOrganizationRole,
+  isOrganizationAssignablePermission,
   permissionsForRoles,
   type PlatformPermission,
 } from "@/lib/permissions/codes";
@@ -30,6 +31,16 @@ function assertRoleCode(code: string) {
     throw new CustomRoleError(
       "INVALID_ROLE_CODE",
       "รหัสบทบาทต้องเป็นตัวพิมพ์ใหญ่ A-Z เริ่มต้น และใช้ได้เฉพาะตัวอักษร ตัวเลข และ _",
+    );
+  }
+}
+
+function assertOrganizationAssignablePermissionCodes(codes: string[]) {
+  const forbidden = codes.filter((code) => !isOrganizationAssignablePermission(code));
+  if (forbidden.length > 0) {
+    throw new CustomRoleError(
+      "PLATFORM_PERMISSION_NOT_ALLOWED",
+      "มีสิทธิ์ระดับแพลตฟอร์มที่ไม่สามารถกำหนดให้บทบาทองค์กรได้",
     );
   }
 }
@@ -296,6 +307,7 @@ export async function createCustomRole(
       "ต้องเลือกสิทธิ์อย่างน้อย 1 รายการ",
     );
   }
+  assertOrganizationAssignablePermissionCodes(uniquePerms);
 
   return db.$transaction(
     async (tx) => {
@@ -425,6 +437,7 @@ export async function updateCustomRole(
   let activePermissions: Array<{ id: string; code: string }> = [];
   if (input.permissionCodes) {
     const uniquePerms = [...new Set(input.permissionCodes)];
+    assertOrganizationAssignablePermissionCodes(uniquePerms);
     await ensurePermissionCatalog(db, uniquePerms);
     activePermissions = await db.permission.findMany({
       where: { code: { in: uniquePerms }, isActive: true },

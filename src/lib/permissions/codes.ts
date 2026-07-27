@@ -39,6 +39,50 @@ export const PLATFORM_PERMISSIONS = {
 export type PlatformPermission =
   (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];
 
+/**
+ * Permissions that may be granted on organization roles (OWNER/ADMIN/custom).
+ * Excludes GoldenSoft staff-only capabilities (create orgs, manage product catalog,
+ * platform settings, customer portfolio assignment, etc.).
+ */
+export const ORGANIZATION_ASSIGNABLE_PERMISSIONS: readonly PlatformPermission[] = [
+  PLATFORM_PERMISSIONS.organizationRead,
+  PLATFORM_PERMISSIONS.organizationManage,
+  PLATFORM_PERMISSIONS.branchRead,
+  PLATFORM_PERMISSIONS.branchManage,
+  PLATFORM_PERMISSIONS.userRead,
+  PLATFORM_PERMISSIONS.userInvite,
+  PLATFORM_PERMISSIONS.userSuspend,
+  PLATFORM_PERMISSIONS.userManage,
+  PLATFORM_PERMISSIONS.userPasswordReset,
+  PLATFORM_PERMISSIONS.roleRead,
+  PLATFORM_PERMISSIONS.roleManage,
+  PLATFORM_PERMISSIONS.roleAssign,
+  PLATFORM_PERMISSIONS.auditRead,
+  PLATFORM_PERMISSIONS.productRead,
+  PLATFORM_PERMISSIONS.planRead,
+  PLATFORM_PERMISSIONS.subscriptionRead,
+  PLATFORM_PERMISSIONS.billingAccountRead,
+  PLATFORM_PERMISSIONS.billingAccountManage,
+  PLATFORM_PERMISSIONS.billingCreditRead,
+  PLATFORM_PERMISSIONS.billingCreditAdjust,
+  PLATFORM_PERMISSIONS.billingInvoiceRead,
+  PLATFORM_PERMISSIONS.billingInvoiceManage,
+  PLATFORM_PERMISSIONS.billingPaymentRead,
+  PLATFORM_PERMISSIONS.billingPaymentRecord,
+  PLATFORM_PERMISSIONS.billingContactRead,
+  PLATFORM_PERMISSIONS.billingContactManage,
+  PLATFORM_PERMISSIONS.billingSubscriptionRead,
+  PLATFORM_PERMISSIONS.billingSubscriptionManage,
+] as const;
+
+const ORGANIZATION_ASSIGNABLE_SET = new Set<string>(
+  ORGANIZATION_ASSIGNABLE_PERMISSIONS,
+);
+
+export function isOrganizationAssignablePermission(code: string): boolean {
+  return ORGANIZATION_ASSIGNABLE_SET.has(code);
+}
+
 /** Thai labels for permission matrix UI — never show raw codes as primary label. */
 export const PLATFORM_PERMISSION_LABELS: Record<PlatformPermission, string> = {
   [PLATFORM_PERMISSIONS.organizationRead]: "ดูข้อมูลองค์กร",

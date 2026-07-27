@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  ORGANIZATION_ASSIGNABLE_PERMISSIONS,
   PLATFORM_PERMISSION_DESCRIPTIONS,
   PLATFORM_PERMISSION_LABELS,
   PLATFORM_PERMISSIONS,
@@ -14,8 +15,6 @@ import {
 import { IconTextButton } from "@/components/ui/labeled-icon-button";
 import { Input } from "@/components/ui/input";
 import { TH } from "@/lib/i18n/th";
-
-const ALL_PERMS = Object.values(PLATFORM_PERMISSIONS);
 
 export function CustomRoleForm(props: {
   /** Null for platform-wide system / platform roles. */
@@ -58,9 +57,13 @@ export function CustomRoleForm(props: {
   const metadataReadOnly = isSystem || roleKind === "platform";
 
   const grouped = useMemo(() => {
+    const assignablePerms =
+      roleKind === "platform"
+        ? Object.values(PLATFORM_PERMISSIONS)
+        : ORGANIZATION_ASSIGNABLE_PERMISSIONS;
     const q = query.trim().toLowerCase();
     const map = new Map<string, PlatformPermission[]>();
-    for (const code of ALL_PERMS) {
+    for (const code of assignablePerms) {
       const label = PLATFORM_PERMISSION_LABELS[code];
       const desc = PLATFORM_PERMISSION_DESCRIPTIONS[code];
       if (
@@ -77,7 +80,7 @@ export function CustomRoleForm(props: {
       map.set(group, list);
     }
     return [...map.entries()];
-  }, [query]);
+  }, [query, roleKind]);
 
   function toggle(code: string) {
     if (permissionsReadOnly) return;

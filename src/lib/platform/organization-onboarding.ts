@@ -1,5 +1,11 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
+import {
+  createStaffAuthAdapter,
+  generateUnguessablePassword,
+  StaffAuthError,
+  type StaffAuthPort,
+} from "@/lib/auth/staff-auth-adapter";
 import { ensureAuditActionType } from "@/lib/platform/audit";
 import {
   allocateUniqueOrganizationSlug,
@@ -17,6 +23,7 @@ import {
   composeStaffDisplayName,
   type IndividualCustomerIdentity,
 } from "@/lib/platform/staff-identity";
+import { PASSWORD_RESET_TTL_MINUTES } from "@/lib/platform/staff";
 
 export class OnboardingError extends Error {
   constructor(
@@ -80,6 +87,74 @@ function isStaffPortfolioCreator(actor: ActorAccess): boolean {
   );
 }
 
+type ProvisionedOwner = {
+  authUserId: string;
+  existingProfileId: string | null;
+  needsPasswordSetup: boolean;
+};
+
+/**
+ * Resolve or create the org admin Auth identity before the DB transaction.
+ * New accounts get an open password-reset window so first login can set a password.
+ */
+async function resolveOnboardingOwnerAuth(
+  db: PrismaClient,
+  owner: OnboardingPayload["owner"],
+  auth: StaffAuthPort,
+): Promise<ProvisionedOwner> {
+  if (owner.authUserId) {
+    const profile = await db.userProfile.findUnique({
+      where: { authUserId: owner.authUserId },
+      select: { id: true },
+    });
+    if (!profile) {
+      throw new OnboardingError(
+        "OWNER_PROFILE_MISSING",
+        "ไม่พบโปรไฟล์ของผู้ดูแลองค์กร",
+      );
+    }
+    return {
+      authUserId: owner.authUserId,
+      existingProfileId: profile.id,
+      needsPasswordSetup: false,
+    };
+  }
+
+  const ownerEmail = normalizeEmail(owner.email);
+  const existingProfile = await db.userProfile.findFirst({
+    where: { email: ownerEmail, deletedAt: null },
+    select: { id: true, authUserId: true },
+  });
+  if (existingProfile) {
+    return {
+      authUserId: existingProfile.authUserId,
+      existingProfileId: existingProfile.id,
+      needsPasswordSetup: false,
+    };
+  }
+
+  try {
+    let authUser = await auth.getUserByEmail(ownerEmail);
+    if (!authUser) {
+      authUser = await auth.createUser({
+        email: ownerEmail,
+        displayName: owner.displayName.trim(),
+        password: generateUnguessablePassword(),
+      });
+    }
+    return {
+      authUserId: authUser.authUserId,
+      existingProfileId: null,
+      needsPasswordSetup: true,
+    };
+  } catch (error) {
+    if (error instanceof StaffAuthError) {
+      throw new OnboardingError("OWNER_AUTH_FAILED", error.message);
+    }
+    throw error;
+  }
+}
+
 export async function onboardOrganization(
   db: PrismaClient,
   input: {
@@ -87,6 +162,7 @@ export async function onboardOrganization(
     actorAuthUserId: string;
     idempotencyKey: string;
     payload: OnboardingPayload;
+    auth?: StaffAuthPort;
   },
 ) {
   if (!canCreateOrganization(input.actor)) {
@@ -170,7 +246,8 @@ export async function onboardOrganization(
       assignmentStatus,
       contactRole,
       allBranches,
-      inviteStatus,
+      inviteCompletedStatus,
+      profileActiveStatus,
     ] = await Promise.all([
       db.organizationStatus.findUniqueOrThrow({
         where: { code: MASTER.organizationStatus.ACTIVE },
@@ -195,9 +272,19 @@ export async function onboardOrganization(
         where: { code: MASTER.branchScopeType.ALL_BRANCHES },
       }),
       db.userInvitationStatus.findUniqueOrThrow({
-        where: { code: MASTER.userInvitationStatus.PENDING },
+        where: { code: MASTER.userInvitationStatus.COMPLETED },
+      }),
+      db.userProfileStatus.findUniqueOrThrow({
+        where: { code: MASTER.userProfileStatus.ACTIVE },
       }),
     ]);
+
+    // Auth network call outside the interactive transaction (avoids P2028).
+    const provisionedOwner = await resolveOnboardingOwnerAuth(
+      db,
+      input.payload.owner,
+      input.auth ?? createStaffAuthAdapter(),
+    );
 
     const resolvedSelections: Array<{
       product: { id: string; code: string };
@@ -340,8 +427,10 @@ export async function onboardOrganization(
 
       let ownerProfileId: string | null = null;
       let invitationId: string | null = null;
+      let passwordResetId: string | null = null;
       let portfolioAssignmentId: string | null = null;
       const ownerEmail = normalizeEmail(input.payload.owner.email);
+      const ownerDisplayName = input.payload.owner.displayName.trim();
 
       const creatorProfile = await tx.userProfile.findUnique({
         where: { authUserId: input.actorAuthUserId },
@@ -365,18 +454,42 @@ export async function onboardOrganization(
         portfolioAssignmentId = assignment.id;
       }
 
-      if (input.payload.owner.authUserId) {
-        const profile = await tx.userProfile.findUnique({
-          where: { authUserId: input.payload.owner.authUserId },
+      // Always activate the org admin immediately so they can log in.
+      // First-time accounts get an open password-reset window (empty-password login).
+      let profile =
+        provisionedOwner.existingProfileId != null
+          ? await tx.userProfile.findUnique({
+              where: { id: provisionedOwner.existingProfileId },
+            })
+          : await tx.userProfile.findUnique({
+              where: { authUserId: provisionedOwner.authUserId },
+            });
+
+      if (!profile) {
+        profile = await tx.userProfile.create({
+          data: {
+            authUserId: provisionedOwner.authUserId,
+            email: ownerEmail,
+            displayName: ownerDisplayName,
+            statusId: profileActiveStatus.id,
+          },
         });
-        if (!profile) {
-          throw new OnboardingError(
-            "OWNER_PROFILE_MISSING",
-            "ไม่พบโปรไฟล์ของผู้ดูแลองค์กร",
-          );
-        }
-        ownerProfileId = profile.id;
-        const membership = await tx.organizationMembership.create({
+      }
+
+      ownerProfileId = profile.id;
+
+      const existingMembership = await tx.organizationMembership.findUnique({
+        where: {
+          organizationId_userProfileId: {
+            organizationId: org.id,
+            userProfileId: profile.id,
+          },
+        },
+        select: { id: true },
+      });
+      const membership =
+        existingMembership ??
+        (await tx.organizationMembership.create({
           data: {
             organizationId: org.id,
             userProfileId: profile.id,
@@ -384,7 +497,16 @@ export async function onboardOrganization(
             joinedAt: new Date(),
             invitedByAuthUserId: input.actorAuthUserId,
           },
-        });
+        }));
+
+      const existingRole = await tx.organizationMembershipRole.findFirst({
+        where: {
+          membershipId: membership.id,
+          roleId: contactRole.id,
+        },
+        select: { id: true },
+      });
+      if (!existingRole) {
         await tx.organizationMembershipRole.create({
           data: {
             membershipId: membership.id,
@@ -392,6 +514,19 @@ export async function onboardOrganization(
             statusId: assignmentStatus.id,
           },
         });
+      }
+
+      const existingScope = await tx.organizationMembershipBranchScope.findFirst(
+        {
+          where: {
+            membershipId: membership.id,
+            scopeTypeId: allBranches.id,
+            branchId: null,
+          },
+          select: { id: true },
+        },
+      );
+      if (!existingScope) {
         await tx.organizationMembershipBranchScope.create({
           data: {
             membershipId: membership.id,
@@ -399,22 +534,40 @@ export async function onboardOrganization(
             statusId: assignmentStatus.id,
           },
         });
-      } else {
-        const invitation = await tx.userInvitation.create({
-          data: {
-            emailNormalized: ownerEmail,
-            displayName: input.payload.owner.displayName.trim(),
-            organizationId: org.id,
-            organizationRoleId: contactRole.id,
-            branchScopeTypeId: allBranches.id,
-            branchIdsJson: [],
-            statusId: inviteStatus.id,
-            invitedByProfileId: creatorProfile.id,
-            idempotencyKey: `onboard-owner:${input.idempotencyKey}`,
-          },
-        });
-        invitationId = invitation.id;
       }
+
+      if (provisionedOwner.needsPasswordSetup) {
+        const reset = await tx.userPasswordReset.create({
+          data: {
+            userProfileId: profile.id,
+            requestedByAuthUserId: input.actorAuthUserId,
+            expiresAt: new Date(
+              Date.now() + PASSWORD_RESET_TTL_MINUTES * 60 * 1000,
+            ),
+            note: "ตั้งรหัสผ่านครั้งแรกเมื่อสร้างองค์กร",
+          },
+          select: { id: true },
+        });
+        passwordResetId = reset.id;
+      }
+
+      const invitation = await tx.userInvitation.create({
+        data: {
+          emailNormalized: ownerEmail,
+          displayName: ownerDisplayName,
+          organizationId: org.id,
+          organizationRoleId: contactRole.id,
+          branchScopeTypeId: allBranches.id,
+          branchIdsJson: [],
+          statusId: inviteCompletedStatus.id,
+          invitedByProfileId: creatorProfile.id,
+          idempotencyKey: `onboard-owner:${input.idempotencyKey}`,
+          authUserId: provisionedOwner.authUserId,
+          isActive: false,
+          platformSetupCompletedAt: new Date(),
+        },
+      });
+      invitationId = invitation.id;
 
       const subscriptionStatusCode =
         input.payload.subscriptionMode === "TRIAL"
@@ -491,6 +644,7 @@ export async function onboardOrganization(
             subscriptionId: subscriptionIds[0] ?? null,
             ownerProfileId,
             invitationId,
+            passwordResetId,
             portfolioAssignmentId,
             contactRoleCode,
             selections: selectionSummary,
@@ -505,6 +659,7 @@ export async function onboardOrganization(
         subscriptionId: subscriptionIds[0] ?? null,
         ownerProfileId,
         invitationId,
+        passwordResetId,
         portfolioAssignmentId,
         contactRoleCode,
         selections: selectionSummary,

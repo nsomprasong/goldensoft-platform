@@ -71,9 +71,11 @@ export default async function UsersPage({
     );
   }
 
-  const orgFilter =
-    actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN) ||
-    actor.platformRoles.includes(MASTER.platformRole.SUPPORT)
+  const activeOrganizationId = ctx.activeOrganization?.id ?? null;
+  const orgFilter = activeOrganizationId
+    ? { organizationId: activeOrganizationId }
+    : actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN) ||
+        actor.platformRoles.includes(MASTER.platformRole.SUPPORT)
       ? undefined
       : {
           organizationId: {

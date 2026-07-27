@@ -2,6 +2,7 @@ import Link from "next/link";
 import { GitBranch, Pencil } from "lucide-react";
 import { notFound } from "next/navigation";
 
+import { OrganizationAdminsPanel } from "@/components/organization-admins-panel";
 import { PlatformShell } from "@/components/platform-shell";
 import {
   AccessDenied,
@@ -19,6 +20,7 @@ import {
   detectEntitlementConsistency,
   listEntitlementsForOrganization,
 } from "@/lib/platform/entitlements";
+import { listOrganizationAdminContacts } from "@/lib/platform/organization-admins";
 import {
   canManageOrganization,
   canViewOrganization,
@@ -32,7 +34,7 @@ type Props = { params: Promise<{ id: string }> };
 export default async function OrganizationDetailPage({ params }: Props) {
   const ctx = await requirePlatformPage();
   const { id } = await params;
-  const [actor, org, entitlements] = await Promise.all([
+  const [actor, org, entitlements, admins] = await Promise.all([
     loadActorAccess(prisma, ctx.user.id),
     prisma.organization.findUnique({
       where: { id },
@@ -74,6 +76,7 @@ export default async function OrganizationDetailPage({ params }: Props) {
       },
     }),
     listEntitlementsForOrganization(prisma, id),
+    listOrganizationAdminContacts(prisma, id),
   ]);
 
   if (!org || org.deletedAt) notFound();
@@ -151,6 +154,12 @@ export default async function OrganizationDetailPage({ params }: Props) {
             ]}
           />
         </section>
+
+        <OrganizationAdminsPanel
+          organizationId={org.id}
+          canManage={canManage}
+          admins={admins}
+        />
 
         <section className="card">
           <SectionHeader title={TH.nav.branches} />

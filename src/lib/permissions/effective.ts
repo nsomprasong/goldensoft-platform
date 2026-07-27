@@ -9,6 +9,12 @@ import {
   type PlatformPermission,
 } from "@/lib/permissions/codes";
 import { permissionResourceGroup } from "@/lib/permissions/codes";
+import {
+  HR_PERMISSION_CODES,
+  HR_PRODUCT_CODE,
+  hrPermissionLabel,
+  isHrPermissionCode,
+} from "@/lib/permissions/hr-codes";
 import { loadPlatformRolePermissionOverrides } from "@/lib/platform/platform-roles";
 
 export type EffectivePermissionRow = {
@@ -51,7 +57,20 @@ function labelFor(code: string): string {
   if (code in PLATFORM_PERMISSION_LABELS) {
     return PLATFORM_PERMISSION_LABELS[code as PlatformPermission];
   }
+  if (isHrPermissionCode(code)) {
+    return hrPermissionLabel(code);
+  }
   return code;
+}
+
+const ORG_ADMIN_ROLE_CODES = new Set<string>([
+  MASTER.organizationRole.OWNER,
+  MASTER.organizationRole.ADMIN,
+]);
+
+/** OWNER/ADMIN of a customer org get full HR capability when the org is entitled. */
+function shouldGrantProductAdminPermissions(roleCodes: string[]): boolean {
+  return roleCodes.some((code) => ORG_ADMIN_ROLE_CODES.has(code));
 }
 
 /**
@@ -258,6 +277,56 @@ export const resolveEffectivePermissions = cache(
             action: perm.action,
             sourceRole: role.code,
             sourceKind: "organization_custom",
+            organizationId: membership.organizationId,
+            organizationScope:
+              membership.organization.displayName ||
+              membership.organization.customerCode,
+            branchScope: branchLabel,
+          });
+        }
+      }
+    }
+
+    // Product-admin grants: when the org has an active product entitlement,
+    // OWNER/ADMIN receive that product's permission catalog so Customer App
+    // menus are usable without manually assigning every hr.* code.
+    const membershipOrgIds = [
+      ...new Set(profile.memberships.map((m) => m.organizationId)),
+    ];
+    if (membershipOrgIds.length > 0) {
+      const hrEntitled = await db.entitlement.findMany({
+        where: {
+          organizationId: { in: membershipOrgIds },
+          code: "hr.access",
+          status: {
+            code: MASTER.entitlementStatus.ACTIVE,
+          },
+        },
+        select: { organizationId: true },
+      });
+      const hrOrgIds = new Set(hrEntitled.map((row) => row.organizationId));
+      for (const membership of profile.memberships) {
+        if (!hrOrgIds.has(membership.organizationId)) continue;
+        const roleCodes = membership.roles
+          .filter((row) => row.role.isActive)
+          .map((row) => row.role.code);
+        if (!shouldGrantProductAdminPermissions(roleCodes)) continue;
+        const sourceRole = roleCodes.includes(MASTER.organizationRole.OWNER)
+          ? MASTER.organizationRole.OWNER
+          : MASTER.organizationRole.ADMIN;
+        const branchLabel =
+          membership.branchScopes.map((s) => s.scopeType.code).join(", ") ||
+          "NONE";
+        for (const code of HR_PERMISSION_CODES) {
+          const meta = parsePermissionMeta(code);
+          addRow({
+            code,
+            nameTh: labelFor(code),
+            product: HR_PRODUCT_CODE,
+            resource: meta.resource,
+            action: meta.action,
+            sourceRole,
+            sourceKind: "organization_system",
             organizationId: membership.organizationId,
             organizationScope:
               membership.organization.displayName ||
