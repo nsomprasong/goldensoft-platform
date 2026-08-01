@@ -5,6 +5,8 @@ export type MembershipSummary = {
   organizationId: string;
   organizationName: string;
   organizationStatus: string;
+  /** Used to restore Platform Admin menus when GOLDENSOFT is selected. */
+  customerCode?: string;
   roles: string[];
   branches: Array<{ id: string; name: string; code: string }>;
 };

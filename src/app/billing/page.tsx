@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PlatformShell } from "@/components/platform-shell";
 import { PageHeader } from "@/components/ui/admin-ui";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
+import { membershipOrganizationOptions } from "@/lib/auth/shell-props";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { serializeMoney } from "@/lib/billing/money";
 import {
@@ -27,10 +28,7 @@ export default async function BillingIndexPage() {
         displayName={ctx.bundle.profile?.displayName ?? "ผู้ใช้"}
         platformRoles={ctx.bundle.platformRoles}
         organizationRoles={ctx.organizationRoles}
-        organizations={ctx.bundle.memberships.map((m) => ({
-          id: m.organizationId,
-          name: m.organizationName,
-        }))}
+        organizations={membershipOrganizationOptions(ctx.bundle)}
         branches={ctx.branches}
         activeOrganization={ctx.activeOrganization}
         activeBranch={ctx.activeBranch}
@@ -55,10 +53,7 @@ export default async function BillingIndexPage() {
     displayName: ctx.bundle.profile?.displayName ?? "ผู้ใช้",
     platformRoles: ctx.bundle.platformRoles,
     organizationRoles: ctx.organizationRoles,
-    organizations: ctx.bundle.memberships.map((m) => ({
-      id: m.organizationId,
-      name: m.organizationName,
-    })),
+    organizations: membershipOrganizationOptions(ctx.bundle),
     branches: ctx.branches,
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,

@@ -12,6 +12,7 @@ import {
 import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
+import { membershipOrganizationOptions } from "@/lib/auth/shell-props";
 import {
   TH,
   labelInvitationStatus,
@@ -48,10 +49,7 @@ export default async function UserInvitationDetailPage({
     displayName: ctx.bundle.profile?.displayName ?? TH.common.user,
     platformRoles: ctx.bundle.platformRoles,
     organizationRoles: ctx.organizationRoles,
-    organizations: ctx.bundle.memberships.map((membership) => ({
-      id: membership.organizationId,
-      name: membership.organizationName,
-    })),
+    organizations: membershipOrganizationOptions(ctx.bundle),
     branches: ctx.branches,
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,

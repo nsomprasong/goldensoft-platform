@@ -7,7 +7,6 @@ import {
   MIDDLEWARE_AUTH_USER_HEADER,
 } from "@/lib/auth/middleware-headers";
 import { isTestAuthEnabled } from "@/lib/env/test-auth";
-import { alignCustomerAppOriginToRequestHost } from "@/lib/platform/customer-products";
 import { updateSession } from "@/lib/supabase/middleware";
 
 function copySessionCookies(
@@ -20,36 +19,13 @@ function copySessionCookies(
   return to;
 }
 
-/** Honor allowlisted `?next=` when an already-signed-in user hits /login. */
+/** Honor relative `?next=` when an already-signed-in user hits /login. */
 function signedInLoginRedirect(
   request: NextRequest,
   sessionResponse: NextResponse,
 ): NextResponse {
-  const requestHost =
-    request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
-    request.headers.get("host");
   const rawNext = request.nextUrl.searchParams.get("next");
   const resolved = resolvePostLoginRedirect(rawNext);
-
-  if (resolved.startsWith("http://") || resolved.startsWith("https://")) {
-    try {
-      const dest = new URL(resolved);
-      const aligned = alignCustomerAppOriginToRequestHost(
-        dest.origin,
-        requestHost,
-      );
-      const href =
-        aligned === dest.origin
-          ? resolved
-          : new URL(dest.pathname + dest.search, aligned).toString();
-      return copySessionCookies(
-        sessionResponse,
-        NextResponse.redirect(href),
-      );
-    } catch {
-      // fall through to home
-    }
-  }
 
   if (resolved.startsWith("/") && !resolved.startsWith("//")) {
     return copySessionCookies(
@@ -117,6 +93,12 @@ export async function middleware(request: NextRequest) {
   const signedIn = Boolean(user) || testAuth;
 
   if (isAuthPage(pathname) && signedIn) {
+    const rawNext = request.nextUrl.searchParams.get("next");
+    const resolved = resolvePostLoginRedirect(rawNext);
+    // Absolute Customer App URLs need a staff vs tenant role check — login page.
+    if (resolved.startsWith("http://") || resolved.startsWith("https://")) {
+      return response;
+    }
     return signedInLoginRedirect(request, sessionResponse);
   }
 

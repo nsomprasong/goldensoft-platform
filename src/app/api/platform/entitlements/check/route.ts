@@ -57,6 +57,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // SUPER_ADMIN may inspect any tenant product regardless of subscription state.
+  if (isSuper) {
+    return NextResponse.json({
+      allowed: true,
+      value: null,
+      reason: "SUPER_ADMIN_BYPASS",
+      subscriptionStatus: null,
+      expiresAt: null,
+      organizationId: parsed.data.organizationId,
+      productCode: parsed.data.productCode,
+      entitlementCode: parsed.data.entitlementCode,
+      branchId: parsed.data.branchId ?? null,
+    });
+  }
+
   const result = await assertOrganizationEntitlement({
     db: prisma,
     organizationId: parsed.data.organizationId,

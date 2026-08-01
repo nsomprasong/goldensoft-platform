@@ -15,8 +15,8 @@ import {
 } from "@/lib/auth/platform-user";
 import { startPasswordResetSession } from "@/lib/auth/password-reset-session";
 import {
-  resolveAccessiblePostLoginPath,
   resolvePostLoginRedirect,
+  resolveStaffPostLoginPath,
 } from "@/lib/auth/post-login-redirect";
 import { TH } from "@/lib/i18n/th";
 import {
@@ -41,7 +41,7 @@ async function resolveLoginDestination(
   requestedNext: string,
 ): Promise<string> {
   if (isGoldenSoftPlatformStaff(bundle.platformRoles)) {
-    return resolveAccessiblePostLoginPath(requestedNext, {
+    return resolveStaffPostLoginPath(requestedNext, {
       platformRoles: bundle.platformRoles,
       organizationRoles: bundle.memberships.flatMap((m) => m.roles),
     });

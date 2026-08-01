@@ -90,7 +90,12 @@ const GROUP_TONE: Record<
   },
 };
 
+function isExternalHref(href: string): boolean {
+  return href.startsWith("http://") || href.startsWith("https://");
+}
+
 function groupForHref(href: string): ShellNavItem["group"] {
+  if (isExternalHref(href)) return "services";
   if (href === "/") return "overview";
   if (
     href.startsWith("/organizations") ||
@@ -143,43 +148,66 @@ function NavGroups(props: {
             ) : null}
             <ul className="space-y-1.5">
               {entry.items.map((item) => {
-                const active = isNavigationItemActive(props.pathname, item);
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      title={props.collapsed ? item.label : undefined}
-                      aria-current={active ? "page" : undefined}
-                      onClick={props.onNavigate}
-                      className={[
-                        "shell-nav-link relative flex min-h-12 items-center rounded-[0.9rem] px-2.5 text-[length:var(--text-label)] transition-[background-color,color,box-shadow,transform] duration-200",
-                        active
-                          ? tone.rowActive
-                          : "font-medium text-[var(--text-secondary)] hover:-translate-y-px hover:bg-white hover:text-[var(--text-primary)] hover:shadow-[var(--shadow-sm)]",
-                        props.collapsed ? "justify-center" : "gap-2.5",
-                      ].join(" ")}
-                    >
-                      {active ? (
-                        <span
-                          className={[
-                            "absolute inset-y-2 left-0 w-1 rounded-full",
-                            tone.accent,
-                          ].join(" ")}
-                          aria-hidden="true"
-                        />
-                      ) : null}
+                const external = isExternalHref(item.href);
+                const active = external
+                  ? false
+                  : isNavigationItemActive(props.pathname, item);
+                const className = [
+                  "shell-nav-link relative flex min-h-12 items-center rounded-[0.9rem] px-2.5 text-[length:var(--text-label)] transition-[background-color,color,box-shadow,transform] duration-200",
+                  active
+                    ? tone.rowActive
+                    : "font-medium text-[var(--text-secondary)] hover:-translate-y-px hover:bg-white hover:text-[var(--text-primary)] hover:shadow-[var(--shadow-sm)]",
+                  props.collapsed ? "justify-center" : "gap-2.5",
+                ].join(" ");
+                const content = (
+                  <>
+                    {active ? (
                       <span
                         className={[
-                          "inline-flex size-8 shrink-0 items-center justify-center rounded-[0.7rem]",
-                          active ? tone.iconActive : tone.iconIdle,
+                          "absolute inset-y-2 left-0 w-1 rounded-full",
+                          tone.accent,
                         ].join(" ")}
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                    <span
+                      className={[
+                        "inline-flex size-8 shrink-0 items-center justify-center rounded-[0.7rem]",
+                        active ? tone.iconActive : tone.iconIdle,
+                      ].join(" ")}
+                    >
+                      <NavIcon
+                        name={navIconKeyForHref(external ? "/products" : item.href)}
+                        size={18}
+                      />
+                    </span>
+                    {!props.collapsed ? (
+                      <span className="truncate">{item.label}</span>
+                    ) : null}
+                  </>
+                );
+                return (
+                  <li key={item.href}>
+                    {external ? (
+                      <a
+                        href={item.href}
+                        title={props.collapsed ? item.label : undefined}
+                        onClick={props.onNavigate}
+                        className={className}
                       >
-                        <NavIcon name={navIconKeyForHref(item.href)} size={18} />
-                      </span>
-                      {!props.collapsed ? (
-                        <span className="truncate">{item.label}</span>
-                      ) : null}
-                    </Link>
+                        {content}
+                      </a>
+                    ) : (
+                      <Link
+                        href={item.href}
+                        title={props.collapsed ? item.label : undefined}
+                        aria-current={active ? "page" : undefined}
+                        onClick={props.onNavigate}
+                        className={className}
+                      >
+                        {content}
+                      </Link>
+                    )}
                   </li>
                 );
               })}
@@ -196,13 +224,26 @@ export function AppShell(props: {
   displayName: string;
   roles: string[];
   navItems: Array<{ href: string; label: string }>;
-  organizations: Array<{ id: string; name: string }>;
-  platformAdminOrganizations?: Array<{ id: string; name: string }>;
-  managedOrganizations?: Array<{ id: string; name: string }>;
+  organizations: Array<{ id: string; name: string; customerCode?: string | null }>;
+  platformAdminOrganizations?: Array<{
+    id: string;
+    name: string;
+    customerCode?: string | null;
+  }>;
+  managedOrganizations?: Array<{
+    id: string;
+    name: string;
+    customerCode?: string | null;
+  }>;
   branches: Array<{ id: string; name: string; code: string }>;
-  activeOrganization: { id: string; name: string } | null;
+  activeOrganization: {
+    id: string;
+    name: string;
+    customerCode?: string | null;
+  } | null;
   activeBranch: { id: string; name: string; code: string } | null;
   contextMode?: "membership" | "platform_admin" | "managed_org";
+  shellMode?: "platform" | "customer_support";
   canUsePlatformAdminMode?: boolean;
   canUseManagedOrgMode?: boolean;
   pageTitle?: string;
@@ -315,7 +356,9 @@ export function AppShell(props: {
                   GoldenSoft
                 </p>
                 <p className="mt-0.5 text-[length:var(--text-caption)] text-[var(--text-muted)]">
-                  ศูนย์ควบคุมแพลตฟอร์ม
+                  {props.shellMode === "customer_support"
+                    ? TH.nav.customerSupportBadge
+                    : "ศูนย์ควบคุมแพลตฟอร์ม"}
                 </p>
               </div>
             </div>
@@ -368,6 +411,7 @@ export function AppShell(props: {
                     activeOrganizationId={props.activeOrganization?.id ?? null}
                     activeBranchId={props.activeBranch?.id ?? null}
                     contextMode={props.contextMode}
+                    shellMode={props.shellMode}
                     canUsePlatformAdminMode={props.canUsePlatformAdminMode}
                   />
                 </div>
@@ -406,6 +450,7 @@ export function AppShell(props: {
                   activeOrganizationId={props.activeOrganization?.id ?? null}
                   activeBranchId={props.activeBranch?.id ?? null}
                   contextMode={props.contextMode}
+                  shellMode={props.shellMode}
                   canUsePlatformAdminMode={props.canUsePlatformAdminMode}
                 />
               </div>

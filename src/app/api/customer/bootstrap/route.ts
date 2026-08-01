@@ -18,6 +18,7 @@ import {
   readCustomerBootstrapCache,
   writeCustomerBootstrapCache,
 } from "@/lib/platform/customer-bootstrap-cache";
+import { listActiveManagedOrganizationIds } from "@/lib/platform/customer-portfolio";
 import { CUSTOMER_PRODUCT_CARDS } from "@/lib/platform/customer-products";
 import {
   canonicalProductCode,
@@ -39,7 +40,7 @@ const responseSchema = z.object({
     })
     .nullable(),
   platformRoles: z.array(z.string()),
-  contextMode: z.enum(["membership", "platform_admin"]),
+  contextMode: z.enum(["membership", "platform_admin", "managed_org"]),
   organizationId: z.string().nullable(),
   organizationName: z.string().nullable(),
   branchId: z.string().nullable(),
@@ -131,6 +132,16 @@ export async function GET(request: NextRequest) {
   }
 
   const isSuper = bundle.platformRoles.includes("SUPER_ADMIN");
+  const managedOrganizationIds = await listActiveManagedOrganizationIds(
+    prisma,
+    bundle.profile.id,
+  );
+  const isStaffSupportClaim = (mode: string | undefined, orgId: string | undefined) =>
+    Boolean(
+      orgId &&
+        ((isSuper && mode === "platform_admin") ||
+          (mode === "managed_org" && managedOrganizationIds.includes(orgId))),
+    );
   let activeMembership = cookie
     ? bundle.memberships.find((m) => m.organizationId === cookie!.organizationId)
     : null;
@@ -140,7 +151,7 @@ export async function GET(request: NextRequest) {
   if (
     cookie &&
     !activeMembership &&
-    !(isSuper && cookie.mode === "platform_admin")
+    !isStaffSupportClaim(cookie.mode, cookie.organizationId)
   ) {
     cookie = null;
     activeMembership = null;
@@ -201,7 +212,7 @@ export async function GET(request: NextRequest) {
     membership &&
     !branchId &&
     bundle.profile &&
-    !(isSuper && cookie?.mode === "platform_admin")
+    !isStaffSupportClaim(cookie?.mode, organizationId ?? undefined)
   ) {
     const preference = await prisma.userPreference.findUnique({
       where: { userProfileId: bundle.profile.id },
@@ -224,7 +235,7 @@ export async function GET(request: NextRequest) {
     membership &&
     !branchId &&
     activeBranches.length === 1 &&
-    !(isSuper && cookie?.mode === "platform_admin")
+    !isStaffSupportClaim(cookie?.mode, organizationId ?? undefined)
   ) {
     branchId = activeBranches[0]!.id;
     branch = activeBranches[0]!;
@@ -244,7 +255,7 @@ export async function GET(request: NextRequest) {
     : Promise.resolve([]);
 
   if (organizationId && !membership) {
-    if (!(isSuper && cookie?.mode === "platform_admin")) {
+    if (!isStaffSupportClaim(cookie?.mode, organizationId)) {
       return NextResponse.json(
         { code: "ORG_FORBIDDEN", message: "ไม่มีสิทธิ์เข้าถึงองค์กรนี้" },
         { status: 403 },
@@ -318,11 +329,25 @@ export async function GET(request: NextRequest) {
       ? roleMapped
       : Array.from(new Set([...resolvedEffectiveCodes, ...roleMapped]));
 
-  const entitlementsAllowed = entitlements
+  const inactiveSub = new Set(["SUSPENDED", "CANCELLED", "EXPIRED"]);
+  const activeEntitlementCodes = entitlements
     .filter((e) => e.status.code === "ACTIVE" || e.status.code === "TRIAL")
+    .filter((e) => {
+      const subStatus = e.subscription?.status.code ?? null;
+      return !subStatus || !inactiveSub.has(subStatus);
+    })
     .map((e) => e.code);
 
-  const inactiveSub = new Set(["SUSPENDED", "CANCELLED", "EXPIRED"]);
+  // SUPER_ADMIN can open runtime-available products even when the org has no
+  // paid entitlement (inspect / support). Coming-soon products stay locked in UI.
+  const superBypassCodes = isSuper
+    ? CUSTOMER_PRODUCT_CARDS.filter((card) => card.runtimeStatus === "available").map(
+        (card) => card.entitlementCode,
+      )
+    : [];
+  const entitlementsAllowed = Array.from(
+    new Set([...activeEntitlementCodes, ...superBypassCodes]),
+  );
 
   const products = CUSTOMER_PRODUCT_CARDS.map((card) => {
     const rows = entitlements.filter((e) => e.code === card.entitlementCode);
@@ -332,11 +357,13 @@ export async function GET(request: NextRequest) {
       row != null &&
       (row.status.code === "ACTIVE" || row.status.code === "TRIAL");
     const subOk = !subStatus || !inactiveSub.has(subStatus);
+    const orgAllowed = entitlementActive && subOk;
+    const superAllowed = isSuper && card.runtimeStatus === "available";
     return {
       productCode: card.productCode,
       labelTh: card.labelTh,
       basePath: card.basePath,
-      allowed: entitlementActive && subOk,
+      allowed: orgAllowed || superAllowed,
       subscriptionStatus: subStatus ?? row?.status.code ?? null,
       entitlementCode: card.entitlementCode,
     };
@@ -393,7 +420,9 @@ export async function GET(request: NextRequest) {
       };
     }),
     entitlementsAllowed,
-    contextVersion: 1,
+    // Bump when SUPER_ADMIN / managed_org support rules change so stale cache
+    // cannot keep products locked after a deploy.
+    contextVersion: 3,
   });
 
   writeCustomerBootstrapCache(bootstrapKey, payload);
@@ -403,7 +432,7 @@ export async function GET(request: NextRequest) {
   } else if (
     persistContextCookie &&
     organizationId &&
-    !(isSuper && cookie?.mode === "platform_admin")
+    !isStaffSupportClaim(cookie?.mode, organizationId)
   ) {
     response.cookies.set(
       COOKIE_NAME,

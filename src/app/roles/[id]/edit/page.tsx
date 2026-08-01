@@ -5,6 +5,7 @@ import { CustomRoleForm } from "@/components/custom-role-form";
 import { PlatformShell } from "@/components/platform-shell";
 import { AccessDenied, PageHeader } from "@/components/ui/admin-ui";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
+import { membershipOrganizationOptions } from "@/lib/auth/shell-props";
 import { TH } from "@/lib/i18n/th";
 import {
   PLATFORM_PERMISSIONS,
@@ -24,10 +25,7 @@ export default async function EditOrganizationRolePage({ params }: Props) {
     displayName: ctx.bundle.profile?.displayName ?? TH.common.user,
     platformRoles: ctx.bundle.platformRoles,
     organizationRoles: ctx.organizationRoles,
-    organizations: ctx.bundle.memberships.map((m) => ({
-      id: m.organizationId,
-      name: m.organizationName,
-    })),
+    organizations: membershipOrganizationOptions(ctx.bundle),
     branches: ctx.branches,
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,

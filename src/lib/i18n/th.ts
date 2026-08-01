@@ -73,6 +73,12 @@ export const TH = {
     selectOrganization: "เลือกองค์กร",
     switchOrganization: "เปลี่ยนองค์กร",
     switchBranch: "เปลี่ยนสาขา",
+    supportOrgOverview: "ภาพรวมองค์กรลูกค้า",
+    openCustomerApp: "เปิดแอปลูกค้า",
+    inviteUser: "เชิญผู้ใช้",
+    myCustomers: "ลูกค้าของฉัน",
+    customerSupportBadge: "โหมดซัพพอร์ตลูกค้า",
+    platformHomeBadge: "ศูนย์บริหาร Platform",
   },
 
   access: {
@@ -310,7 +316,7 @@ export const TH = {
     selectStaffPlaceholder: "เลือกพนักงาน (SALES / ACCOUNT_MANAGER)",
     selectOrgPlaceholder: "เลือกองค์กรลูกค้า",
     managedOrgGroupLabel: "ลูกค้าในพอร์ตโฟลิโอ",
-    managedOrgModeBadge: "โหมดจัดการพอร์ตโฟลิโอลูกค้า",
+    managedOrgModeBadge: "โหมดซัพพอร์ตลูกค้า",
   },
 
   staff: {

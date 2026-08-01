@@ -61,7 +61,11 @@ export async function GET(request: NextRequest) {
     ? bundle.memberships.find((m) => m.organizationId === cookie.organizationId)
     : null;
 
-  let platformAdminOrganization: { id: string; name: string } | null = null;
+  let platformAdminOrganization: {
+    id: string;
+    name: string;
+    customerCode: string;
+  } | null = null;
   if (cookie && !activeMembership) {
     const isManagedOrgClaim =
       cookie.mode === "managed_org" &&
@@ -81,7 +85,7 @@ export async function GET(request: NextRequest) {
         deletedAt: null,
         status: { code: MASTER.organizationStatus.ACTIVE },
       },
-      select: { id: true, displayName: true },
+      select: { id: true, displayName: true, customerCode: true },
     });
     if (!org) {
       return NextResponse.json(
@@ -89,7 +93,11 @@ export async function GET(request: NextRequest) {
         { status: 403 },
       );
     }
-    platformAdminOrganization = { id: org.id, name: org.displayName };
+    platformAdminOrganization = {
+      id: org.id,
+      name: org.displayName,
+      customerCode: org.customerCode,
+    };
   }
 
   const activeBranch =
@@ -117,7 +125,7 @@ export async function GET(request: NextRequest) {
           deletedAt: null,
           status: { code: MASTER.organizationStatus.ACTIVE },
         },
-        select: { id: true, displayName: true },
+        select: { id: true, displayName: true, customerCode: true },
         orderBy: { displayName: "asc" },
         take: 200,
       })
@@ -131,7 +139,7 @@ export async function GET(request: NextRequest) {
             deletedAt: null,
             status: { code: MASTER.organizationStatus.ACTIVE },
           },
-          select: { id: true, displayName: true },
+          select: { id: true, displayName: true, customerCode: true },
           orderBy: { displayName: "asc" },
           take: 200,
         })
@@ -149,22 +157,26 @@ export async function GET(request: NextRequest) {
       organizationId: m.organizationId,
       organizationName: m.organizationName,
       organizationStatus: m.organizationStatus,
+      customerCode: m.customerCode ?? null,
       roles: m.roles,
       branchCount: m.branches.length,
     })),
     platformAdminOrganizations: adminOrganizations.map((o) => ({
       id: o.id,
       name: o.displayName,
+      customerCode: o.customerCode,
     })),
     managedOrganizations: managedOrganizations.map((o) => ({
       id: o.id,
       name: o.displayName,
+      customerCode: o.customerCode,
     })),
     contextMode: cookie?.mode ?? "membership",
     activeOrganization: activeMembership
       ? {
           id: activeMembership.organizationId,
           name: activeMembership.organizationName,
+          customerCode: activeMembership.customerCode ?? null,
         }
       : platformAdminOrganization,
     activeBranch: activeBranch

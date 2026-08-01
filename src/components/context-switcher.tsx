@@ -10,8 +10,16 @@ import {
   signalNavigationPending,
 } from "@/lib/navigation-pending";
 
-type OrgOption = { id: string; name: string };
+type OrgOption = {
+  id: string;
+  name: string;
+  customerCode?: string | null;
+};
 type BranchOption = { id: string; name: string; code: string };
+
+function isGoldenSoftOrg(customerCode: string | null | undefined): boolean {
+  return (customerCode ?? "").trim().toUpperCase() === "GOLDENSOFT";
+}
 
 export function ContextSwitcher(props: {
   organizations: OrgOption[];
@@ -21,6 +29,7 @@ export function ContextSwitcher(props: {
   activeOrganizationId: string | null;
   activeBranchId: string | null;
   contextMode?: "membership" | "platform_admin" | "managed_org";
+  shellMode?: "platform" | "customer_support";
   canUsePlatformAdminMode?: boolean;
 }) {
   const router = useRouter();
@@ -37,6 +46,12 @@ export function ContextSwitcher(props: {
     (o) => !membershipIds.has(o.id) && !adminOnly.some((a) => a.id === o.id),
   );
   const allOptions = [...props.organizations, ...adminOnly, ...managedOnly];
+
+  function destinationForOrg(org: OrgOption | undefined): string {
+    if (!org) return "/";
+    if (isGoldenSoftOrg(org.customerCode)) return "/";
+    return `/organizations/${org.id}`;
+  }
 
   async function switchContext(
     organizationId: string,
@@ -55,19 +70,26 @@ export function ContextSwitcher(props: {
       signalNavigationDone();
       return;
     }
+    const org = allOptions.find((row) => row.id === organizationId);
+    router.push(destinationForOrg(org));
     router.refresh();
   }
 
+  const showSupportBadge =
+    props.shellMode === "customer_support" ||
+    props.contextMode === "managed_org" ||
+    (props.contextMode === "platform_admin" &&
+      props.shellMode !== "platform");
+
   return (
     <div className="context-switcher flex w-full flex-wrap items-stretch gap-2 text-[length:var(--text-helper)]">
-      {props.contextMode === "platform_admin" ? (
+      {showSupportBadge ? (
         <span className="inline-flex items-center rounded-full border border-[var(--page-header-border)] bg-gradient-to-r from-[var(--primary-soft)] to-[#fff7ed] px-2.5 py-1 text-[length:var(--text-caption)] font-semibold text-[var(--primary)] shadow-[var(--shadow-xs)]">
-          โหมดผู้ดูแลแพลตฟอร์ม
+          {TH.nav.customerSupportBadge}
         </span>
-      ) : null}
-      {props.contextMode === "managed_org" ? (
+      ) : props.contextMode === "platform_admin" ? (
         <span className="inline-flex items-center rounded-full border border-[var(--page-header-border)] bg-gradient-to-r from-[var(--primary-soft)] to-[#fff7ed] px-2.5 py-1 text-[length:var(--text-caption)] font-semibold text-[var(--primary)] shadow-[var(--shadow-xs)]">
-          {TH.staffPortfolio.managedOrgModeBadge}
+          {TH.nav.platformHomeBadge}
         </span>
       ) : null}
 
@@ -96,15 +118,17 @@ export function ContextSwitcher(props: {
                 {props.organizations.map((org) => (
                   <option key={org.id} value={org.id}>
                     {org.name}
+                    {isGoldenSoftOrg(org.customerCode) ? " (Platform)" : ""}
                   </option>
                 ))}
               </optgroup>
             ) : null}
             {adminOnly.length > 0 ? (
-              <optgroup label="โหมดผู้ดูแลแพลตฟอร์ม">
+              <optgroup label="องค์กรลูกค้า (Super Admin)">
                 {adminOnly.map((org) => (
                   <option key={`admin-${org.id}`} value={org.id}>
                     {org.name}
+                    {isGoldenSoftOrg(org.customerCode) ? " (Platform)" : ""}
                   </option>
                 ))}
               </optgroup>
@@ -118,44 +142,55 @@ export function ContextSwitcher(props: {
                 ))}
               </optgroup>
             ) : null}
+            {allOptions.length === 0 ? (
+              <option value="" disabled>
+                {TH.common.notFound}
+              </option>
+            ) : null}
           </select>
         </span>
       </label>
 
-      {props.branches.length > 0 ? (
-        <label className="context-chip context-chip--branch">
-          <span className="context-chip-icon" aria-hidden="true">
-            <GitBranch className="size-4" />
-          </span>
-          <span className="context-chip-body">
-            <span className="context-chip-label">{TH.nav.switchBranch}</span>
-            <select
-              className="context-chip-select"
-              aria-label={TH.nav.switchBranch}
-              disabled={pending || !props.activeOrganizationId}
-              value={props.activeBranchId ?? ""}
-              suppressHydrationWarning
-              onChange={(e) => {
-                const branchId = e.target.value || null;
-                if (!props.activeOrganizationId) return;
-                start(() =>
-                  switchContext(props.activeOrganizationId!, branchId),
-                );
-              }}
-            >
-              <option value="">{TH.common.noBranch}</option>
-              {props.branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </span>
-        </label>
-      ) : null}
+      <label className="context-chip context-chip--branch">
+        <span className="context-chip-icon" aria-hidden="true">
+          <GitBranch className="size-4" />
+        </span>
+        <span className="context-chip-body">
+          <span className="context-chip-label">{TH.nav.switchBranch}</span>
+          <select
+            className="context-chip-select"
+            aria-label={TH.nav.switchBranch}
+            disabled={pending || !props.activeOrganizationId}
+            value={props.activeBranchId ?? ""}
+            suppressHydrationWarning
+            onChange={(e) => {
+              if (!props.activeOrganizationId) return;
+              const mode = managedOnly.some(
+                (o) => o.id === props.activeOrganizationId,
+              )
+                ? "managed_org"
+                : undefined;
+              start(() =>
+                switchContext(
+                  props.activeOrganizationId!,
+                  e.target.value || null,
+                  mode,
+                ),
+              );
+            }}
+          >
+            <option value="">{TH.common.noBranch}</option>
+            {props.branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </select>
+        </span>
+      </label>
 
       {error ? (
-        <span className="w-full text-[var(--danger)] sm:w-auto" role="alert">
+        <span className="text-[length:var(--text-caption)] text-[var(--danger)]">
           {error}
         </span>
       ) : null}

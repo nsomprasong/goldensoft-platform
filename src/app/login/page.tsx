@@ -3,7 +3,12 @@ import { redirect } from "next/navigation";
 
 import { BrandLockup } from "@/components/platform-shell";
 import { LoginForm } from "@/components/login-form";
-import { resolvePostLoginRedirect } from "@/lib/auth/post-login-redirect";
+import { isGoldenSoftPlatformStaff } from "@/lib/auth/customer-app-redirect";
+import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
+import {
+  resolvePostLoginRedirect,
+  resolveStaffPostLoginPath,
+} from "@/lib/auth/post-login-redirect";
 import { getAuthUser } from "@/lib/auth/session";
 import { TH } from "@/lib/i18n/th";
 import { alignCustomerAppOriginToRequestHost } from "@/lib/platform/customer-products";
@@ -43,6 +48,15 @@ export default async function LoginPage({
   const passwordJustSet = params.password === "set";
 
   if (user) {
+    const bundle = await loadPlatformUserBundle(user.id);
+    if (isGoldenSoftPlatformStaff(bundle.platformRoles)) {
+      redirect(
+        resolveStaffPostLoginPath(params.next ?? "/", {
+          platformRoles: bundle.platformRoles,
+          organizationRoles: bundle.memberships.flatMap((m) => m.roles),
+        }),
+      );
+    }
     redirect(nextPath);
   }
 

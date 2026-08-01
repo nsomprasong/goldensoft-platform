@@ -16,6 +16,7 @@ type CachedBundle = {
     organizationId: string;
     organizationName: string;
     organizationStatus: string;
+    customerCode?: string;
     roles: string[];
     branches: Array<{ id: string; name: string; code: string }>;
   }>;

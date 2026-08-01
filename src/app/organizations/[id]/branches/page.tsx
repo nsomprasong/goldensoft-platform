@@ -12,6 +12,7 @@ import {
 import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
+import { membershipOrganizationOptions } from "@/lib/auth/shell-props";
 import { TH, labelStatus } from "@/lib/i18n/th";
 import { listBranches } from "@/lib/platform/branches-admin";
 import { canManageOrganization } from "@/lib/platform/organizations-admin";
@@ -39,10 +40,7 @@ export default async function OrganizationBranchesPage({
     displayName: ctx.bundle.profile?.displayName ?? TH.common.user,
     platformRoles: ctx.bundle.platformRoles,
     organizationRoles: ctx.organizationRoles,
-    organizations: ctx.bundle.memberships.map((m) => ({
-      id: m.organizationId,
-      name: m.organizationName,
-    })),
+    organizations: membershipOrganizationOptions(ctx.bundle),
     branches: ctx.branches,
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,

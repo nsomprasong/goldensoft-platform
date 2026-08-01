@@ -14,6 +14,7 @@ import {
   SectionHeader,
 } from "@/components/ui/admin-ui";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
+import { membershipOrganizationOptions } from "@/lib/auth/shell-props";
 import { TH } from "@/lib/i18n/th";
 import { listStaffOrganizationAssignments } from "@/lib/platform/customer-portfolio";
 import { MASTER } from "@/lib/platform/master-codes";
@@ -30,10 +31,7 @@ export default async function StaffPortfolioPage() {
     displayName: ctx.bundle.profile?.displayName ?? TH.common.user,
     platformRoles: ctx.bundle.platformRoles,
     organizationRoles: ctx.organizationRoles,
-    organizations: ctx.bundle.memberships.map((m) => ({
-      id: m.organizationId,
-      name: m.organizationName,
-    })),
+    organizations: membershipOrganizationOptions(ctx.bundle),
     branches: ctx.branches,
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,

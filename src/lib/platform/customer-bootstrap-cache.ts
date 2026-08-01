@@ -2,6 +2,8 @@ import "server-only";
 
 const TTL_MS = 45_000;
 const MAX_ENTRIES = 200;
+/** Bump when bootstrap product/entitlement rules change (invalidate in-memory cache). */
+const CACHE_REV = "v2-super-admin-product-bypass";
 
 type Entry = {
   expiresAt: number;
@@ -18,6 +20,7 @@ export function customerBootstrapCacheKey(input: {
   mode: string;
 }): string {
   return [
+    CACHE_REV,
     input.authUserId,
     input.organizationId ?? "",
     input.branchId ?? "",

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/admin-ui";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
+import { membershipOrganizationOptions } from "@/lib/auth/shell-props";
 import { TH } from "@/lib/i18n/th";
 import { logServerTiming, measure } from "@/lib/perf/server-timing";
 import { MASTER } from "@/lib/platform/master-codes";
@@ -142,16 +143,14 @@ export default async function DashboardPage() {
     displayName,
     platformRoles: ctx.bundle.platformRoles,
     organizationRoles: ctx.organizationRoles,
-    organizations: ctx.bundle.memberships.map((m) => ({
-      id: m.organizationId,
-      name: m.organizationName,
-    })),
+    organizations: membershipOrganizationOptions(ctx.bundle),
     branches: ctx.branches,
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,
     pageTitle: TH.pages.dashboardTitle,
     contextMode: ctx.contextMode,
     canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
+    permissions: ctx.permissionCodes,
   };
 
   // Sales staff with an empty portfolio should land on “create customer org”

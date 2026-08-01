@@ -1,4 +1,4 @@
-type OrgOption = { id: string; name: string };
+type OrgOption = { id: string; name: string; customerCode?: string | null };
 
 let cachedAdminOrganizations: OrgOption[] | null = null;
 let inFlight: Promise<OrgOption[]> | null = null;

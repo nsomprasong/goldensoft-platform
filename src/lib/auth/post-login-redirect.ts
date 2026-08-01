@@ -39,6 +39,24 @@ export function resolvePostLoginRedirect(raw: string | null | undefined): string
 }
 
 /**
+ * Platform staff post-login path. Absolute Customer App `next` URLs are ignored
+ * so Super Admin / SALES land on Platform Admin menus, not the tenant shell.
+ */
+export function resolveStaffPostLoginPath(
+  rawPath: string,
+  input: {
+    platformRoles: string[];
+    organizationRoles: string[];
+  },
+): string {
+  const path = resolveAccessiblePostLoginPath(rawPath, input);
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return "/";
+  }
+  return path;
+}
+
+/**
  * Drop `next` targets the signed-in user cannot open (e.g. /staff after a
  * Super Admin session expired on that URL and a SALES user signed in).
  */

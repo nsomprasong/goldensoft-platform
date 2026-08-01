@@ -70,6 +70,7 @@ async function loadPlatformUserBundleUncached(
             organization: {
               select: {
                 displayName: true,
+                customerCode: true,
                 status: { select: { code: true } },
               },
             },
@@ -193,6 +194,7 @@ async function loadPlatformUserBundleUncached(
       organizationId: m.organizationId,
       organizationName: m.organization.displayName,
       organizationStatus: m.organization.status.code,
+      customerCode: m.organization.customerCode,
       roles: rolesByMembership.get(m.id) ?? [],
       branches,
     };

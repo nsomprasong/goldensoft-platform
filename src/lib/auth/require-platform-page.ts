@@ -156,7 +156,11 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     cookie?.mode === "managed_org" &&
     !!activeOrgId &&
     managedOrganizationIds.includes(activeOrgId);
-  let platformAdminOrganization: { id: string; name: string } | null = null;
+  let platformAdminOrganization: {
+    id: string;
+    name: string;
+    customerCode: string;
+  } | null = null;
 
   if (cookie && !membership) {
     const canUsePlatformAdminContext =
@@ -189,6 +193,7 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
       select: {
         id: true,
         displayName: true,
+        customerCode: true,
         branches: {
           where: { deletedAt: null, status: { code: "ACTIVE" } },
           select: { id: true, name: true, code: true },
@@ -201,7 +206,11 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
       // Claimed org gone — drop cookie; Super Admin continues to main.
       redirectClearContext(requestPath);
     } else {
-      platformAdminOrganization = { id: org.id, name: org.displayName };
+      platformAdminOrganization = {
+        id: org.id,
+        name: org.displayName,
+        customerCode: org.customerCode,
+      };
       const adminBranch = activeBranchId
         ? (org.branches.find((b) => b.id === activeBranchId) ?? null)
         : null;
@@ -254,7 +263,11 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     bundle,
     managedOrganizationIds,
     activeOrganization: membership
-      ? { id: membership.organizationId, name: membership.organizationName }
+      ? {
+          id: membership.organizationId,
+          name: membership.organizationName,
+          customerCode: membership.customerCode ?? null,
+        }
       : null,
     activeBranch,
     organizationRoles,

@@ -19,6 +19,13 @@ export const GOLDENSOFT_ORG = {
   nameEn: "GoldenSoft",
 } as const;
 
+/** True when this organization is GoldenSoft itself (Platform Admin home). */
+export function isGoldenSoftCustomerCode(
+  customerCode: string | null | undefined,
+): boolean {
+  return (customerCode ?? "").trim().toUpperCase() === GOLDENSOFT_ORG.customerCode;
+}
+
 export const GOLDENSOFT_BRANCH = {
   code: "GOLDENSOFT-01",
   nameTh: "สาขาที่ 1",
