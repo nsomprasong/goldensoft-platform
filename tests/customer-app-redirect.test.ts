@@ -6,6 +6,7 @@ import {
 } from "../src/lib/auth/customer-app-redirect";
 import { resolvePostLoginRedirect } from "../src/lib/auth/post-login-redirect";
 import {
+  alignCustomerAppOriginToRequestHost,
   getPreferredCustomerAppOrigin,
   pickCustomerProductHomePath,
 } from "../src/lib/platform/customer-products";
@@ -44,14 +45,16 @@ describe("Platform staff vs customer routing", () => {
   });
 
   it("picks product home from entitlements", () => {
+    // Coming-soon products are ignored — HR-only usable surface → /hr.
     assert.equal(
       pickCustomerProductHomePath(["resident_v2.access"]),
-      "/resident",
+      "/",
     );
     assert.equal(
       pickCustomerProductHomePath(["hr.access", "resident_v2.access"]),
-      "/",
+      "/hr",
     );
+    assert.equal(pickCustomerProductHomePath(["hr.access"]), "/hr");
     assert.equal(pickCustomerProductHomePath([]), "/");
   });
 
@@ -62,6 +65,25 @@ describe("Platform staff vs customer routing", () => {
         CUSTOMER_APP_ORIGINS: "http://127.0.0.1:3002",
       }),
       "http://192.168.1.10:3002",
+    );
+  });
+
+  it("rewrites loopback customer origin to the phone/LAN request host", () => {
+    assert.equal(
+      alignCustomerAppOriginToRequestHost(
+        "http://localhost:3002",
+        "192.168.1.177:3000",
+      ),
+      "http://192.168.1.177:3002",
+    );
+    assert.equal(
+      getPreferredCustomerAppOrigin(
+        {
+          CUSTOMER_APP_URL: "http://127.0.0.1:3002",
+        },
+        "192.168.1.177:3000",
+      ),
+      "http://192.168.1.177:3002",
     );
   });
 });

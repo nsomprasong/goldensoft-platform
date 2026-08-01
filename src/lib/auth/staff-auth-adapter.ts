@@ -61,6 +61,8 @@ export interface StaffAuthPort {
     authUserId: string;
     phone: string;
   }): Promise<void>;
+  /** Remove Auth user (login-test cleanup). Optional on test doubles. */
+  deleteUser?(input: { authUserId: string }): Promise<void>;
 }
 
 /** URL-safe random secret used as a placeholder password nobody knows. */
@@ -212,6 +214,12 @@ export class SupabaseStaffAuthAdapter implements StaffAuthPort {
     });
   }
 
+  async deleteUser(input: { authUserId: string }): Promise<void> {
+    await this.request(`/auth/v1/admin/users/${input.authUserId}`, {
+      method: "DELETE",
+    });
+  }
+
   private async request(path: string, init: RequestInit): Promise<unknown> {
     const transport = this.config.fetchTransport ?? fetch;
     const timeoutMs = this.config.timeoutMs ?? 10_000;
@@ -283,6 +291,16 @@ export class InMemoryStaffAuthAdapter implements StaffAuthPort {
     phone: string;
   }): Promise<void> {
     // In-memory auth has no phone identity; email login path covers tests.
+  }
+
+  async deleteUser(input: { authUserId: string }): Promise<void> {
+    for (const [email, user] of this.users) {
+      if (user.authUserId === input.authUserId) {
+        this.users.delete(email);
+        this.passwords.delete(input.authUserId);
+        return;
+      }
+    }
   }
 }
 

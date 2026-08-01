@@ -1,12 +1,68 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { isAuthPage, isProtectedPath } from "@/lib/auth/access";
+import { resolvePostLoginRedirect } from "@/lib/auth/post-login-redirect";
 import {
   MIDDLEWARE_AUTH_EMAIL_HEADER,
   MIDDLEWARE_AUTH_USER_HEADER,
 } from "@/lib/auth/middleware-headers";
 import { isTestAuthEnabled } from "@/lib/env/test-auth";
+import { alignCustomerAppOriginToRequestHost } from "@/lib/platform/customer-products";
 import { updateSession } from "@/lib/supabase/middleware";
+
+function copySessionCookies(
+  from: NextResponse,
+  to: NextResponse,
+): NextResponse {
+  for (const cookie of from.cookies.getAll()) {
+    to.cookies.set(cookie);
+  }
+  return to;
+}
+
+/** Honor allowlisted `?next=` when an already-signed-in user hits /login. */
+function signedInLoginRedirect(
+  request: NextRequest,
+  sessionResponse: NextResponse,
+): NextResponse {
+  const requestHost =
+    request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    request.headers.get("host");
+  const rawNext = request.nextUrl.searchParams.get("next");
+  const resolved = resolvePostLoginRedirect(rawNext);
+
+  if (resolved.startsWith("http://") || resolved.startsWith("https://")) {
+    try {
+      const dest = new URL(resolved);
+      const aligned = alignCustomerAppOriginToRequestHost(
+        dest.origin,
+        requestHost,
+      );
+      const href =
+        aligned === dest.origin
+          ? resolved
+          : new URL(dest.pathname + dest.search, aligned).toString();
+      return copySessionCookies(
+        sessionResponse,
+        NextResponse.redirect(href),
+      );
+    } catch {
+      // fall through to home
+    }
+  }
+
+  if (resolved.startsWith("/") && !resolved.startsWith("//")) {
+    return copySessionCookies(
+      sessionResponse,
+      NextResponse.redirect(new URL(resolved, request.url)),
+    );
+  }
+
+  const home = request.nextUrl.clone();
+  home.pathname = "/";
+  home.search = "";
+  return copySessionCookies(sessionResponse, NextResponse.redirect(home));
+}
 
 export async function middleware(request: NextRequest) {
   if (process.env.NODE_ENV === "production") {
@@ -61,9 +117,7 @@ export async function middleware(request: NextRequest) {
   const signedIn = Boolean(user) || testAuth;
 
   if (isAuthPage(pathname) && signedIn) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
+    return signedInLoginRedirect(request, sessionResponse);
   }
 
   if (isProtectedPath(pathname) && !signedIn) {

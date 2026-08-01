@@ -5,11 +5,19 @@ import { requireAuthUser } from "@/lib/auth/request-auth";
 import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
 import {
   COOKIE_NAME,
+  contextCookieOptions,
   decodeContextCookie,
+  encodeContextCookie,
+  type PlatformContextCookie,
 } from "@/lib/context/cookie";
 import { TH } from "@/lib/i18n/th";
 import { resolveEffectivePermissionCodes } from "@/lib/permissions/effective";
 import { permissionsForRoles } from "@/lib/permissions/codes";
+import {
+  customerBootstrapCacheKey,
+  readCustomerBootstrapCache,
+  writeCustomerBootstrapCache,
+} from "@/lib/platform/customer-bootstrap-cache";
 import { CUSTOMER_PRODUCT_CARDS } from "@/lib/platform/customer-products";
 import {
   canonicalProductCode,
@@ -102,6 +110,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  let cookie: PlatformContextCookie | null = decodeContextCookie(
+    request.cookies.get(COOKIE_NAME)?.value,
+  );
+  let clearStaleContextCookie = false;
+  let persistContextCookie = false;
+
   const bundle = await loadPlatformUserBundle(user.id);
   if (!bundle.profile) {
     return NextResponse.json(
@@ -115,36 +129,61 @@ export async function GET(request: NextRequest) {
       { status: 403 },
     );
   }
-  const cookie = decodeContextCookie(request.cookies.get(COOKIE_NAME)?.value);
 
-  const activeMembership = cookie
-    ? bundle.memberships.find((m) => m.organizationId === cookie.organizationId)
-    : null;
   const isSuper = bundle.platformRoles.includes("SUPER_ADMIN");
+  let activeMembership = cookie
+    ? bundle.memberships.find((m) => m.organizationId === cookie!.organizationId)
+    : null;
 
+  // Stale gs_platform_ctx from a previous browser user/org is common on shared
+  // devices and after switching test accounts — drop it instead of 403.
   if (
     cookie &&
     !activeMembership &&
     !(isSuper && cookie.mode === "platform_admin")
   ) {
-    return NextResponse.json(
-      { code: "ORG_FORBIDDEN", message: "ไม่มีสิทธิ์เข้าถึงองค์กรนี้" },
-      { status: 403 },
-    );
+    cookie = null;
+    activeMembership = null;
+    clearStaleContextCookie = true;
   }
 
-  const organizationId =
+  const bootstrapKey = customerBootstrapCacheKey({
+    authUserId: user.id,
+    organizationId: cookie?.organizationId ?? null,
+    branchId: cookie?.branchId ?? null,
+    mode: cookie?.mode ?? "membership",
+  });
+  // Skip cache when context cookie is missing so single-org/branch staff
+  // still get an auto-bound gs_platform_ctx on the response.
+  const cachedBootstrap =
+    cookie?.organizationId && !clearStaleContextCookie
+      ? readCustomerBootstrapCache(bootstrapKey)
+      : null;
+  if (cachedBootstrap) {
+    return NextResponse.json(cachedBootstrap);
+  }
+
+  let organizationId =
     cookie?.organizationId ??
     (bundle.memberships.length === 1
       ? bundle.memberships[0]!.organizationId
       : null);
+
+  // Single-org members: bind org without forcing a picker.
+  if (
+    !cookie?.organizationId &&
+    organizationId &&
+    bundle.memberships.length === 1
+  ) {
+    persistContextCookie = true;
+  }
 
   const membership =
     activeMembership ??
     bundle.memberships.find((m) => m.organizationId === organizationId) ??
     null;
 
-  const branchId = cookie?.branchId ?? null;
+  let branchId = cookie?.branchId ?? null;
   let branch =
     membership && branchId
       ? (membership.branches.find((b) => b.id === branchId) ?? null)
@@ -152,11 +191,44 @@ export async function GET(request: NextRequest) {
   let organizationName = membership?.organizationName ?? null;
   let activeBranches = membership?.branches ?? [];
 
+  // Stale branch on a valid org — keep the org, ignore the branch.
   if (branchId && membership && !branch) {
-    return NextResponse.json(
-      { code: "BRANCH_FORBIDDEN", message: "ไม่มีสิทธิ์เข้าถึงสาขานี้" },
-      { status: 403 },
-    );
+    branchId = null;
+  }
+
+  // Restore last home branch (e.g. after HR transfer) when cookie has none.
+  if (
+    membership &&
+    !branchId &&
+    bundle.profile &&
+    !(isSuper && cookie?.mode === "platform_admin")
+  ) {
+    const preference = await prisma.userPreference.findUnique({
+      where: { userProfileId: bundle.profile.id },
+      select: { lastBranchId: true },
+    });
+    if (preference?.lastBranchId) {
+      const preferred =
+        activeBranches.find((row) => row.id === preference.lastBranchId) ??
+        null;
+      if (preferred) {
+        branchId = preferred.id;
+        branch = preferred;
+        persistContextCookie = true;
+      }
+    }
+  }
+
+  // Single-branch scope (e.g. branch-assigned staff): lock to that branch.
+  if (
+    membership &&
+    !branchId &&
+    activeBranches.length === 1 &&
+    !(isSuper && cookie?.mode === "platform_admin")
+  ) {
+    branchId = activeBranches[0]!.id;
+    branch = activeBranches[0]!;
+    persistContextCookie = true;
   }
 
   const platformAdminOrganizationsPromise = isSuper
@@ -324,5 +396,24 @@ export async function GET(request: NextRequest) {
     contextVersion: 1,
   });
 
-  return NextResponse.json(payload);
+  writeCustomerBootstrapCache(bootstrapKey, payload);
+  const response = NextResponse.json(payload);
+  if (clearStaleContextCookie) {
+    response.cookies.set(COOKIE_NAME, "", contextCookieOptions(0));
+  } else if (
+    persistContextCookie &&
+    organizationId &&
+    !(isSuper && cookie?.mode === "platform_admin")
+  ) {
+    response.cookies.set(
+      COOKIE_NAME,
+      encodeContextCookie({
+        organizationId,
+        branchId,
+        mode: "membership",
+      }),
+      contextCookieOptions(),
+    );
+  }
+  return response;
 }

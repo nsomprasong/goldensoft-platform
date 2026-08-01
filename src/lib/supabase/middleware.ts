@@ -3,6 +3,28 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const REFRESH_WINDOW_MS = 120_000;
 
+function isStaleRefreshTokenError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = "code" in error ? String((error as { code?: string }).code) : "";
+  const message =
+    "message" in error ? String((error as { message?: string }).message) : "";
+  return (
+    code === "refresh_token_not_found" ||
+    /refresh token/i.test(message)
+  );
+}
+
+/** Drop broken Auth cookies so login can start clean. */
+async function clearLocalAuthSession(
+  supabase: ReturnType<typeof createServerClient>,
+) {
+  try {
+    await supabase.auth.signOut({ scope: "local" });
+  } catch {
+    // Cookie write may still succeed via setAll; ignore secondary failures.
+  }
+}
+
 /** Refresh Supabase Auth session cookies on the edge (read/write response cookies). */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -42,18 +64,34 @@ export async function updateSession(request: NextRequest) {
   // over the network and dominated page latency when called on every request.
   const {
     data: { session },
+    error: sessionError,
   } = await supabase.auth.getSession();
+
+  if (isStaleRefreshTokenError(sessionError)) {
+    await clearLocalAuthSession(supabase);
+    return { response: supabaseResponse, user: null };
+  }
+
   const expiresAtMs = session?.expires_at ? session.expires_at * 1000 : 0;
   const sessionFresh =
     Boolean(session?.user) && expiresAtMs - Date.now() > REFRESH_WINDOW_MS;
 
-  if (sessionFresh && session?.user) {
+  // /login must not trust a local JWT alone — a stale refresh token here causes
+  // Customer App SSO bounce (Platform thinks signed-in, App getUser fails).
+  const isLoginPath = request.nextUrl.pathname.startsWith("/login");
+  if (sessionFresh && session?.user && !isLoginPath) {
     return { response: supabaseResponse, user: session.user };
   }
 
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
+
+  if (isStaleRefreshTokenError(userError) || (!user && session?.refresh_token)) {
+    await clearLocalAuthSession(supabase);
+    return { response: supabaseResponse, user: null };
+  }
 
   return { response: supabaseResponse, user };
 }

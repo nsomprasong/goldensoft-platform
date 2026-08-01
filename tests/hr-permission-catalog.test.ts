@@ -54,6 +54,8 @@ const REQUIRED: Array<[string, string, string, string]> = [
   ["hr.payroll.lock", "ล็อกงวดเงินเดือน", "payroll", "lock"],
   ["hr.payslip.self", "ดูสลิปเงินเดือนของตนเอง", "payslip", "self"],
   ["hr.payslip.read", "ดูสลิปเงินเดือน", "payslip", "read"],
+  ["hr.advance.self", "ขอเบิกล่วงหน้าของตนเอง", "advance", "self"],
+  ["hr.advance.approve", "อนุมัติเบิกล่วงหน้า", "advance", "approve"],
   ["hr.department.manage", "จัดการแผนก", "department", "manage"],
   ["hr.position.manage", "จัดการตำแหน่ง", "position", "manage"],
   ["hr.shift.read", "ดูกะงาน", "shift", "read"],

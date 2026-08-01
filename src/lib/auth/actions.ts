@@ -86,6 +86,8 @@ export async function signInWithPassword(
   let destination = next;
   try {
     const supabase = await createSupabaseServerClient();
+    // Stale refresh cookies (revoked / rotated) break getSession — clear locally first.
+    await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -137,6 +139,7 @@ export async function signInWithPhonePassword(
   let destination = next;
   try {
     const supabase = await createSupabaseServerClient();
+    await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
 
     // 1) Prefer native phone credential when Auth already has the phone.
     let signedIn = await supabase.auth.signInWithPassword({

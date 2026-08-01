@@ -8,31 +8,71 @@ export const CUSTOMER_PRODUCT_CARDS = [
     labelTh: "ระบบรีสอร์ท",
     basePath: "/resident",
     entitlementCode: "resident_v2.access",
+    /** Keep in sync with goldensoft-app product registry runtimeStatus. */
+    runtimeStatus: "coming_soon" as const,
   },
   {
     productCode: "GOLDENSOFT_HR",
     labelTh: "บุคลากร",
     basePath: "/hr",
     entitlementCode: "hr.access",
+    runtimeStatus: "available" as const,
   },
   {
     productCode: "QRSTATION",
     labelTh: "QR Station",
     basePath: "/qrstation",
     entitlementCode: "qrstation.access",
+    runtimeStatus: "coming_soon" as const,
   },
 ] as const;
 
 export type CustomerProductCard = (typeof CUSTOMER_PRODUCT_CARDS)[number];
 
+function isLoopbackHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+/**
+ * When login is opened via LAN IP (phone → http://192.168.x.x:3000), rewrite
+ * Customer App origin host to match so redirect is not stuck on localhost.
+ * Keeps the Customer App port from the configured origin (usually 3002).
+ */
+export function alignCustomerAppOriginToRequestHost(
+  customerOrigin: string,
+  requestHostHeader: string | null | undefined,
+): string {
+  if (!requestHostHeader?.trim()) return customerOrigin;
+  const requestHostname = requestHostHeader.split(":")[0]?.trim().toLowerCase();
+  if (!requestHostname) return customerOrigin;
+  try {
+    const url = new URL(customerOrigin);
+    if (url.hostname.toLowerCase() === requestHostname) return customerOrigin;
+    // Phone/LAN: always prefer the host the browser used.
+    if (!isLoopbackHostname(requestHostname)) {
+      url.hostname = requestHostname;
+      return url.origin;
+    }
+    // Browser is on loopback — keep configured origin (may already be LAN for env).
+    return customerOrigin;
+  } catch {
+    return customerOrigin;
+  }
+}
+
 /** Prefer a dedicated URL; otherwise first allowlisted CUSTOMER_APP_ORIGINS entry. */
 export function getPreferredCustomerAppOrigin(
   env: Record<string, string | undefined> = process.env,
+  requestHostHeader?: string | null,
 ): string | null {
   const explicit = env.CUSTOMER_APP_URL?.trim();
   if (explicit) {
     try {
-      return new URL(explicit).origin;
+      return alignCustomerAppOriginToRequestHost(
+        new URL(explicit).origin,
+        requestHostHeader,
+      );
     } catch {
       // fall through
     }
@@ -44,7 +84,10 @@ export function getPreferredCustomerAppOrigin(
   const defaults = ["http://127.0.0.1:3002", "http://localhost:3002"];
   for (const candidate of [...fromList, ...defaults]) {
     try {
-      return new URL(candidate).origin;
+      return alignCustomerAppOriginToRequestHost(
+        new URL(candidate).origin,
+        requestHostHeader,
+      );
     } catch {
       // try next
     }
@@ -54,13 +97,17 @@ export function getPreferredCustomerAppOrigin(
 
 /**
  * Pick the product home path from active entitlements.
- * One product → deep-link into it; several → customer dashboard `/`.
+ * One *available* product → deep-link into it; several → customer dashboard `/`.
+ * Coming-soon entitlements do not count (avoids landing on the launcher when
+ * HR is the only usable product).
  */
 export function pickCustomerProductHomePath(
   entitlementCodes: string[],
 ): string {
-  const allowed = CUSTOMER_PRODUCT_CARDS.filter((card) =>
-    entitlementCodes.includes(card.entitlementCode),
+  const allowed = CUSTOMER_PRODUCT_CARDS.filter(
+    (card) =>
+      card.runtimeStatus === "available" &&
+      entitlementCodes.includes(card.entitlementCode),
   );
   if (allowed.length === 1) {
     return allowed[0]!.basePath;

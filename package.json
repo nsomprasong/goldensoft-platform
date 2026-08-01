@@ -16,6 +16,8 @@
     "seed:hr-permissions": "tsx scripts/seed-hr-permission-catalog.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:demo:cleanup": "tsx scripts/seed-demo-cleanup.ts",
+    "seed:login-test": "tsx scripts/seed-login-test.ts",
+    "seed:login-test:cleanup": "tsx scripts/seed-login-test-cleanup.ts",
     "purge:tenant-data": "tsx scripts/purge-tenant-data.ts",
     "seed:billing-catalog": "tsx scripts/seed-billing-catalog.ts",
     "seed:billing-demo": "tsx scripts/seed-billing-demo.ts",

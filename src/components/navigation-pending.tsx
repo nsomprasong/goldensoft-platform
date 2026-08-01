@@ -100,7 +100,10 @@ export function NavigationPending() {
       if (form.target && form.target !== "_self") return;
       const method = (form.getAttribute("method") ?? "get").toLowerCase();
       if (method !== "get") return;
-      startPending();
+      queueMicrotask(() => {
+        if (event.defaultPrevented) return;
+        startPending();
+      });
     };
 
     const onSignal = () => startPending();

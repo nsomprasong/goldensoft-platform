@@ -1,11 +1,29 @@
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+
 import { BrandLockup } from "@/components/platform-shell";
 import { LoginForm } from "@/components/login-form";
 import { resolvePostLoginRedirect } from "@/lib/auth/post-login-redirect";
 import { getAuthUser } from "@/lib/auth/session";
 import { TH } from "@/lib/i18n/th";
+import { alignCustomerAppOriginToRequestHost } from "@/lib/platform/customer-products";
 import { isPhoneLoginEnabled } from "@/lib/platform/system-settings";
 import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
+
+function alignAbsoluteNext(
+  nextPath: string,
+  requestHost: string | null,
+): string {
+  if (nextPath.startsWith("/") || nextPath.startsWith("//")) return nextPath;
+  try {
+    const url = new URL(nextPath);
+    const aligned = alignCustomerAppOriginToRequestHost(url.origin, requestHost);
+    if (aligned === url.origin) return nextPath;
+    return new URL(url.pathname + url.search, aligned).toString();
+  } catch {
+    return nextPath;
+  }
+}
 
 export default async function LoginPage({
   searchParams,
@@ -14,7 +32,14 @@ export default async function LoginPage({
 }) {
   const user = await getAuthUser();
   const params = await searchParams;
-  const nextPath = resolvePostLoginRedirect(params.next);
+  const headerStore = await headers();
+  const requestHost =
+    headerStore.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    headerStore.get("host");
+  const nextPath = alignAbsoluteNext(
+    resolvePostLoginRedirect(params.next),
+    requestHost,
+  );
   const passwordJustSet = params.password === "set";
 
   if (user) {

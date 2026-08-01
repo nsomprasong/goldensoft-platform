@@ -47,6 +47,12 @@ export async function seedAllMasters(prisma: PrismaClient) {
       nameEn: "Billing Contact",
       sortOrder: 3,
     },
+    {
+      code: "BRANCH_MANAGER",
+      nameTh: "ผู้ดูแลสาขา",
+      nameEn: "Branch Manager",
+      sortOrder: 4,
+    },
   ]) {
     const existing = await prisma.organizationRole.findFirst({
       where: { code: row.code, organizationId: null },

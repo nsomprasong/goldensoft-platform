@@ -39,7 +39,7 @@ export function UserInviteWizard(props: {
     props.organizations[0]?.id ?? "",
   );
   const [organizationRole, setOrganizationRole] = useState<
-    "OWNER" | "ADMIN" | "BILLING_CONTACT"
+    "OWNER" | "ADMIN" | "BILLING_CONTACT" | "BRANCH_MANAGER"
   >("ADMIN");
   const [branchScope, setBranchScope] = useState<
     "ALL_BRANCHES" | "SELECTED" | "NONE"
@@ -246,14 +246,27 @@ export function UserInviteWizard(props: {
           <select
             id="role"
             value={organizationRole}
-            onChange={(e) =>
-              setOrganizationRole(
-                e.target.value as "OWNER" | "ADMIN" | "BILLING_CONTACT",
-              )
-            }
+            onChange={(e) => {
+              const next = e.target.value as
+                | "OWNER"
+                | "ADMIN"
+                | "BILLING_CONTACT"
+                | "BRANCH_MANAGER";
+              setOrganizationRole(next);
+              if (next === "BRANCH_MANAGER") {
+                setBranchScope("SELECTED");
+              }
+            }}
             className="select"
           >
-            {(["OWNER", "ADMIN", "BILLING_CONTACT"] as const).map((r) => (
+            {(
+              [
+                "OWNER",
+                "ADMIN",
+                "BILLING_CONTACT",
+                "BRANCH_MANAGER",
+              ] as const
+            ).map((r) => (
               <option key={r} value={r}>
                 {labelRole(r)}
               </option>

@@ -10,6 +10,12 @@ import {
 } from "@/lib/permissions/codes";
 import { permissionResourceGroup } from "@/lib/permissions/codes";
 import {
+  readEffectiveCodesCache,
+  writeEffectiveCodesCache,
+} from "@/lib/permissions/effective-codes-cache";
+import {
+  HR_BRANCH_MANAGER_PERMISSION_CODES,
+  HR_MEMBER_PERMISSION_CODES,
   HR_PERMISSION_CODES,
   HR_PRODUCT_CODE,
   hrPermissionLabel,
@@ -71,6 +77,10 @@ const ORG_ADMIN_ROLE_CODES = new Set<string>([
 /** OWNER/ADMIN of a customer org get full HR capability when the org is entitled. */
 function shouldGrantProductAdminPermissions(roleCodes: string[]): boolean {
   return roleCodes.some((code) => ORG_ADMIN_ROLE_CODES.has(code));
+}
+
+function isBranchManagerRole(roleCodes: string[]): boolean {
+  return roleCodes.includes(MASTER.organizationRole.BRANCH_MANAGER);
 }
 
 /**
@@ -310,14 +320,25 @@ export const resolveEffectivePermissions = cache(
         const roleCodes = membership.roles
           .filter((row) => row.role.isActive)
           .map((row) => row.role.code);
-        if (!shouldGrantProductAdminPermissions(roleCodes)) continue;
-        const sourceRole = roleCodes.includes(MASTER.organizationRole.OWNER)
-          ? MASTER.organizationRole.OWNER
-          : MASTER.organizationRole.ADMIN;
+        if (roleCodes.length === 0) continue;
         const branchLabel =
           membership.branchScopes.map((s) => s.scopeType.code).join(", ") ||
           "NONE";
-        for (const code of HR_PERMISSION_CODES) {
+        const isAdmin = shouldGrantProductAdminPermissions(roleCodes);
+        const isBranchManager = !isAdmin && isBranchManagerRole(roleCodes);
+        const grantCodes = isAdmin
+          ? HR_PERMISSION_CODES
+          : isBranchManager
+            ? HR_BRANCH_MANAGER_PERMISSION_CODES
+            : HR_MEMBER_PERMISSION_CODES;
+        const sourceRole = isAdmin
+          ? roleCodes.includes(MASTER.organizationRole.OWNER)
+            ? MASTER.organizationRole.OWNER
+            : MASTER.organizationRole.ADMIN
+          : isBranchManager
+            ? MASTER.organizationRole.BRANCH_MANAGER
+            : (roleCodes[0] ?? "MEMBER");
+        for (const code of grantCodes) {
           const meta = parsePermissionMeta(code);
           addRow({
             code,
@@ -326,7 +347,10 @@ export const resolveEffectivePermissions = cache(
             resource: meta.resource,
             action: meta.action,
             sourceRole,
-            sourceKind: "organization_system",
+            sourceKind:
+              isAdmin || isBranchManager
+                ? "organization_system"
+                : "organization_custom",
             organizationId: membership.organizationId,
             organizationScope:
               membership.organization.displayName ||
@@ -348,10 +372,14 @@ export async function resolveEffectivePermissionCodes(
   authUserId: string,
   organizationId?: string | null,
 ): Promise<string[]> {
+  const cached = readEffectiveCodesCache(authUserId, organizationId);
+  if (cached) return cached;
+
   const result = await resolveEffectivePermissions(db, {
     authUserId,
     organizationId,
   });
+  writeEffectiveCodesCache(authUserId, organizationId, result.codes);
   return result.codes;
 }
 

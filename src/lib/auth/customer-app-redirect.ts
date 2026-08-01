@@ -1,8 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
+import { headers } from "next/headers";
 
 import { resolvePostLoginRedirect } from "@/lib/auth/post-login-redirect";
 import { listEntitlementsForOrganization } from "@/lib/platform/entitlements";
 import {
+  alignCustomerAppOriginToRequestHost,
   getPreferredCustomerAppOrigin,
   pickCustomerProductHomePath,
 } from "@/lib/platform/customer-products";
@@ -31,15 +33,33 @@ export async function resolveCustomerAppEntryUrl(
     preferredNext?: string | null;
   },
 ): Promise<string | null> {
+  const headerStore = await headers();
+  const requestHost =
+    headerStore.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    headerStore.get("host");
+
   const preferred = input.preferredNext?.trim() || null;
   if (preferred) {
     const resolved = resolvePostLoginRedirect(preferred);
     if (!resolved.startsWith("/") && !resolved.startsWith("//")) {
+      try {
+        const url = new URL(resolved);
+        const alignedOrigin = alignCustomerAppOriginToRequestHost(
+          url.origin,
+          requestHost,
+        );
+        if (alignedOrigin !== url.origin) {
+          const next = new URL(url.pathname + url.search, alignedOrigin);
+          return next.toString();
+        }
+      } catch {
+        // keep resolved as-is
+      }
       return resolved;
     }
   }
 
-  const origin = getPreferredCustomerAppOrigin();
+  const origin = getPreferredCustomerAppOrigin(process.env, requestHost);
   if (!origin) return null;
 
   let nextPath = "/";

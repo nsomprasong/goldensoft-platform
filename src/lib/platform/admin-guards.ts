@@ -173,13 +173,22 @@ export function canAssignOrganizationRole(input: {
     return true;
   }
   if (input.actorOrganizationRoles.includes(MASTER.organizationRole.OWNER)) {
-    return ["OWNER", "ADMIN", "BILLING_CONTACT"].includes(input.targetRole);
+    return [
+      "OWNER",
+      "ADMIN",
+      "BILLING_CONTACT",
+      "BRANCH_MANAGER",
+    ].includes(input.targetRole);
   }
   if (input.actorOrganizationRoles.includes(MASTER.organizationRole.ADMIN)) {
-    return ["ADMIN", "BILLING_CONTACT"].includes(input.targetRole);
+    return ["ADMIN", "BILLING_CONTACT", "BRANCH_MANAGER"].includes(
+      input.targetRole,
+    );
   }
   if (isPortfolioStaffRole(input.actorPlatformRoles)) {
-    return ["ADMIN", "BILLING_CONTACT"].includes(input.targetRole);
+    return ["ADMIN", "BILLING_CONTACT", "BRANCH_MANAGER"].includes(
+      input.targetRole,
+    );
   }
   return false;
 }

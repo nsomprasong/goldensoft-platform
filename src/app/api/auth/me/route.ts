@@ -30,6 +30,15 @@ const meResponseSchema = z.object({
       organizationStatus: z.string(),
       roles: z.array(z.string()),
       branchCount: z.number().int().nonnegative(),
+      branches: z
+        .array(
+          z.object({
+            id: z.string(),
+            name: z.string(),
+            code: z.string(),
+          }),
+        )
+        .optional(),
     }),
   ),
   activeOrganization: z
@@ -92,6 +101,7 @@ export async function GET(request: NextRequest) {
       organizationStatus: m.organizationStatus,
       roles: m.roles,
       branchCount: m.branches.length,
+      branches: m.branches,
     })),
     activeOrganization: activeMembership
       ? {

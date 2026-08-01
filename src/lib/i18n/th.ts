@@ -428,6 +428,7 @@ export const TH = {
     OWNER: "เจ้าขององค์กร",
     ADMIN: "ผู้ดูแลองค์กร",
     BILLING_CONTACT: "ผู้ประสานงานด้านการเงิน",
+    BRANCH_MANAGER: "ผู้ดูแลสาขา",
   } as Record<string, string>,
 
   pages: {

@@ -64,7 +64,12 @@ export const realInviteUserSchema = z
       }),
     displayName: z.string().trim().min(1).max(200),
     organizationId: z.string().uuid(),
-    organizationRoleCode: z.enum(["OWNER", "ADMIN", "BILLING_CONTACT"]),
+    organizationRoleCode: z.enum([
+      "OWNER",
+      "ADMIN",
+      "BILLING_CONTACT",
+      "BRANCH_MANAGER",
+    ]),
     branchScope: z.enum(["ALL_BRANCHES", "SELECTED", "NONE"]),
     branchIds: z.array(z.string().uuid()).max(200).default([]),
     idempotencyKey: z.string().uuid(),
@@ -97,6 +102,16 @@ export const realInviteUserSchema = z
         code: "custom",
         path: ["branchIds"],
         message: "ห้ามส่งรหัสสาขาเมื่อไม่ได้เลือกขอบเขตบางสาขา",
+      });
+    }
+    if (
+      value.organizationRoleCode === "BRANCH_MANAGER" &&
+      (value.branchScope !== "SELECTED" || value.branchIds.length === 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["branchScope"],
+        message: "ผู้ดูแลสาขาต้องเลือกขอบเขตสาขาที่รับผิดชอบ",
       });
     }
   });

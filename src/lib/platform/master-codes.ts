@@ -41,6 +41,8 @@ export const MASTER = {
     OWNER: "OWNER",
     ADMIN: "ADMIN",
     BILLING_CONTACT: "BILLING_CONTACT",
+    /** Branch-scoped manager — approve within SELECTED branches only. */
+    BRANCH_MANAGER: "BRANCH_MANAGER",
   },
   branchScopeType: {
     ALL_BRANCHES: "ALL_BRANCHES",

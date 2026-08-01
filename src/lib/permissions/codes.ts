@@ -249,6 +249,13 @@ export function defaultPermissionsForOrganizationRole(
       // Commercial subscription lifecycle stays on OWNER/BILLING_ADMIN.
     ];
   }
+  if (roleCode === "BRANCH_MANAGER") {
+    return [
+      PLATFORM_PERMISSIONS.organizationRead,
+      PLATFORM_PERMISSIONS.branchRead,
+      PLATFORM_PERMISSIONS.userRead,
+    ];
+  }
   return [];
 }
 
@@ -284,10 +291,12 @@ export function defaultPermissionsForPlatformRole(
     ];
   }
   // SALES / ACCOUNT_MANAGER: portfolio-scoped at runtime (managed orgs only).
+  // Closest to customer OWNER for assigned orgs: read/edit org + branches + users.
   if (roleCode === "SALES" || roleCode === "ACCOUNT_MANAGER") {
     return [
       PLATFORM_PERMISSIONS.organizationRead,
       PLATFORM_PERMISSIONS.organizationCreate,
+      PLATFORM_PERMISSIONS.organizationManage,
       PLATFORM_PERMISSIONS.branchRead,
       PLATFORM_PERMISSIONS.branchManage,
       PLATFORM_PERMISSIONS.userRead,

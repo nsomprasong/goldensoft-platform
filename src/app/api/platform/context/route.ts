@@ -15,8 +15,10 @@ import {
 } from "@/lib/context/cookie";
 import { TH } from "@/lib/i18n/th";
 import { writeAuditLog } from "@/lib/platform/audit";
+import { invalidateCustomerBootstrapCache } from "@/lib/platform/customer-bootstrap-cache";
 import { listActiveManagedOrganizationIds } from "@/lib/platform/customer-portfolio";
 import { MASTER } from "@/lib/platform/master-codes";
+import { invalidateEffectiveCodesCache } from "@/lib/permissions/effective-codes-cache";
 import { permissionsForRoles } from "@/lib/permissions/codes";
 import { prisma } from "@/lib/prisma";
 
@@ -366,5 +368,7 @@ export async function POST(request: NextRequest) {
   });
 
   response.cookies.set(COOKIE_NAME, encoded, contextCookieOptions());
+  invalidateCustomerBootstrapCache(user.id);
+  invalidateEffectiveCodesCache(user.id);
   return response;
 }

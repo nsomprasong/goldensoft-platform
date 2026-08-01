@@ -38,6 +38,8 @@ export const HR_PERMISSIONS = {
   payrollLock: "hr.payroll.lock",
   payslipSelf: "hr.payslip.self",
   payslipRead: "hr.payslip.read",
+  advanceSelf: "hr.advance.self",
+  advanceApprove: "hr.advance.approve",
   departmentManage: "hr.department.manage",
   positionManage: "hr.position.manage",
   shiftRead: "hr.shift.read",
@@ -88,6 +90,8 @@ export const HR_PERMISSION_LABELS: Record<HrPermission, string> = {
   [HR_PERMISSIONS.payrollLock]: "ล็อกงวดเงินเดือน",
   [HR_PERMISSIONS.payslipSelf]: "ดูสลิปเงินเดือนของตนเอง",
   [HR_PERMISSIONS.payslipRead]: "ดูสลิปเงินเดือน",
+  [HR_PERMISSIONS.advanceSelf]: "ขอเบิกล่วงหน้าของตนเอง",
+  [HR_PERMISSIONS.advanceApprove]: "อนุมัติเบิกล่วงหน้า",
   [HR_PERMISSIONS.departmentManage]: "จัดการแผนก",
   [HR_PERMISSIONS.positionManage]: "จัดการตำแหน่ง",
   [HR_PERMISSIONS.shiftRead]: "ดูกะงาน",
@@ -135,6 +139,8 @@ export const HR_PERMISSION_LABELS_EN: Record<HrPermission, string> = {
   [HR_PERMISSIONS.payrollLock]: "Lock payroll",
   [HR_PERMISSIONS.payslipSelf]: "View own payslips",
   [HR_PERMISSIONS.payslipRead]: "View payslips",
+  [HR_PERMISSIONS.advanceSelf]: "Request own salary advance",
+  [HR_PERMISSIONS.advanceApprove]: "Approve salary advances",
   [HR_PERMISSIONS.departmentManage]: "Manage departments",
   [HR_PERMISSIONS.positionManage]: "Manage positions",
   [HR_PERMISSIONS.shiftRead]: "View shifts",
@@ -229,6 +235,8 @@ const RESOURCE_ACTION: Record<HrPermission, { resource: string; action: string }
     [HR_PERMISSIONS.payrollLock]: { resource: "payroll", action: "lock" },
     [HR_PERMISSIONS.payslipSelf]: { resource: "payslip", action: "self" },
     [HR_PERMISSIONS.payslipRead]: { resource: "payslip", action: "read" },
+    [HR_PERMISSIONS.advanceSelf]: { resource: "advance", action: "self" },
+    [HR_PERMISSIONS.advanceApprove]: { resource: "advance", action: "approve" },
     [HR_PERMISSIONS.departmentManage]: {
       resource: "department",
       action: "manage",
@@ -285,6 +293,35 @@ export const HR_PERMISSION_CATALOG: HrPermissionCatalogEntry[] = Object.values(
 export const HR_PERMISSION_CODES: HrPermission[] = HR_PERMISSION_CATALOG.map(
   (entry) => entry.code,
 );
+
+/**
+ * Self-service set for ordinary org members (not OWNER/ADMIN).
+ * Mirrors goldensoft-hr `MEMBER_PERMISSIONS` so Customer App menus appear.
+ */
+export const HR_MEMBER_PERMISSION_CODES: readonly HrPermission[] = [
+  HR_PERMISSIONS.scheduleRead,
+  HR_PERMISSIONS.attendanceSelf,
+  HR_PERMISSIONS.leaveSelf,
+  HR_PERMISSIONS.overtimeSelf,
+  HR_PERMISSIONS.payslipSelf,
+  HR_PERMISSIONS.advanceSelf,
+];
+
+/**
+ * Branch manager: self-service + approve/read within their SELECTED branch.
+ * Does not receive org-wide settings, payroll, or employee admin catalog.
+ */
+export const HR_BRANCH_MANAGER_PERMISSION_CODES: readonly HrPermission[] = [
+  ...HR_MEMBER_PERMISSION_CODES,
+  HR_PERMISSIONS.approvalRead,
+  HR_PERMISSIONS.leaveRead,
+  HR_PERMISSIONS.leaveApprove,
+  HR_PERMISSIONS.overtimeRead,
+  HR_PERMISSIONS.overtimeApprove,
+  HR_PERMISSIONS.advanceApprove,
+  HR_PERMISSIONS.attendanceRead,
+  HR_PERMISSIONS.attendanceManage,
+];
 
 export function isHrPermissionCode(code: string): code is HrPermission {
   return (HR_PERMISSION_CODES as string[]).includes(code);
