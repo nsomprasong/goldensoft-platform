@@ -17,6 +17,11 @@ export const DEFAULT_KEEP_ORGANIZATION_CODES = ["GOLDENSOFT"] as const;
 export type PurgeOptions = {
   keepEmails: string[];
   keepOrganizationCodes: string[];
+  /**
+   * UI “เริ่มต้นใหม่” for SUPER_ADMIN may run in production with typed confirm.
+   * CLI `purge:tenant-data` never sets this.
+   */
+  allowProduction?: boolean;
 };
 
 export type PurgeCounts = Record<string, number>;
@@ -61,8 +66,8 @@ async function hasPasswordResetTable(db: PrismaClient): Promise<boolean> {
   return rows[0]?.present ?? false;
 }
 
-function assertSafeToPurge(): void {
-  if (process.env.NODE_ENV === "production") {
+function assertSafeToPurge(allowProduction?: boolean): void {
+  if (process.env.NODE_ENV === "production" && !allowProduction) {
     throw new PurgeSafetyError("ห้ามล้างข้อมูลในสภาพแวดล้อม production");
   }
 }
@@ -71,7 +76,7 @@ export async function planPurge(
   db: PrismaClient,
   options: PurgeOptions,
 ): Promise<PurgePlan> {
-  assertSafeToPurge();
+  assertSafeToPurge(options.allowProduction);
 
   const keepEmails = normalizeEmails(options.keepEmails);
   const keepOrganizationCodes = normalizeCodes(options.keepOrganizationCodes);

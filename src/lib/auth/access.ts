@@ -310,6 +310,11 @@ export const PLATFORM_NAV: NavItem[] = [
     label: TH.nav.settings,
     anyPlatformRoles: ["SUPER_ADMIN"],
   },
+  {
+    href: "/data-reset",
+    label: TH.nav.dataReset,
+    anyPlatformRoles: ["SUPER_ADMIN"],
+  },
 ];
 
 export function filterNavForRoles(input: {
