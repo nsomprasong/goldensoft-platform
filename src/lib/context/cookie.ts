@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
+import { withAuthCookieDomain } from "@/lib/auth/cookie-domain";
+
 export type PlatformContextCookie = {
   organizationId: string;
   branchId: string | null;
@@ -70,13 +72,13 @@ export function decodeContextCookie(
 }
 
 export function contextCookieOptions(maxAgeSeconds = 60 * 60 * 24 * 30) {
-  return {
+  return withAuthCookieDomain({
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,
     path: "/",
     maxAge: maxAgeSeconds,
-  };
+  });
 }
 
 export { COOKIE_NAME };

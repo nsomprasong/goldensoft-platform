@@ -26,7 +26,10 @@ import {
 } from "@/lib/platform/system-settings";
 import { prisma } from "@/lib/prisma";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { COOKIE_NAME } from "@/lib/context/cookie";
+import {
+  COOKIE_NAME,
+  contextCookieOptions,
+} from "@/lib/context/cookie";
 
 export type LoginActionState = {
   error: string | null;
@@ -183,11 +186,7 @@ export async function signOutAction(): Promise<void> {
 
   const jar = await cookies();
   jar.set(COOKIE_NAME, "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
+    ...contextCookieOptions(0),
   });
 
   revalidatePath("/", "layout");

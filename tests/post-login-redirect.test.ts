@@ -7,7 +7,7 @@ import {
 } from "../src/lib/auth/post-login-redirect";
 
 describe("resolveStaffPostLoginPath", () => {
-  it("sends platform staff to Platform home when next is Customer App", () => {
+  it("keeps allowlisted Customer App next for staff (เปิดแอปลูกค้า / SSO)", () => {
     const path = resolveStaffPostLoginPath(
       "http://127.0.0.1:3002/auth/callback",
       {
@@ -15,7 +15,7 @@ describe("resolveStaffPostLoginPath", () => {
         organizationRoles: [],
       },
     );
-    assert.equal(path, "/");
+    assert.equal(path, "http://127.0.0.1:3002/auth/callback");
   });
 
   it("keeps relative Platform Admin paths for staff", () => {

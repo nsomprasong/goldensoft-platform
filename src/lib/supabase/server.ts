@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+import { withAuthCookieDomain } from "@/lib/auth/cookie-domain";
+
 /** Browser-safe publishable key only. */
 export async function createSupabaseServerClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -24,7 +26,7 @@ export async function createSupabaseServerClient() {
       ) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
+            cookieStore.set(name, value, withAuthCookieDomain(options));
           });
         } catch {
           // Server Components may not write cookies.

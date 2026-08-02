@@ -39,8 +39,10 @@ export function resolvePostLoginRedirect(raw: string | null | undefined): string
 }
 
 /**
- * Platform staff post-login path. Absolute Customer App `next` URLs are ignored
- * so Super Admin / SALES land on Platform Admin menus, not the tenant shell.
+ * Platform staff post-login path.
+ * Relative Platform Admin paths stay on Platform.
+ * Absolute allowlisted Customer App URLs are kept so “เปิดแอปลูกค้า”
+ * (and SSO return hops) are not bounced back to `/`.
  */
 export function resolveStaffPostLoginPath(
   rawPath: string,
@@ -51,7 +53,7 @@ export function resolveStaffPostLoginPath(
 ): string {
   const path = resolveAccessiblePostLoginPath(rawPath, input);
   if (path.startsWith("http://") || path.startsWith("https://")) {
-    return "/";
+    return path;
   }
   return path;
 }
