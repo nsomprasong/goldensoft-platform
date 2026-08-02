@@ -57,12 +57,13 @@ export async function updateSession(request: NextRequest) {
         });
         supabaseResponse = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) => {
-          expireHostOnlyCookie(supabaseResponse, name);
           supabaseResponse.cookies.set(
             name,
             value,
             withAuthCookieDomain(options),
           );
+          // After Domain write — append host-only Max-Age=0 (cookies.set collapses).
+          expireHostOnlyCookie(supabaseResponse, name);
         });
       },
     },

@@ -17,7 +17,6 @@ import { TH } from "@/lib/i18n/th";
 import { alignCustomerAppOriginToRequestHost } from "@/lib/platform/customer-products";
 import { isPhoneLoginEnabled } from "@/lib/platform/system-settings";
 import { prisma } from "@/lib/prisma";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function alignAbsoluteNext(
   nextPath: string,
@@ -37,9 +36,13 @@ function alignAbsoluteNext(
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; password?: string; sso_retry?: string }>;
+  searchParams: Promise<{
+    next?: string;
+    password?: string;
+    sso_retry?: string;
+    sso_cleared?: string;
+  }>;
 }) {
-  let user = await getAuthUser();
   const params = await searchParams;
   const headerStore = await headers();
   const requestHost =
@@ -51,21 +54,21 @@ export default async function LoginPage({
   );
   const passwordJustSet = params.password === "set";
   const ssoRetry = params.sso_retry === "1";
-  let ssoRetryMessage: string | null = null;
+  const ssoCleared = params.sso_cleared === "1";
 
-  // App /auth/callback bounced here because it could not read the session.
-  // Stop auto-redirect loops (page flicker) and force a clean login.
-  if (user && ssoRetry) {
-    try {
-      const supabase = await createSupabaseServerClient();
-      await supabase.auth.signOut({ scope: "local" });
-    } catch {
-      // still show the form
+  // App bounced here (sso_retry). RSC cannot reliably clear cookies — Route Handler can.
+  if (ssoRetry && !ssoCleared) {
+    const wipe = new URL("/auth/reset-cookies", "http://local.invalid");
+    if (nextPath && nextPath !== "/") {
+      wipe.searchParams.set("next", nextPath);
     }
-    user = null;
-    ssoRetryMessage =
-      "เซสชันกับแอปลูกค้าไม่ตรงกัน — กรุณาเข้าสู่ระบบอีกครั้ง";
+    redirect(`${wipe.pathname}${wipe.search}`);
   }
+
+  const user = await getAuthUser();
+  const ssoRetryMessage = ssoCleared
+    ? "เซสชันกับแอปลูกค้าไม่ตรงกัน — กรุณาเข้าสู่ระบบอีกครั้ง"
+    : null;
 
   if (user) {
     const bundle = await loadPlatformUserBundle(user.id);

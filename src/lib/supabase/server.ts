@@ -26,6 +26,8 @@ export async function createSupabaseServerClient() {
       ) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
+            // Domain cookies only here — host-only twins are cleared via
+            // middleware expireHostOnlyCookie (raw Set-Cookie append).
             cookieStore.set(name, value, withAuthCookieDomain(options));
           });
         } catch {

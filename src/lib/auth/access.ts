@@ -362,6 +362,7 @@ export const SET_PASSWORD_PATH = "/auth/set-password";
 export function isProtectedPath(pathname: string): boolean {
   if (pathname.startsWith("/login")) return false;
   if (pathname.startsWith("/auth/accept-invite")) return false;
+  if (pathname.startsWith("/auth/reset-cookies")) return false;
   if (pathname.startsWith(SET_PASSWORD_PATH)) return false;
   if (pathname.startsWith(`/api${SET_PASSWORD_PATH}`)) return false;
   if (pathname.startsWith("/access")) return false;

@@ -66,8 +66,14 @@ export async function middleware(request: NextRequest) {
     );
   }
 
-  const { response: sessionResponse, user } = await updateSession(request);
   const { pathname } = request.nextUrl;
+
+  // Cookie wipe must not refresh/re-write the session first.
+  if (pathname.startsWith("/auth/reset-cookies")) {
+    return NextResponse.next();
+  }
+
+  const { response: sessionResponse, user } = await updateSession(request);
 
   const requestHeaders = new Headers(request.headers);
   // Never trust client-supplied identity headers — only middleware may set them.
