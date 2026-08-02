@@ -189,8 +189,8 @@ describe("db:verify read-only checks", () => {
     };
   }
 
-  it("expects platform table count 67 after migration 0009", () => {
-    assert.equal(EXPECTED_PLATFORM_TABLE_COUNT, 67);
+  it("expects platform table count 69 after migrations 0012-0013", () => {
+    assert.equal(EXPECTED_PLATFORM_TABLE_COUNT, 69);
     assert.ok(MASTER_TABLES.includes("user_invitation_statuses"));
     assert.ok(MASTER_TABLES.includes("entitlement_statuses"));
     assert.ok(MASTER_TABLES.includes("organization_onboarding_statuses"));
@@ -324,9 +324,9 @@ describe("db:verify read-only checks", () => {
     );
   });
 
-  it("passes when platform table count is 67", async () => {
+  it("passes when platform table count is 69", async () => {
     const result = await verifyPlatformDatabase(
-      mockQuery({ platformTableCount: 67 }),
+      mockQuery({ platformTableCount: 69 }),
     );
     assert.equal(result.ok, true);
     assert.equal(
@@ -454,7 +454,7 @@ describe("db:verify read-only checks", () => {
     assert.equal(/INSERT\s+|UPDATE\s+|DELETE\s+|DROP\s+/i.test(src), false);
     assert.equal(/connectionString:\s*directUrl/.test(src), false);
     assert.equal(/DIRECT_URL/.test(src), false);
-    assert.equal(EXPECTED_PLATFORM_TABLE_COUNT, 67);
+    assert.equal(EXPECTED_PLATFORM_TABLE_COUNT, 69);
     assert.match(src, /0003_user_invitations/);
     assert.match(src, /0004_phase7_operations/);
     assert.match(src, /0005_phase7b_subscription_history/);
