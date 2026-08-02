@@ -5,7 +5,11 @@ on:
   workflow_dispatch:
     inputs:
       git_sha:
-        description: "Full commit SHA to build (image tag = first 12 chars). Empty = this workflow commit."
+        description: "Full commit SHA to build (default: this workflow commit)."
+        required: false
+        default: ""
+      image_tag:
+        description: "Image tag to push (default: first 12 chars of git_sha)."
         required: false
         default: ""
 
@@ -23,7 +27,7 @@ jobs:
       image_tag: ${{ steps.meta.outputs.tag }}
       image_ref: ${{ steps.meta.outputs.ref }}
     steps:
-      - name: Resolve source commit
+      - name: Resolve source commit and tag
         id: meta
         run: |
           set -euo pipefail
@@ -31,16 +35,46 @@ jobs:
           if [ -z "$SHA" ]; then
             SHA="${GITHUB_SHA}"
           fi
-          TAG="${SHA::12}"
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${SHA::12}"
+          fi
           echo "full_sha=${SHA}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Building ${TAG} from ${SHA}"
+          echo "Building tag=${TAG} from sha=${SHA}"
 
       - name: Checkout source commit
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.meta.outputs.full_sha }}
+
+      - name: Ensure Dockerfile accepts NEXT_PUBLIC build-args
+        run: |
+          set -euo pipefail
+          if grep -q 'ARG NEXT_PUBLIC_SUPABASE_URL' Dockerfile; then
+            echo "Dockerfile already has NEXT_PUBLIC build-args"
+            exit 0
+          fi
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path("Dockerfile")
+          text = path.read_text()
+          old = "ENV NEXT_TELEMETRY_DISABLED=1\nENV NODE_ENV=production\nRUN npx prisma generate && npm run build"
+          new = """ENV NEXT_TELEMETRY_DISABLED=1
+          ENV NODE_ENV=production
+          ARG NEXT_PUBLIC_SUPABASE_URL
+          ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+          ARG NEXT_PUBLIC_APP_URL=https://platform.goldensoft.cloud
+          ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+          ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+          ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+          RUN npx prisma generate && npm run build""".replace("          ", "")
+          if old not in text:
+              raise SystemExit("Dockerfile marker not found for build-arg injection")
+          path.write_text(text.replace(old, new, 1))
+          print("Injected NEXT_PUBLIC build-args into Dockerfile for this build")
+          PY
 
       - name: Login GHCR
         uses: docker/login-action@v3
@@ -58,6 +92,9 @@ jobs:
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ steps.meta.outputs.full_sha }}
           build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+            NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL || 'https://platform.goldensoft.cloud' }}
             IMAGE_TAG=${{ steps.meta.outputs.tag }}
 
       - name: Confirm pushed tags
