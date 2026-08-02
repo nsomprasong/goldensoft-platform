@@ -533,15 +533,17 @@ a {
 
 .context-chip {
   display: flex;
-  min-width: 0;
-  flex: 1 1 11rem;
+  min-width: 12.5rem;
+  flex: 1 1 15rem;
+  max-width: 22rem;
   align-items: center;
   gap: 0.55rem;
   min-height: 2.85rem;
-  padding: 0.35rem 0.65rem 0.35rem 0.4rem;
+  padding: 0.35rem 0.75rem 0.35rem 0.45rem;
   border: 1px solid transparent;
   border-radius: 0.9rem;
   box-shadow: var(--shadow-xs);
+  overflow: hidden;
   transition:
     border-color var(--motion-fast) var(--ease-out),
     box-shadow var(--motion-fast) var(--ease-out),
@@ -555,12 +557,20 @@ a {
 
 .context-chip--org {
   border-color: #bfdbfe;
-  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 70%);
+  background: linear-gradient(135deg, #eef5ff 0%, #ffffff 70%);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 1px rgba(37, 99, 235, 0.12),
+    0 8px 18px rgba(37, 99, 235, 0.1);
 }
 
 .context-chip--branch {
   border-color: #a7f3d0;
   background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 70%);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 1px rgba(5, 150, 105, 0.12),
+    0 8px 18px rgba(5, 150, 105, 0.1);
 }
 
 .context-chip-icon {
@@ -590,6 +600,7 @@ a {
   flex: 1;
   flex-direction: column;
   gap: 0.05rem;
+  overflow: hidden;
 }
 
 .context-chip-label {
@@ -610,7 +621,7 @@ a {
 .context-chip-select {
   width: 100%;
   min-width: 0;
-  max-width: 14rem;
+  max-width: 100%;
   border: 0;
   background: transparent;
   color: var(--text-primary);
@@ -621,6 +632,12 @@ a {
   padding: 0;
   outline: none;
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .context-chip-select:disabled {
@@ -628,8 +645,16 @@ a {
   cursor: not-allowed;
 }
 
-.context-chip:focus-within {
-  box-shadow: 0 0 0 2px var(--ring-soft);
+.context-chip--org:focus-within {
+  box-shadow:
+    0 0 0 2px rgba(37, 99, 235, 0.28),
+    0 8px 18px rgba(37, 99, 235, 0.12);
+}
+
+.context-chip--branch:focus-within {
+  box-shadow:
+    0 0 0 2px rgba(5, 150, 105, 0.28),
+    0 8px 18px rgba(5, 150, 105, 0.12);
 }
 
 .page-header {
@@ -1276,10 +1301,20 @@ a {
 
   .desktop-context {
     display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    max-width: min(52rem, 100%);
   }
 
   .desktop-context .context-switcher {
-    width: auto;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .desktop-context .context-chip {
+    flex: 1 1 17rem;
+    min-width: 14.5rem;
+    max-width: 24rem;
   }
 
   .navigation-trigger,
@@ -1346,6 +1381,8 @@ a {
   .context-switcher > .context-chip {
     width: 100%;
     flex: none;
+    min-width: 0;
+    max-width: none;
   }
 
   .context-chip-select {
