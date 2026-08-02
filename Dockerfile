@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
   && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Next standalone COPY expects this directory even when the repo has no assets.
+RUN mkdir -p public certs
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 # NEXT_PUBLIC_* are inlined at build time (not VPS secrets).

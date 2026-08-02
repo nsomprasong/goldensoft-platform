@@ -49,31 +49,46 @@ jobs:
         with:
           ref: ${{ steps.meta.outputs.full_sha }}
 
+      - name: Ensure build context dirs exist
+        run: mkdir -p public certs
+
       - name: Ensure Dockerfile accepts NEXT_PUBLIC build-args
         run: |
           set -euo pipefail
-          if grep -q 'ARG NEXT_PUBLIC_SUPABASE_URL' Dockerfile; then
-            echo "Dockerfile already has NEXT_PUBLIC build-args"
-            exit 0
-          fi
           python3 <<'PY'
           from pathlib import Path
           path = Path("Dockerfile")
           text = path.read_text()
-          old = "ENV NEXT_TELEMETRY_DISABLED=1\nENV NODE_ENV=production\nRUN npx prisma generate && npm run build"
-          new = """ENV NEXT_TELEMETRY_DISABLED=1
-          ENV NODE_ENV=production
-          ARG NEXT_PUBLIC_SUPABASE_URL
-          ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-          ARG NEXT_PUBLIC_APP_URL=https://platform.goldensoft.cloud
-          ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-          ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-          ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
-          RUN npx prisma generate && npm run build""".replace("          ", "")
-          if old not in text:
-              raise SystemExit("Dockerfile marker not found for build-arg injection")
-          path.write_text(text.replace(old, new, 1))
-          print("Injected NEXT_PUBLIC build-args into Dockerfile for this build")
+          changed = False
+          if "RUN mkdir -p public" not in text:
+              needle = "COPY . .\n"
+              insert = "COPY . .\nRUN mkdir -p public certs\n"
+              if needle not in text:
+                  raise SystemExit("Dockerfile COPY . . marker not found")
+              text = text.replace(needle, insert, 1)
+              changed = True
+          if "ARG NEXT_PUBLIC_SUPABASE_URL" not in text:
+              old = "ENV NEXT_TELEMETRY_DISABLED=1\nENV NODE_ENV=production\nRUN npx prisma generate && npm run build"
+              new = (
+                  "ENV NEXT_TELEMETRY_DISABLED=1\n"
+                  "ENV NODE_ENV=production\n"
+                  "ARG NEXT_PUBLIC_SUPABASE_URL\n"
+                  "ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY\n"
+                  "ARG NEXT_PUBLIC_APP_URL=https://platform.goldensoft.cloud\n"
+                  "ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL\n"
+                  "ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY\n"
+                  "ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL\n"
+                  "RUN npx prisma generate && npm run build"
+              )
+              if old not in text:
+                  raise SystemExit("Dockerfile build marker not found for ARG injection")
+              text = text.replace(old, new, 1)
+              changed = True
+          if changed:
+              path.write_text(text)
+              print("Patched Dockerfile for GHCR build")
+          else:
+              print("Dockerfile already build-ready")
           PY
 
       - name: Login GHCR
