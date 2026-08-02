@@ -174,7 +174,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(cachedBootstrap);
   }
 
-  let organizationId =
+  const organizationId =
     cookie?.organizationId ??
     (bundle.memberships.length === 1
       ? bundle.memberships[0]!.organizationId

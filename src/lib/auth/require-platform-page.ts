@@ -42,7 +42,7 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
 
   const bundle = await loadPlatformUserBundle(user.id);
   const jar = await cookies();
-  let cookie = decodeContextCookie(jar.get(COOKIE_NAME)?.value);
+  const cookie = decodeContextCookie(jar.get(COOKIE_NAME)?.value);
   const headerList = await headers();
   const requestPath = safeNextPath(
     headerList.get("x-gs-pathname") ?? headerList.get("next-url"),
@@ -152,7 +152,7 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     activeBranchId = decision.autoBranchId;
   }
 
-  let isManagedOrgMode =
+  const isManagedOrgMode =
     cookie?.mode === "managed_org" &&
     !!activeOrgId &&
     managedOrganizationIds.includes(activeOrgId);
