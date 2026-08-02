@@ -147,6 +147,11 @@ jobs:
           mv .env.tmp .env
           docker compose -f docker-compose.yml up -d --no-deps "$COMPOSE_SERVICE"
 
+
+      - name: Prune old GoldenSoft images
+        if: steps.health.outcome == 'success'
+        run: bash /opt/goldensoft/scripts/prune-old-images.sh --dry-run
+
       - name: Fail job if unhealthy
         if: steps.health.outcome == 'failure'
         run: exit 1
