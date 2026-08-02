@@ -116,3 +116,12 @@ jobs:
         run: |
           echo "Pushed ${{ steps.meta.outputs.ref }}"
           echo "Also tagged sha-${{ steps.meta.outputs.full_sha }}"
+
+      - name: Verify CA cert exists and non-empty in image
+        run: |
+          set -euo pipefail
+          IMG="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}"
+          docker pull "$IMG"
+          SIZE=$(docker run --rm --entrypoint sh "$IMG" -c 'test -s /app/certs/prod-ca-2021.crt && wc -c < /app/certs/prod-ca-2021.crt')
+          echo "CA_CERT_INCLUDED=yes bytes=${SIZE}"
+          test "$SIZE" -gt 0
