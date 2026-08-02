@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import {
   DATA_RESET_CONFIRM_PHRASE,
   PROTECTED_ORG_CODE,
+  type DataResetCatalogTargets,
   type DataResetPreview,
   type DataResetSelection,
   type DataResetTargetOrg,
@@ -18,6 +19,7 @@ import {
 export {
   DATA_RESET_CONFIRM_PHRASE,
   PROTECTED_ORG_CODE,
+  type DataResetCatalogTargets,
   type DataResetPreview,
   type DataResetSelection,
   type DataResetTargetOrg,
@@ -59,6 +61,69 @@ export async function listDataResetTargets(
   });
 }
 
+export async function listDataResetCatalog(
+  db: PrismaClient,
+): Promise<DataResetCatalogTargets> {
+  const [products, plans, subscriptions] = await Promise.all([
+    db.product.findMany({
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        _count: { select: { plans: true } },
+      },
+      orderBy: { code: "asc" },
+    }),
+    db.plan.findMany({
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        productId: true,
+        product: { select: { code: true } },
+      },
+      orderBy: [{ product: { code: "asc" } }, { code: "asc" }],
+    }),
+    db.subscription.findMany({
+      select: {
+        id: true,
+        organizationId: true,
+        planCode: true,
+        organization: { select: { customerCode: true, displayName: true } },
+        product: { select: { code: true } },
+        status: { select: { code: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    }),
+  ]);
+
+  return {
+    products: products.map((p) => ({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      planCount: p._count.plans,
+    })),
+    plans: plans.map((p) => ({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      productId: p.productId,
+      productCode: p.product.code,
+    })),
+    subscriptions: subscriptions.map((s) => ({
+      id: s.id,
+      organizationId: s.organizationId,
+      organizationCode: s.organization.customerCode,
+      organizationName: s.organization.displayName,
+      productCode: s.product.code,
+      planCode: s.planCode,
+      statusCode: s.status.code,
+    })),
+  };
+}
+
 async function listSuperAdminEmails(db: PrismaClient): Promise<string[]> {
   const rows = await db.platformRoleAssignment.findMany({
     where: {
@@ -77,10 +142,145 @@ async function listSuperAdminEmails(db: PrismaClient): Promise<string[]> {
   ];
 }
 
+type ResolvedCatalog = {
+  products: { id: string; code: string; name: string }[];
+  plans: { id: string; code: string; name: string; productCode: string }[];
+  subscriptions: {
+    id: string;
+    organizationCode: string;
+    productCode: string;
+    planCode: string;
+  }[];
+  productIds: string[];
+  planIds: string[];
+  subscriptionIds: string[];
+};
+
+async function resolveCatalogSelection(
+  db: PrismaClient,
+  selection: DataResetSelection,
+): Promise<ResolvedCatalog> {
+  const productIds = unique(selection.productIds);
+  const planIdsIn = unique(selection.planIds);
+  const subscriptionIdsIn = unique(selection.subscriptionIds);
+
+  const products = productIds.length
+    ? await db.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, code: true, name: true },
+        orderBy: { code: "asc" },
+      })
+    : [];
+  if (products.length !== productIds.length) {
+    throw new PurgeSafetyError("พบรหัสผลิตภัณฑ์ที่ไม่ถูกต้อง");
+  }
+
+  const plansFromProducts =
+    productIds.length > 0
+      ? await db.plan.findMany({
+          where: { productId: { in: productIds } },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            product: { select: { code: true } },
+          },
+        })
+      : [];
+
+  const plansSelected = planIdsIn.length
+    ? await db.plan.findMany({
+        where: { id: { in: planIdsIn } },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          product: { select: { code: true } },
+        },
+      })
+    : [];
+  if (plansSelected.length !== planIdsIn.length) {
+    throw new PurgeSafetyError("พบรหัสแพ็กเกจที่ไม่ถูกต้อง");
+  }
+
+  const planMap = new Map<string, (typeof plansSelected)[number]>();
+  for (const plan of [...plansFromProducts, ...plansSelected]) {
+    planMap.set(plan.id, plan);
+  }
+  const plans = [...planMap.values()].map((p) => ({
+    id: p.id,
+    code: p.code,
+    name: p.name,
+    productCode: p.product.code,
+  }));
+  const planIds = plans.map((p) => p.id);
+
+  const subsFromCatalog =
+    productIds.length > 0 || planIds.length > 0
+      ? await db.subscription.findMany({
+          where: {
+            OR: [
+              productIds.length ? { productId: { in: productIds } } : undefined,
+              planIds.length ? { planId: { in: planIds } } : undefined,
+            ].filter(Boolean) as Array<
+              { productId: { in: string[] } } | { planId: { in: string[] } }
+            >,
+          },
+          select: {
+            id: true,
+            planCode: true,
+            organization: { select: { customerCode: true } },
+            product: { select: { code: true } },
+          },
+        })
+      : [];
+
+  const subsSelected = subscriptionIdsIn.length
+    ? await db.subscription.findMany({
+        where: { id: { in: subscriptionIdsIn } },
+        select: {
+          id: true,
+          planCode: true,
+          organization: { select: { customerCode: true } },
+          product: { select: { code: true } },
+        },
+      })
+    : [];
+  if (subsSelected.length !== subscriptionIdsIn.length) {
+    throw new PurgeSafetyError("พบรหัสการสมัครใช้บริการที่ไม่ถูกต้อง");
+  }
+
+  const subMap = new Map<string, (typeof subsSelected)[number]>();
+  for (const sub of [...subsFromCatalog, ...subsSelected]) {
+    subMap.set(sub.id, sub);
+  }
+  const subscriptions = [...subMap.values()].map((s) => ({
+    id: s.id,
+    organizationCode: s.organization.customerCode,
+    productCode: s.product.code,
+    planCode: s.planCode,
+  }));
+
+  return {
+    products,
+    plans,
+    subscriptions,
+    productIds: products.map((p) => p.id),
+    planIds,
+    subscriptionIds: subscriptions.map((s) => s.id),
+  };
+}
+
 export async function previewDataReset(
   db: PrismaClient,
   selection: DataResetSelection,
 ): Promise<DataResetPreview> {
+  const catalog = await resolveCatalogSelection(db, selection);
+  const hasCatalog =
+    catalog.productIds.length > 0 ||
+    catalog.planIds.length > 0 ||
+    catalog.subscriptionIds.length > 0;
+
   if (selection.selectAll) {
     const keepEmails = await listSuperAdminEmails(db);
     if (keepEmails.length === 0) {
@@ -99,30 +299,44 @@ export async function previewDataReset(
       keptSuperAdminEmails: keepEmails,
       organizations: plan.organizations,
       branches: [],
+      ...catalog,
       orphanProfiles: plan.profiles,
       counts: {
         ...plan.counts,
         selectedBranches: 0,
+        catalogProducts: catalog.products.length,
+        catalogPlans: catalog.plans.length,
+        catalogSubscriptions: catalog.subscriptions.length,
         hrOrganizationScoped: "จะล้างข้อมูล HR ขององค์กรที่ถูกลบ (ถ้ามี schema hr)",
       },
       warnings: [
-        "โหมดเลือกทั้งหมด: เหลือเฉพาะองค์กร GOLDENSOFT และบัญชีที่มีบทบาทผู้ดูแลระบบสูงสุด",
+        "โหมดเลือกทั้งหมด (องค์กร): เหลือเฉพาะองค์กร GOLDENSOFT และบัญชีผู้ดูแลระบบสูงสุด",
+        ...(hasCatalog
+          ? [
+              "จะลบผลิตภัณฑ์/แพ็กเกจ/การสมัครที่เลือกด้วย (การสมัครที่ผูกกับผลิตภัณฑ์/แพ็กเกจที่เลือกจะถูกลบอัตโนมัติ)",
+            ]
+          : []),
         "ไม่ลบผู้ใช้ใน Supabase Auth — ลบโปรไฟล์ใน Platform เท่านั้น",
       ],
     };
   }
 
-  return previewSelected(db, selection);
+  return previewSelected(db, selection, catalog, hasCatalog);
 }
 
 async function previewSelected(
   db: PrismaClient,
   selection: DataResetSelection,
+  catalog: ResolvedCatalog,
+  hasCatalog: boolean,
 ): Promise<DataResetPreview> {
   const organizationIds = unique(selection.organizationIds);
   const branchIds = unique(selection.branchIds);
-  if (organizationIds.length === 0 && branchIds.length === 0) {
-    throw new PurgeSafetyError("กรุณาเลือกองค์กรหรือสาขาที่ต้องการลบ");
+  const hasTenant = organizationIds.length > 0 || branchIds.length > 0;
+  if (!hasTenant && !hasCatalog) {
+    throw new PurgeSafetyError(
+      "กรุณาเลือกองค์กร สาขา ผลิตภัณฑ์ แพ็กเกจ หรือการสมัครใช้บริการที่ต้องการลบ",
+    );
   }
 
   const protectedOrg = await db.organization.findFirst({
@@ -135,37 +349,43 @@ async function previewSelected(
     );
   }
 
-  const organizations = await db.organization.findMany({
-    where: { id: { in: organizationIds } },
-    select: { id: true, customerCode: true, displayName: true },
-    orderBy: { customerCode: "asc" },
-  });
+  const organizations = organizationIds.length
+    ? await db.organization.findMany({
+        where: { id: { in: organizationIds } },
+        select: { id: true, customerCode: true, displayName: true },
+        orderBy: { customerCode: "asc" },
+      })
+    : [];
   if (organizations.length !== organizationIds.length) {
     throw new PurgeSafetyError("พบรหัสองค์กรที่ไม่ถูกต้อง");
   }
 
-  const branches = await db.branch.findMany({
-    where: {
-      id: { in: branchIds },
-      ...(protectedOrg
-        ? { organizationId: { not: protectedOrg.id } }
-        : {}),
-    },
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      organizationId: true,
-      organization: { select: { customerCode: true } },
-    },
-    orderBy: { code: "asc" },
-  });
-  // Branches under orgs already selected for full delete are redundant.
+  const branches = branchIds.length
+    ? await db.branch.findMany({
+        where: {
+          id: { in: branchIds },
+          ...(protectedOrg ? { organizationId: { not: protectedOrg.id } } : {}),
+        },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          organizationId: true,
+          organization: { select: { customerCode: true } },
+        },
+        orderBy: { code: "asc" },
+      })
+    : [];
   const orgIdSet = new Set(organizationIds);
   const standaloneBranches = branches.filter(
     (branch) => !orgIdSet.has(branch.organizationId),
   );
-  if (branchIds.length > 0 && branches.length === 0 && organizationIds.length === 0) {
+  if (
+    branchIds.length > 0 &&
+    branches.length === 0 &&
+    organizationIds.length === 0 &&
+    !hasCatalog
+  ) {
     throw new PurgeSafetyError(
       "สาขาที่เลือกอยู่ในองค์กรระบบ หรือไม่พบสาขา — ไม่สามารถลบได้",
     );
@@ -181,40 +401,19 @@ async function previewSelected(
     organizations: organizations.length,
     userProfiles: orphanProfiles.length,
     selectedBranches: standaloneBranches.length,
+    catalogProducts: catalog.products.length,
+    catalogPlans: catalog.plans.length,
+    catalogSubscriptions: catalog.subscriptions.length,
     paymentAllocations:
       organizationIds.length === 0
         ? 0
         : await db.paymentAllocation.count({
             where: { OR: [{ payment: orgFilter }, { invoice: orgFilter }] },
           }),
-    invoiceItems:
-      organizationIds.length === 0
-        ? 0
-        : await db.invoiceItem.count({ where: { invoice: orgFilter } }),
     invoices:
       organizationIds.length === 0
         ? 0
         : await db.invoice.count({ where: orgFilter }),
-    payments:
-      organizationIds.length === 0
-        ? 0
-        : await db.payment.count({ where: orgFilter }),
-    creditTransactions:
-      organizationIds.length === 0
-        ? 0
-        : await db.creditTransaction.count({ where: orgFilter }),
-    billingContacts:
-      organizationIds.length === 0
-        ? 0
-        : await db.billingContact.count({ where: orgFilter }),
-    billingAccounts:
-      organizationIds.length === 0
-        ? 0
-        : await db.billingAccount.count({ where: orgFilter }),
-    userInvitations:
-      organizationIds.length === 0
-        ? 0
-        : await db.userInvitation.count({ where: orgFilter }),
     entitlements:
       organizationIds.length === 0
         ? 0
@@ -223,54 +422,11 @@ async function previewSelected(
       organizationIds.length === 0
         ? 0
         : await db.subscription.count({ where: orgFilter }),
-    subscriptionHistories:
-      organizationIds.length === 0
-        ? 0
-        : await db.subscriptionHistory.count({ where: orgFilter }),
-    organizationProductMemberships:
-      organizationIds.length === 0
-        ? 0
-        : await db.organizationProductMembership.count({ where: orgFilter }),
-    organizationMemberships:
-      organizationIds.length === 0
-        ? 0
-        : await db.organizationMembership.count({ where: orgFilter }),
-    customOrganizationRoles:
-      organizationIds.length === 0
-        ? 0
-        : await db.organizationRole.count({
-            where: { organizationId: { in: organizationIds } },
-          }),
     branches:
       (organizationIds.length === 0
         ? 0
         : await db.branch.count({ where: orgFilter })) +
       standaloneBranches.length,
-    staffOrganizationAssignments:
-      organizationIds.length === 0
-        ? 0
-        : await db.staffOrganizationAssignment.count({ where: orgFilter }),
-    organizationOnboardings:
-      organizationIds.length === 0
-        ? 0
-        : await db.organizationOnboarding.count({ where: orgFilter }),
-    legacyIdentityMappings:
-      organizationIds.length === 0
-        ? 0
-        : await db.legacyIdentityMapping.count({ where: orgFilter }),
-    auditLogs:
-      organizationIds.length === 0
-        ? 0
-        : await db.auditLog.count({ where: orgFilter }),
-    outboxEvents:
-      organizationIds.length === 0
-        ? 0
-        : await db.outboxEvent.count({
-            where: { organizationId: { in: organizationIds } },
-          }),
-    userPasswordResets: 0,
-    platformRoleAssignments: 0,
-    userPreferences: 0,
     hrOrganizationScoped:
       organizationIds.length > 0
         ? "จะล้างข้อมูล HR ขององค์กรที่เลือก (ถ้ามี)"
@@ -289,12 +445,20 @@ async function previewSelected(
       organizationId: branch.organizationId,
       organizationCode: branch.organization.customerCode,
     })),
+    products: catalog.products,
+    plans: catalog.plans,
+    subscriptions: catalog.subscriptions,
     orphanProfiles,
     counts,
     warnings: [
       "องค์กร GOLDENSOFT และสาขาขององค์กรนี้ถูกล็อกไม่ให้ลบ",
       "บัญชีผู้ดูแลระบบสูงสุดจะไม่ถูกลบ",
       "ไม่ลบผู้ใช้ใน Supabase Auth",
+      ...(hasCatalog
+        ? [
+            "ลบผลิตภัณฑ์/แพ็กเกจจะลบการสมัครที่ใช้รายการนั้นด้วย",
+          ]
+        : []),
     ],
   };
 }
@@ -366,6 +530,9 @@ export async function applyDataReset(
 
   const preview = await previewDataReset(db, selection);
 
+  // Catalog first (subscriptions Restrict product/plan).
+  await deleteCatalog(db, preview);
+
   if (selection.selectAll) {
     const keepEmails = preview.keptSuperAdminEmails;
     const { plan } = await purgeData(db, {
@@ -381,16 +548,99 @@ export async function applyDataReset(
     return { preview, purgePlan: plan };
   }
 
-  await deleteSelected(db, preview);
-  await purgeHrForOrganizations(
-    db,
-    preview.organizations.map((org) => org.id),
-  );
+  if (preview.organizations.length > 0 || preview.branches.length > 0) {
+    await deleteSelectedTenant(db, preview);
+    await purgeHrForOrganizations(
+      db,
+      preview.organizations.map((org) => org.id),
+    );
+  }
+
   await writeAudit(db, actor, preview);
   return { preview };
 }
 
-async function deleteSelected(
+async function deleteCatalog(
+  db: PrismaClient,
+  preview: DataResetPreview,
+): Promise<void> {
+  const productIds = preview.products.map((p) => p.id);
+  const planIds = preview.plans.map((p) => p.id);
+  const subscriptionIds = preview.subscriptions.map((s) => s.id);
+  if (
+    productIds.length === 0 &&
+    planIds.length === 0 &&
+    subscriptionIds.length === 0
+  ) {
+    return;
+  }
+
+  await db.$transaction(
+    async (tx) => {
+      if (subscriptionIds.length > 0) {
+        await tx.subscriptionFeatureOverride.deleteMany({
+          where: { subscriptionId: { in: subscriptionIds } },
+        });
+        await tx.entitlement.deleteMany({
+          where: { subscriptionId: { in: subscriptionIds } },
+        });
+        await tx.subscriptionHistory.deleteMany({
+          where: { subscriptionId: { in: subscriptionIds } },
+        });
+        await tx.subscription.deleteMany({
+          where: { id: { in: subscriptionIds } },
+        });
+      }
+
+      if (planIds.length > 0) {
+        await tx.planVersionFeature.deleteMany({
+          where: { planVersion: { planId: { in: planIds } } },
+        });
+        await tx.planVersion.deleteMany({
+          where: { planId: { in: planIds } },
+        });
+        await tx.plan.deleteMany({ where: { id: { in: planIds } } });
+      }
+
+      if (productIds.length > 0) {
+        await tx.organizationProductMembership.deleteMany({
+          where: { productId: { in: productIds } },
+        });
+        await tx.entitlement.deleteMany({
+          where: { productId: { in: productIds } },
+        });
+        await tx.planVersionFeature.deleteMany({
+          where: { feature: { productId: { in: productIds } } },
+        });
+        await tx.subscriptionFeatureOverride.deleteMany({
+          where: { feature: { productId: { in: productIds } } },
+        });
+        await tx.feature.deleteMany({
+          where: { productId: { in: productIds } },
+        });
+        // Remaining plans under product (if any) — versions already cleared when in planIds.
+        const leftoverPlans = await tx.plan.findMany({
+          where: { productId: { in: productIds } },
+          select: { id: true },
+        });
+        const leftoverPlanIds = leftoverPlans.map((p) => p.id);
+        if (leftoverPlanIds.length > 0) {
+          await tx.planVersionFeature.deleteMany({
+            where: { planVersion: { planId: { in: leftoverPlanIds } } },
+          });
+          await tx.planVersion.deleteMany({
+            where: { planId: { in: leftoverPlanIds } },
+          });
+          await tx.plan.deleteMany({ where: { id: { in: leftoverPlanIds } } });
+        }
+        await tx.product.deleteMany({ where: { id: { in: productIds } } });
+      }
+    },
+    { timeout: 120_000 },
+  );
+}
+
+async function deleteSelectedTenant(
   db: PrismaClient,
   preview: DataResetPreview,
 ): Promise<void> {
@@ -500,7 +750,6 @@ export async function purgeHrForOrganizations(
       ) AS "present"`;
     if (!present[0]?.present) return;
 
-    // Cast name → text: Prisma cannot deserialize PostgreSQL `name` oid.
     const tables = await db.$queryRaw<{ table_name: string }[]>`
       SELECT c.table_name::text AS "table_name"
       FROM information_schema.columns c
@@ -508,7 +757,6 @@ export async function purgeHrForOrganizations(
         AND c.column_name = 'organization_id'
       ORDER BY c.table_name::text`;
 
-    // Child-ish tables first by name heuristics, then the rest.
     const priority = [
       "notification",
       "payslip",
@@ -546,7 +794,6 @@ export async function purgeHrForOrganizations(
     ];
 
     for (const table of ordered) {
-      // Only allow simple identifiers from information_schema.
       if (!/^[a-z][a-z0-9_]*$/.test(table)) continue;
       try {
         await db.$executeRawUnsafe(
@@ -558,7 +805,6 @@ export async function purgeHrForOrganizations(
       }
     }
   } catch (error) {
-    // Platform wipe already committed — HR cleanup must not fail the request.
     console.warn("[data-reset] HR purge skipped", error);
   }
 }
@@ -594,12 +840,17 @@ async function writeAudit(
           branches: preview.branches.map(
             (b) => `${b.organizationCode}/${b.code}`,
           ),
+          products: preview.products.map((p) => p.code),
+          plans: preview.plans.map((p) => `${p.productCode}/${p.code}`),
+          subscriptions: preview.subscriptions.map(
+            (s) => `${s.organizationCode}:${s.productCode}/${s.planCode}`,
+          ),
           orphanProfiles: preview.orphanProfiles.map((p) => p.email),
           actorEmail: actor.email,
         },
       },
     });
   } catch {
-    // Audit is best-effort — wipe already succeeded.
+    // Audit is best-effort.
   }
 }

@@ -10,7 +10,10 @@ import {
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { membershipOrganizationOptions } from "@/lib/auth/shell-props";
 import { TH } from "@/lib/i18n/th";
-import { listDataResetTargets } from "@/lib/ops/data-reset";
+import {
+  listDataResetCatalog,
+  listDataResetTargets,
+} from "@/lib/ops/data-reset";
 import { DATA_RESET_CONFIRM_PHRASE } from "@/lib/ops/data-reset-types";
 import { prisma } from "@/lib/prisma";
 
@@ -37,7 +40,10 @@ export default async function DataResetPage() {
     );
   }
 
-  const targets = await listDataResetTargets(prisma);
+  const [targets, catalog] = await Promise.all([
+    listDataResetTargets(prisma),
+    listDataResetCatalog(prisma),
+  ]);
 
   return (
     <PlatformShell {...shellProps}>
@@ -49,11 +55,12 @@ export default async function DataResetPage() {
 
       <section className="card">
         <SectionHeader
-          title="เลือกองค์กร / สาขาที่ต้องการลบ"
-          description="เมื่อเลือกลบ ระบบจะลบข้อมูลที่เกี่ยวข้องใน Platform และ HR (ถ้ามี) ของรายการนั้น — องค์กร GOLDENSOFT ล็อกไว้เสมอ"
+          title="เลือกรายการที่ต้องการลบ"
+          description="เลือกองค์กร/สาขา และ/หรือ ผลิตภัณฑ์ แพ็กเกจ การสมัครใช้บริการ — องค์กร GOLDENSOFT ล็อกไว้เสมอ"
         />
         <DataResetPanel
           targets={targets}
+          catalog={catalog}
           confirmPhrase={DATA_RESET_CONFIRM_PHRASE}
         />
       </section>

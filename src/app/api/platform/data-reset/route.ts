@@ -6,6 +6,7 @@ import { requireAuthUser } from "@/lib/auth/request-auth";
 import { TH } from "@/lib/i18n/th";
 import {
   applyDataReset,
+  listDataResetCatalog,
   listDataResetTargets,
   previewDataReset,
   DATA_RESET_CONFIRM_PHRASE,
@@ -41,9 +42,13 @@ async function requireSuperAdmin(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const auth = await requireSuperAdmin(request);
   if ("error" in auth && auth.error) return auth.error;
-  const targets = await listDataResetTargets(prisma);
+  const [targets, catalog] = await Promise.all([
+    listDataResetTargets(prisma),
+    listDataResetCatalog(prisma),
+  ]);
   return NextResponse.json({
     targets,
+    catalog,
     confirmPhrase: DATA_RESET_CONFIRM_PHRASE,
   });
 }
@@ -53,6 +58,9 @@ const bodySchema = z.object({
   selectAll: z.boolean().default(false),
   organizationIds: z.array(z.string().uuid()).default([]),
   branchIds: z.array(z.string().uuid()).default([]),
+  productIds: z.array(z.string().uuid()).default([]),
+  planIds: z.array(z.string().uuid()).default([]),
+  subscriptionIds: z.array(z.string().uuid()).default([]),
   confirmPhrase: z.string().optional(),
 });
 
@@ -82,6 +90,9 @@ export async function POST(request: NextRequest) {
     selectAll: parsed.data.selectAll,
     organizationIds: parsed.data.organizationIds,
     branchIds: parsed.data.branchIds,
+    productIds: parsed.data.productIds,
+    planIds: parsed.data.planIds,
+    subscriptionIds: parsed.data.subscriptionIds,
   };
 
   try {
