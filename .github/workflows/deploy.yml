@@ -66,23 +66,10 @@ jobs:
 
   deploy:
     needs: build-and-push
-    runs-on: ubuntu-latest
+    # Runs on the VPS itself — avoids flaky GitHub-hosted → :22 paths (e.g. eastus timeouts).
+    runs-on: [self-hosted, linux, goldensoft-vps]
     steps:
-      - name: Stagger SSH (avoid concurrent dial storms across products)
-        run: sleep 4
-
-      - name: Prepare SSH key file
-        run: |
-          mkdir -p "$HOME/.ssh"
-          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > "$HOME/.ssh/gs_deploy"
-          chmod 600 "$HOME/.ssh/gs_deploy"
-          printf 'Host gs-vps\n  HostName %s\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  AddressFamily inet\n  StrictHostKeyChecking accept-new\n  ConnectTimeout 30\n  ServerAliveInterval 15\n  ServerAliveCountMax 3\n' \
-            "${{ secrets.VPS_HOST }}" \
-            "${{ secrets.VPS_USER }}" \
-            "$HOME/.ssh/gs_deploy" > "$HOME/.ssh/config"
-          chmod 600 "$HOME/.ssh/config"
-
-      - name: Deploy via SSH (pull + compose only)
+      - name: Deploy via local docker compose
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
@@ -93,41 +80,21 @@ jobs:
           COMPOSE_DIR: ${{ secrets.VPS_COMPOSE_DIR }}
         run: |
           set -euo pipefail
-          attempt=1
-          while [ "$attempt" -le 6 ]; do
-            echo "SSH deploy attempt ${attempt}/6"
-            if ssh -F "$HOME/.ssh/config" gs-vps bash -s <<EOF
-          set -euo pipefail
-          # Safety: never prune volumes; never touch resident-app / n8n.
-          export GHCR_TOKEN=$(printf %q "$GHCR_TOKEN")
-          export IMAGE_TAG=$(printf %q "$IMAGE_TAG")
-          export GHCR_OWNER=$(printf %q "$GHCR_OWNER")
-          export IMAGE_TAG_ENV=$(printf %q "$IMAGE_TAG_ENV")
-          export COMPOSE_SERVICE=$(printf %q "$COMPOSE_SERVICE")
-          export CONTAINER_NAME=$(printf %q "$CONTAINER_NAME")
-          export COMPOSE_DIR=$(printf %q "$COMPOSE_DIR")
-          cd "\$COMPOSE_DIR"
-          PREV=\$(docker inspect -f '{{ index .Config.Image }}' "\$CONTAINER_NAME" 2>/dev/null || true)
-          export "\${IMAGE_TAG_ENV}=\${IMAGE_TAG}"
+          cd "${COMPOSE_DIR:-/opt/goldensoft}"
+          PREV=$(docker inspect -f '{{ index .Config.Image }}' "$CONTAINER_NAME" 2>/dev/null || true)
+          export "${IMAGE_TAG_ENV}=${IMAGE_TAG}"
           export GHCR_OWNER
           touch .env
-          grep -v "^\${IMAGE_TAG_ENV}=" .env > .env.tmp || true
-          echo "\${IMAGE_TAG_ENV}=\${IMAGE_TAG}" >> .env.tmp
+          grep -v "^${IMAGE_TAG_ENV}=" .env > .env.tmp || true
+          echo "${IMAGE_TAG_ENV}=${IMAGE_TAG}" >> .env.tmp
           mv .env.tmp .env
-          if ! docker compose -f docker-compose.yml pull "\$COMPOSE_SERVICE"; then
-            echo "\$GHCR_TOKEN" | docker login ghcr.io -u "\$GHCR_OWNER" --password-stdin
-            docker compose -f docker-compose.yml pull "\$COMPOSE_SERVICE"
+          # Prefer existing VPS GHCR credentials. Only login when pull fails.
+          if ! docker compose -f docker-compose.yml pull "$COMPOSE_SERVICE"; then
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_OWNER" --password-stdin
+            docker compose -f docker-compose.yml pull "$COMPOSE_SERVICE"
           fi
-          docker compose -f docker-compose.yml up -d --no-deps "\$COMPOSE_SERVICE"
-          echo "PREV_IMAGE=\${PREV}" > "/tmp/gs-prev-\${COMPOSE_SERVICE}.txt"
-          EOF
-            then
-              exit 0
-            fi
-            attempt=$((attempt + 1))
-            sleep 20
-          done
-          exit 1
+          docker compose -f docker-compose.yml up -d --no-deps "$COMPOSE_SERVICE"
+          echo "PREV_IMAGE=${PREV}" > "/tmp/gs-prev-${COMPOSE_SERVICE}.txt"
 
       - name: Health check
         id: health
@@ -151,52 +118,34 @@ jobs:
           COMPOSE_DIR: ${{ secrets.VPS_COMPOSE_DIR }}
         run: |
           set -euo pipefail
-          attempt=1
-          while [ "$attempt" -le 3 ]; do
-            echo "SSH rollback attempt ${attempt}/3"
-            if ssh -F "$HOME/.ssh/config" gs-vps bash -s <<EOF
-          set -euo pipefail
-          export GHCR_TOKEN=$(printf %q "$GHCR_TOKEN")
-          export GHCR_OWNER=$(printf %q "$GHCR_OWNER")
-          export IMAGE_TAG_ENV=$(printf %q "$IMAGE_TAG_ENV")
-          export COMPOSE_SERVICE=$(printf %q "$COMPOSE_SERVICE")
-          export COMPOSE_DIR=$(printf %q "$COMPOSE_DIR")
-          cd "\$COMPOSE_DIR"
-          PREV_FILE="/tmp/gs-prev-\${COMPOSE_SERVICE}.txt"
-          if [ ! -f "\$PREV_FILE" ]; then
+          cd "${COMPOSE_DIR:-/opt/goldensoft}"
+          PREV_FILE="/tmp/gs-prev-${COMPOSE_SERVICE}.txt"
+          if [ ! -f "$PREV_FILE" ]; then
             echo "No previous image recorded; cannot rollback"
             exit 1
           fi
           # shellcheck disable=SC1090
-          . "\$PREV_FILE"
-          if [ -z "\${PREV_IMAGE:-}" ]; then
+          . "$PREV_FILE"
+          if [ -z "${PREV_IMAGE:-}" ]; then
             echo "Previous image empty; cannot rollback"
             exit 1
           fi
-          echo "\$GHCR_TOKEN" | docker login ghcr.io -u "\$GHCR_OWNER" --password-stdin
-          docker pull "\$PREV_IMAGE"
-          PREV_TAG="\${PREV_IMAGE##*:}"
-          case "\$PREV_TAG" in
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_OWNER" --password-stdin
+          docker pull "$PREV_IMAGE"
+          PREV_TAG="${PREV_IMAGE##*:}"
+          case "$PREV_TAG" in
             latest|rollback|"")
-              echo "Refusing rollback to non-immutable tag: \${PREV_TAG}"
+              echo "Refusing rollback to non-immutable tag: ${PREV_TAG}"
               exit 1
               ;;
           esac
-          export "\${IMAGE_TAG_ENV}=\${PREV_TAG}"
+          export "${IMAGE_TAG_ENV}=${PREV_TAG}"
           export GHCR_OWNER
           touch .env
-          grep -v "^\${IMAGE_TAG_ENV}=" .env > .env.tmp || true
-          echo "\${IMAGE_TAG_ENV}=\${PREV_TAG}" >> .env.tmp
+          grep -v "^${IMAGE_TAG_ENV}=" .env > .env.tmp || true
+          echo "${IMAGE_TAG_ENV}=${PREV_TAG}" >> .env.tmp
           mv .env.tmp .env
-          docker compose -f docker-compose.yml up -d --no-deps "\$COMPOSE_SERVICE"
-          EOF
-            then
-              exit 0
-            fi
-            attempt=$((attempt + 1))
-            sleep 15
-          done
-          exit 1
+          docker compose -f docker-compose.yml up -d --no-deps "$COMPOSE_SERVICE"
 
       - name: Fail job if unhealthy
         if: steps.health.outcome == 'failure'
