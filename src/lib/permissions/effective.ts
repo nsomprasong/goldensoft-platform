@@ -390,19 +390,9 @@ export function hasEffectivePermission(
   return codes.includes(permission);
 }
 
-/** Exported for unit tests — pure union/dedup helpers. */
-export function unionPermissionCodes(groups: string[][]): string[] {
-  const set = new Set<string>();
-  for (const group of groups) {
-    for (const code of group) set.add(code);
-  }
-  return [...set].sort();
-}
-
-export function filterInactivePermissions(
-  rows: Array<{ code: string; isActive: boolean }>,
-): string[] {
-  return rows.filter((r) => r.isActive).map((r) => r.code);
-}
+export {
+  filterInactivePermissions,
+  unionPermissionCodes,
+} from "@/lib/permissions/effective-helpers";
 
 export { PLATFORM_PERMISSIONS };

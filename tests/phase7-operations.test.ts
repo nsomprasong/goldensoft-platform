@@ -224,7 +224,11 @@ describe("Phase 7 organization selector and onboarding", () => {
     );
     assert.match(
       read("src/components/context-switcher.tsx"),
-      /โหมดผู้ดูแลแพลตฟอร์ม/,
+      /TH\.nav\.platformHomeBadge/,
+    );
+    assert.match(
+      read("src/lib/i18n/th.ts"),
+      /platformHomeBadge:\s*["'][^"']+["']/,
     );
   });
 });

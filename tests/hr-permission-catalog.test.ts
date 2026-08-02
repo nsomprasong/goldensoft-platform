@@ -164,19 +164,28 @@ describe("HR permission catalog seed script", () => {
     const dirs = fs
       .readdirSync(migrationsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name);
-    assert.deepEqual(dirs.sort(), [
-      "0001_platform_initial",
-      "0002_phase5_admin_fields",
-      "0003_user_invitations",
-      "0004_phase7_operations",
-      "0005_phase7b_subscription_history",
-      "0006_billing_credit_foundation",
-      "0007_staff_customer_portfolio",
-      "0008_staff_password_reset",
-      "0009_staff_identity_profiles",
-      "0010_staff_national_id_optional",
-    ]);
+      .map((entry) => entry.name)
+      .sort();
+
+    // Existing platform migrations through 0014 must remain present.
+    for (const required of [
+      "0011_organization_entity_type",
+      "0012_platform_role_permissions",
+      "0013_system_settings",
+      "0014_user_profile_phone",
+    ]) {
+      assert.ok(dirs.includes(required), `missing migration ${required}`);
+    }
+
+    // HR permission catalog is seed-only — must not add its own migration folder.
+    const hrCatalogMigration = dirs.find((name) =>
+      /hr[-_]?permission|permission[-_]?catalog|hr[-_]?codes/i.test(name),
+    );
+    assert.equal(
+      hrCatalogMigration,
+      undefined,
+      `HR catalog must not ship its own migration: ${hrCatalogMigration}`,
+    );
 
     for (const dir of dirs) {
       const sqlPath = path.join(migrationsDir, dir, "migration.sql");

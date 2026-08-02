@@ -11,7 +11,7 @@ import {
 import {
   filterInactivePermissions,
   unionPermissionCodes,
-} from "../src/lib/permissions/effective";
+} from "../src/lib/permissions/effective-helpers";
 import { detectEntitlementConsistency } from "../src/lib/platform/entitlements";
 import { resolveSeedMode } from "../src/lib/seed/seed-mode";
 import { DEMO_ORG_CODES, DEMO_MARKER } from "../src/lib/seed/demo-dataset";
