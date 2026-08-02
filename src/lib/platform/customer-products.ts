@@ -36,8 +36,11 @@ function isLoopbackHostname(hostname: string): boolean {
 
 /**
  * When login is opened via LAN IP (phone → http://192.168.x.x:3000), rewrite
- * Customer App origin host to match so redirect is not stuck on localhost.
- * Keeps the Customer App port from the configured origin (usually 3002).
+ * a loopback Customer App origin onto that host so redirect is not stuck on
+ * localhost. Keeps the Customer App port from the configured origin (usually 3002).
+ *
+ * Never rewrite a real public host (app.x) onto platform.x — that sends org
+ * users to platform `/auth/callback`, which does not exist (404 → RSC 502).
  */
 export function alignCustomerAppOriginToRequestHost(
   customerOrigin: string,
@@ -49,13 +52,15 @@ export function alignCustomerAppOriginToRequestHost(
   try {
     const url = new URL(customerOrigin);
     if (url.hostname.toLowerCase() === requestHostname) return customerOrigin;
-    // Phone/LAN: always prefer the host the browser used.
-    if (!isLoopbackHostname(requestHostname)) {
-      url.hostname = requestHostname;
-      return url.origin;
+    // Only rewrite loopback configs onto the phone/LAN request host.
+    if (!isLoopbackHostname(url.hostname)) {
+      return customerOrigin;
     }
-    // Browser is on loopback — keep configured origin (may already be LAN for env).
-    return customerOrigin;
+    if (isLoopbackHostname(requestHostname)) {
+      return customerOrigin;
+    }
+    url.hostname = requestHostname;
+    return url.origin;
   } catch {
     return customerOrigin;
   }

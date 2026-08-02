@@ -86,4 +86,23 @@ describe("Platform staff vs customer routing", () => {
       "http://192.168.1.177:3002",
     );
   });
+
+  it("does not rewrite public Customer App origin onto Platform host", () => {
+    assert.equal(
+      alignCustomerAppOriginToRequestHost(
+        "https://app.goldensoft.cloud",
+        "platform.goldensoft.cloud",
+      ),
+      "https://app.goldensoft.cloud",
+    );
+    assert.equal(
+      getPreferredCustomerAppOrigin(
+        {
+          CUSTOMER_APP_URL: "https://app.goldensoft.cloud",
+        },
+        "platform.goldensoft.cloud",
+      ),
+      "https://app.goldensoft.cloud",
+    );
+  });
 });
