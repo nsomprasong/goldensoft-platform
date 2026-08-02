@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { withAuthCookieDomain } from "@/lib/auth/cookie-domain";
+import { expireHostOnlyCookie } from "@/lib/auth/expire-host-cookies";
 
 const REFRESH_WINDOW_MS = 120_000;
 
@@ -56,6 +57,7 @@ export async function updateSession(request: NextRequest) {
         });
         supabaseResponse = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) => {
+          expireHostOnlyCookie(supabaseResponse, name);
           supabaseResponse.cookies.set(
             name,
             value,
