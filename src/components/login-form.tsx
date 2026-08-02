@@ -1,7 +1,7 @@
 "use client";
 
 import { LogIn } from "lucide-react";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 
 import {
   signInWithPassword,
@@ -35,6 +35,14 @@ export function LoginForm({
 
   const pending = emailPending || phonePending;
   const activeError = mode === "email" ? emailState.error : phoneState.error;
+  const redirectTo =
+    mode === "email" ? emailState.redirectTo : phoneState.redirectTo;
+
+  // Hard navigate to Customer App — Server Action redirect() is same-origin only.
+  useEffect(() => {
+    if (!redirectTo) return;
+    window.location.assign(redirectTo);
+  }, [redirectTo]);
 
   return (
     <div className="mt-6">

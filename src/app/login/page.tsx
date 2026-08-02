@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 
 import { BrandLockup } from "@/components/platform-shell";
 import { LoginForm } from "@/components/login-form";
-import { isGoldenSoftPlatformStaff } from "@/lib/auth/customer-app-redirect";
+import {
+  isGoldenSoftPlatformStaff,
+  resolveCustomerAppEntryUrl,
+} from "@/lib/auth/customer-app-redirect";
 import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
 import {
   resolvePostLoginRedirect,
@@ -57,7 +60,16 @@ export default async function LoginPage({
         }),
       );
     }
-    redirect(nextPath);
+    // Already signed-in customer: full document redirect is fine from RSC.
+    // Prefer building Customer App entry when next is missing/relative.
+    if (nextPath.startsWith("http://") || nextPath.startsWith("https://")) {
+      redirect(nextPath);
+    }
+    const customerUrl = await resolveCustomerAppEntryUrl(prisma, {
+      memberships: bundle.memberships,
+      preferredNext: nextPath,
+    });
+    redirect(customerUrl ?? "/access?reason=customer_app");
   }
 
   let phoneLoginEnabled = false;

@@ -34,7 +34,26 @@ import {
 export type LoginActionState = {
   error: string | null;
   message?: string | null;
+  /**
+   * Cross-origin Customer App handoff. Do not use `redirect()` for these —
+   * the Server Action client follows Location as an RSC fetch and crashes with
+   * "An unexpected response was received from the server" (often shown as 502).
+   */
+  redirectTo?: string | null;
 };
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  return value.startsWith("http://") || value.startsWith("https://");
+}
+
+/** Same-origin → Next redirect; Customer App → client hard navigation. */
+function finishLogin(destination: string): LoginActionState {
+  revalidatePath("/", "layout");
+  if (isAbsoluteHttpUrl(destination)) {
+    return { error: null, redirectTo: destination };
+  }
+  redirect(destination);
+}
 
 /**
  * Platform staff → Platform Admin. Org customers → Customer App (by package).
@@ -104,8 +123,7 @@ export async function signInWithPassword(
     return { error: TH.common.connectionError };
   }
 
-  revalidatePath("/", "layout");
-  redirect(destination);
+  return finishLogin(destination);
 }
 
 export async function signInWithPhonePassword(
@@ -172,8 +190,7 @@ export async function signInWithPhonePassword(
     return { error: TH.common.connectionError };
   }
 
-  revalidatePath("/", "layout");
-  redirect(destination);
+  return finishLogin(destination);
 }
 
 export async function signOutAction(): Promise<void> {
