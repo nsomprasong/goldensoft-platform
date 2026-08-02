@@ -1,0 +1,161 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      triggered_by:
+        description: "Caller id"
+        required: false
+        default: "manual"
+
+env:
+  IMAGE_NAME: goldensoft-platform
+  COMPOSE_SERVICE: goldensoft-platform
+  CONTAINER_NAME: goldensoft-platform
+  IMAGE_TAG_ENV: PLATFORM_IMAGE_TAG
+  HEALTH_URL: https://platform.goldensoft.cloud/api/health
+  REGISTRY: ghcr.io
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  build-and-push:
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Immutable image tag from commit SHA
+        id: meta
+        run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push (GitHub runners only — never on VPS)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          build-args: |
+            IMAGE_TAG=${{ steps.meta.outputs.tag }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH (pull + compose only)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          envs: GHCR_TOKEN,IMAGE_TAG,GHCR_OWNER,IMAGE_TAG_ENV,COMPOSE_SERVICE,CONTAINER_NAME,IMAGE_NAME
+          script: |
+            set -euo pipefail
+            # Safety: never prune volumes; never touch resident-app / n8n.
+            cd "${{ secrets.VPS_COMPOSE_DIR }}"
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_OWNER" --password-stdin
+            PREV=$(docker inspect -f '{{ index .Config.Image }}' "$CONTAINER_NAME" 2>/dev/null || true)
+            export "${IMAGE_TAG_ENV}=${IMAGE_TAG}"
+            export GHCR_OWNER
+            # Persist tag for this service only (keep other service tags in .env)
+            touch .env
+            grep -v "^${IMAGE_TAG_ENV}=" .env > .env.tmp || true
+            echo "${IMAGE_TAG_ENV}=${IMAGE_TAG}" >> .env.tmp
+            mv .env.tmp .env
+            docker compose -f docker-compose.goldensoft.yml pull "$COMPOSE_SERVICE"
+            docker compose -f docker-compose.goldensoft.yml up -d --no-deps "$COMPOSE_SERVICE"
+            echo "PREV_IMAGE=${PREV}" > "/tmp/gs-prev-${COMPOSE_SERVICE}.txt"
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+          GHCR_OWNER: ${{ github.repository_owner }}
+          IMAGE_TAG_ENV: ${{ env.IMAGE_TAG_ENV }}
+          COMPOSE_SERVICE: ${{ env.COMPOSE_SERVICE }}
+          CONTAINER_NAME: ${{ env.CONTAINER_NAME }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+
+      - name: Health check
+        id: health
+        continue-on-error: true
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS "${{ env.HEALTH_URL }}" | grep -q '"ok":true'; then
+              exit 0
+            fi
+            sleep 6
+          done
+          exit 1
+
+      - name: Rollback previous immutable image tag
+        if: steps.health.outcome == 'failure'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          envs: GHCR_TOKEN,GHCR_OWNER,IMAGE_TAG_ENV,COMPOSE_SERVICE,IMAGE_NAME
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.VPS_COMPOSE_DIR }}"
+            PREV_FILE="/tmp/gs-prev-${COMPOSE_SERVICE}.txt"
+            if [ ! -f "$PREV_FILE" ]; then
+              echo "No previous image recorded; cannot rollback"
+              exit 1
+            fi
+            # shellcheck disable=SC1090
+            . "$PREV_FILE"
+            if [ -z "${PREV_IMAGE:-}" ]; then
+              echo "Previous image empty; cannot rollback"
+              exit 1
+            fi
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_OWNER" --password-stdin
+            docker pull "$PREV_IMAGE"
+            PREV_TAG="${PREV_IMAGE##*:}"
+            case "$PREV_TAG" in
+              latest|rollback|"")
+                echo "Refusing rollback to non-immutable tag: ${PREV_TAG}"
+                exit 1
+                ;;
+            esac
+            export "${IMAGE_TAG_ENV}=${PREV_TAG}"
+            export GHCR_OWNER
+            touch .env
+            grep -v "^${IMAGE_TAG_ENV}=" .env > .env.tmp || true
+            echo "${IMAGE_TAG_ENV}=${PREV_TAG}" >> .env.tmp
+            mv .env.tmp .env
+            docker compose -f docker-compose.goldensoft.yml up -d --no-deps "$COMPOSE_SERVICE"
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_OWNER: ${{ github.repository_owner }}
+          IMAGE_TAG_ENV: ${{ env.IMAGE_TAG_ENV }}
+          COMPOSE_SERVICE: ${{ env.COMPOSE_SERVICE }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+
+      - name: Fail job if unhealthy
+        if: steps.health.outcome == 'failure'
+        run: exit 1

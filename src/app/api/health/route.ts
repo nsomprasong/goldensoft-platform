@@ -1,19 +1,11 @@
-import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
 
-import { assertSafeEnvironment } from "@/lib/env/guard";
-
+/** Liveness probe — no secrets, no DB details. */
 export async function GET() {
-  const guard = assertSafeEnvironment();
-  if (!guard.ok) {
-    return NextResponse.json(
-      { status: "error", code: guard.code, message: guard.reason },
-      { status: 503 },
-    );
-  }
-
-  return NextResponse.json({
-    status: "ok",
-    appCode: process.env.APP_CODE ?? null,
-    projectRef: guard.projectRef,
+  return Response.json({
+    ok: true,
+    service: "goldensoft-platform",
+    version: process.env.IMAGE_TAG || "unknown",
+    time: new Date().toISOString(),
   });
 }
