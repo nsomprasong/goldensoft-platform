@@ -1,0 +1,64 @@
+name: Prep platform env
+
+# Upload .env.platform + set PLATFORM_IMAGE_TAG + compose config only.
+# Never: docker compose up/pull, migrate, nginx, touch resident/n8n.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "PLATFORM_IMAGE_TAG value"
+        required: true
+        default: "01258beea1ed"
+
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload env and validate compose (no start)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          envs: PLATFORM_ENV_B64,IMAGE_TAG,COMPOSE_DIR
+          script: |
+            set -euo pipefail
+            COMPOSE_DIR="${COMPOSE_DIR:-/opt/goldensoft}"
+            mkdir -p "$COMPOSE_DIR"
+            # Write .env.platform from base64 secret (no echo of contents)
+            printf '%s' "$PLATFORM_ENV_B64" | base64 -d > "$COMPOSE_DIR/.env.platform"
+            chmod 600 "$COMPOSE_DIR/.env.platform"
+            # Ensure ownership is usable by deploy user
+            chown "$(id -u):$(id -g)" "$COMPOSE_DIR/.env.platform" 2>/dev/null || true
+            # Update PLATFORM_IMAGE_TAG only in compose .env
+            touch "$COMPOSE_DIR/.env"
+            grep -v '^PLATFORM_IMAGE_TAG=' "$COMPOSE_DIR/.env" > "$COMPOSE_DIR/.env.tmp" || true
+            echo "PLATFORM_IMAGE_TAG=${IMAGE_TAG}" >> "$COMPOSE_DIR/.env.tmp"
+            mv "$COMPOSE_DIR/.env.tmp" "$COMPOSE_DIR/.env"
+            chmod 600 "$COMPOSE_DIR/.env"
+            # Ensure GHCR_OWNER present for compose interpolation
+            if ! grep -q '^GHCR_OWNER=' "$COMPOSE_DIR/.env"; then
+              echo "GHCR_OWNER=nsomprasong" >> "$COMPOSE_DIR/.env"
+            fi
+            # Placeholder tags for other services so `compose config` can parse (no up)
+            for k in APP_IMAGE_TAG HR_IMAGE_TAG DEPLOYER_IMAGE_TAG; do
+              if ! grep -q "^${k}=" "$COMPOSE_DIR/.env"; then
+                echo "${k}=pending" >> "$COMPOSE_DIR/.env"
+              fi
+            done
+            cd "$COMPOSE_DIR"
+            test -f docker-compose.yml
+            docker compose -f docker-compose.yml config >/tmp/gs-compose-config.out
+            # Report non-secret checks only
+            echo "ENV_PLATFORM_MODE=$(stat -c '%a' .env.platform)"
+            echo "PLATFORM_IMAGE_TAG=$(grep '^PLATFORM_IMAGE_TAG=' .env | cut -d= -f2-)"
+            echo "COMPOSE_CONFIG_OK=yes"
+            # Confirm platform service image line resolves (tag only)
+            grep -E 'image:.*goldensoft-platform' /tmp/gs-compose-config.out | head -n 1
+            # Safety: containers not started by this job
+            echo "NO_COMPOSE_UP=yes"
+        env:
+          PLATFORM_ENV_B64: ${{ secrets.PLATFORM_ENV_B64 }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          COMPOSE_DIR: ${{ secrets.VPS_COMPOSE_DIR }}
