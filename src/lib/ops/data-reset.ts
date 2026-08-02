@@ -492,66 +492,74 @@ export async function purgeHrForOrganizations(
   organizationIds: string[],
 ): Promise<void> {
   if (organizationIds.length === 0) return;
-  const present = await db.$queryRaw<{ present: boolean }[]>`
-    SELECT EXISTS (
-      SELECT 1 FROM information_schema.schemata WHERE schema_name = 'hr'
-    ) AS "present"`;
-  if (!present[0]?.present) return;
+  try {
+    const present = await db.$queryRaw<{ present: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.schemata
+        WHERE schema_name = 'hr'
+      ) AS "present"`;
+    if (!present[0]?.present) return;
 
-  const tables = await db.$queryRaw<{ table_name: string }[]>`
-    SELECT table_name
-    FROM information_schema.columns
-    WHERE table_schema = 'hr'
-      AND column_name = 'organization_id'
-    ORDER BY table_name`;
+    // Cast name → text: Prisma cannot deserialize PostgreSQL `name` oid.
+    const tables = await db.$queryRaw<{ table_name: string }[]>`
+      SELECT c.table_name::text AS "table_name"
+      FROM information_schema.columns c
+      WHERE c.table_schema = 'hr'
+        AND c.column_name = 'organization_id'
+      ORDER BY c.table_name::text`;
 
-  // Child-ish tables first by name heuristics, then the rest.
-  const priority = [
-    "notification",
-    "payslip",
-    "payroll_run_item",
-    "payroll_run",
-    "leave_balance_transaction",
-    "employee_leave_balance",
-    "leave_request",
-    "overtime_request",
-    "shift_mismatch_request",
-    "attendance_adjustment",
-    "attendance_event",
-    "attendance_day",
-    "shift_assignment",
-    "employee_branch_assignment",
-    "employee_recurring_pay_item",
-    "schedule_period",
-    "holiday",
-    "employee",
-    "leave_policy",
-    "leave_type",
-    "work_calendar",
-    "payroll_schedule",
-    "overtime_rule",
-    "shift",
-    "work_location",
-    "position",
-    "department",
-  ];
-  const ordered = [
-    ...priority.filter((name) => tables.some((t) => t.table_name === name)),
-    ...tables
-      .map((t) => t.table_name)
-      .filter((name) => !priority.includes(name)),
-  ];
+    // Child-ish tables first by name heuristics, then the rest.
+    const priority = [
+      "notification",
+      "payslip",
+      "payroll_run_item",
+      "payroll_run",
+      "leave_balance_transaction",
+      "employee_leave_balance",
+      "leave_request",
+      "overtime_request",
+      "shift_mismatch_request",
+      "attendance_adjustment",
+      "attendance_event",
+      "attendance_day",
+      "shift_assignment",
+      "employee_branch_assignment",
+      "employee_recurring_pay_item",
+      "schedule_period",
+      "holiday",
+      "employee",
+      "leave_policy",
+      "leave_type",
+      "work_calendar",
+      "payroll_schedule",
+      "overtime_rule",
+      "shift",
+      "work_location",
+      "position",
+      "department",
+    ];
+    const ordered = [
+      ...priority.filter((name) => tables.some((t) => t.table_name === name)),
+      ...tables
+        .map((t) => t.table_name)
+        .filter((name) => !priority.includes(name)),
+    ];
 
-  for (const table of ordered) {
-    // table names come from information_schema — not user input.
-    try {
-      await db.$executeRawUnsafe(
-        `DELETE FROM hr.${table} WHERE organization_id = ANY($1::uuid[])`,
-        organizationIds,
-      );
-    } catch (error) {
-      console.warn(`[data-reset] skip hr.${table}`, error);
+    for (const table of ordered) {
+      // Only allow simple identifiers from information_schema.
+      if (!/^[a-z][a-z0-9_]*$/.test(table)) continue;
+      try {
+        await db.$executeRawUnsafe(
+          `DELETE FROM hr.${table} WHERE organization_id = ANY($1::uuid[])`,
+          organizationIds,
+        );
+      } catch (error) {
+        console.warn(`[data-reset] skip hr.${table}`, error);
+      }
     }
+  } catch (error) {
+    // Platform wipe already committed — HR cleanup must not fail the request.
+    console.warn("[data-reset] HR purge skipped", error);
   }
 }
 
