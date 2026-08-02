@@ -150,7 +150,7 @@ jobs:
 
       - name: Prune old GoldenSoft images
         if: steps.health.outcome == 'success'
-        run: bash /opt/goldensoft/scripts/prune-old-images.sh --dry-run
+        run: bash /opt/goldensoft/scripts/prune-old-images.sh
 
       - name: Fail job if unhealthy
         if: steps.health.outcome == 'failure'
