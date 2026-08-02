@@ -86,8 +86,8 @@ jobs:
             grep -v "^${IMAGE_TAG_ENV}=" .env > .env.tmp || true
             echo "${IMAGE_TAG_ENV}=${IMAGE_TAG}" >> .env.tmp
             mv .env.tmp .env
-            docker compose -f docker-compose.goldensoft.yml pull "$COMPOSE_SERVICE"
-            docker compose -f docker-compose.goldensoft.yml up -d --no-deps "$COMPOSE_SERVICE"
+            docker compose -f docker-compose.yml pull "$COMPOSE_SERVICE"
+            docker compose -f docker-compose.yml up -d --no-deps "$COMPOSE_SERVICE"
             echo "PREV_IMAGE=${PREV}" > "/tmp/gs-prev-${COMPOSE_SERVICE}.txt"
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
@@ -148,7 +148,7 @@ jobs:
             grep -v "^${IMAGE_TAG_ENV}=" .env > .env.tmp || true
             echo "${IMAGE_TAG_ENV}=${PREV_TAG}" >> .env.tmp
             mv .env.tmp .env
-            docker compose -f docker-compose.goldensoft.yml up -d --no-deps "$COMPOSE_SERVICE"
+            docker compose -f docker-compose.yml up -d --no-deps "$COMPOSE_SERVICE"
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_OWNER: ${{ github.repository_owner }}

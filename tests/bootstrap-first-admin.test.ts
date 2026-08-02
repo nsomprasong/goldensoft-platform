@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { randomUUID } from "node:crypto";
+
+import { assertResidentLegacyUntouched } from "./helpers/legacy-untouched";
 
 import {
   AUTH_LOOKUP_MESSAGES,
@@ -815,15 +816,7 @@ describe("Phase 4B first super admin bootstrap", () => {
   });
 
   it("does not modify Resident Legacy", () => {
-    const legacyRoot = path.resolve(
-      __dirname,
-      "../../resident-legacy-reference",
-    );
-    const status = execSync("git status --porcelain", {
-      cwd: legacyRoot,
-      encoding: "utf8",
-    }).trim();
-    assert.equal(status, "");
+    assertResidentLegacyUntouched(__dirname);
   });
 
   it("requires branch code when organization has multiple branches", async () => {

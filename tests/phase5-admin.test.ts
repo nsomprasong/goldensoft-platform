@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { randomUUID } from "node:crypto";
+
+import { assertResidentLegacyUntouched } from "./helpers/legacy-untouched";
 
 import {
   canAssignOrganizationRole,
@@ -360,15 +361,7 @@ describe("Phase 5 migration preview safety", () => {
   });
 
   it("does not modify Resident Legacy", () => {
-    const legacyRoot = path.resolve(
-      __dirname,
-      "../../resident-legacy-reference",
-    );
-    const status = execSync("git status --porcelain", {
-      cwd: legacyRoot,
-      encoding: "utf8",
-    }).trim();
-    assert.equal(status, "");
+    assertResidentLegacyUntouched(__dirname);
   });
 });
 

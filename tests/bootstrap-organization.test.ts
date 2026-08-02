@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
+
+import { assertResidentLegacyUntouched } from "./helpers/legacy-untouched";
 
 import { assertSafeEnvironment } from "../src/lib/env/guard";
 import {
@@ -539,11 +540,6 @@ describe("GoldenSoft organization bootstrap", () => {
   });
 
   it("does not modify Resident Legacy", () => {
-    const legacyRoot = path.resolve(__dirname, "../../resident-legacy-reference");
-    const status = execSync("git status --porcelain", {
-      cwd: legacyRoot,
-      encoding: "utf8",
-    }).trim();
-    assert.equal(status, "");
+    assertResidentLegacyUntouched(__dirname);
   });
 });
