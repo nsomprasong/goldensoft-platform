@@ -6,6 +6,26 @@ import { COOKIE_NAME } from "@/lib/context/cookie";
 
 export const dynamic = "force-dynamic";
 
+/** Browser-facing origin (container listens on 0.0.0.0 — never use that). */
+function publicOrigin(request: NextRequest): string {
+  const forwardedHost =
+    request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    request.headers.get("host")?.split(",")[0]?.trim();
+  const forwardedProto =
+    request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
+    "https";
+  if (
+    forwardedHost &&
+    !forwardedHost.startsWith("0.0.0.0") &&
+    !forwardedHost.startsWith("127.0.0.1")
+  ) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  if (configured) return configured;
+  return request.nextUrl.origin;
+}
+
 /**
  * Clear host-only + Domain=.goldensoft.cloud Auth cookies, then return to login.
  * Used when Customer App cannot read the Platform session (sso_retry).
@@ -19,7 +39,7 @@ export async function GET(request: NextRequest) {
   const next = resolvePostLoginRedirect(
     request.nextUrl.searchParams.get("next"),
   );
-  const login = new URL("/login", request.nextUrl.origin);
+  const login = new URL("/login", publicOrigin(request));
   if (next && next !== "/") {
     login.searchParams.set("next", next);
   }
