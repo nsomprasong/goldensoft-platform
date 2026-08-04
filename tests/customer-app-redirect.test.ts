@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -37,6 +38,16 @@ describe("Customer App login redirect allowlist", () => {
 });
 
 describe("Platform staff vs customer routing", () => {
+  it("exposes customerCode so Customer App can route GoldenSoft automatically", () => {
+    const source = readFileSync(
+      "src/app/api/customer/bootstrap/route.ts",
+      "utf8",
+    );
+    assert.match(source, /select:\s*\{ id: true, displayName: true, customerCode: true \}/);
+    assert.match(source, /customerCode: row\.customerCode/);
+    assert.match(source, /customerCode: m\.customerCode \?\? null/);
+  });
+
   it("treats any platform role as GoldenSoft staff", () => {
     assert.equal(isGoldenSoftPlatformStaff(["SALES"]), true);
     assert.equal(isGoldenSoftPlatformStaff(["SUPER_ADMIN"]), true);

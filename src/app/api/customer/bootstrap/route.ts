@@ -57,6 +57,7 @@ const responseSchema = z.object({
     z.object({
       id: z.string(),
       name: z.string(),
+      customerCode: z.string().nullable().optional(),
     }),
   ),
   memberships: z.array(
@@ -64,6 +65,7 @@ const responseSchema = z.object({
       organizationId: z.string(),
       organizationName: z.string(),
       organizationStatus: z.string(),
+      customerCode: z.string().nullable().optional(),
       roles: z.array(z.string()),
       branches: z.array(
         z.object({
@@ -274,7 +276,7 @@ export async function GET(request: NextRequest) {
           deletedAt: null,
           status: { code: MASTER.organizationStatus.ACTIVE },
         },
-        select: { id: true, displayName: true },
+        select: { id: true, displayName: true, customerCode: true },
         orderBy: { displayName: "asc" },
         take: 200,
       })
@@ -419,11 +421,13 @@ export async function GET(request: NextRequest) {
     platformAdminOrganizations: platformAdminOrganizations.map((row) => ({
       id: row.id,
       name: row.displayName,
+      customerCode: row.customerCode,
     })),
     memberships: bundle.memberships.map((m) => ({
       organizationId: m.organizationId,
       organizationName: m.organizationName,
       organizationStatus: m.organizationStatus,
+      customerCode: m.customerCode ?? null,
       roles: m.roles,
       branches: m.branches,
     })),

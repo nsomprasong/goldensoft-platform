@@ -123,7 +123,7 @@ export default async function OrganizationDetailPage({ params }: Props) {
   );
   const customerOrigin = getPreferredCustomerAppOrigin();
   const customerAppHref = customerOrigin
-    ? `${customerOrigin}/auth/callback?next=${encodeURIComponent("/")}`
+    ? `${customerOrigin}/auth/callback?next=${encodeURIComponent("/hr")}&entry=customer`
     : null;
 
   const menuTiles: Array<{
