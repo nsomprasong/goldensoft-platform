@@ -19,10 +19,12 @@ import { ToastHost } from "@/components/ui/toast";
 import { isNavigationItemActive } from "@/lib/navigation/active";
 import { TH, labelRole } from "@/lib/i18n/th";
 import { signalNavigationDone } from "@/lib/navigation-pending";
+import { cn } from "@/lib/utils";
 import {
   loadManagedOrganizations,
   loadPlatformAdminOrganizations,
 } from "@/lib/platform/admin-organizations-client";
+import styles from "./app-shell.module.css";
 
 export type ShellNavItem = {
   href: string;
@@ -357,14 +359,22 @@ export function AppShell(props: {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="app-top-header sticky top-0 z-30 border-b border-[var(--page-header-border)]">
-            <div className="shell-header-inner mx-auto max-w-[var(--container-max)]">
-              <div className="shell-header-bar flex min-h-[var(--header-height)] items-center gap-2 py-2 sm:gap-3">
+            <div className="shell-header-inner mx-auto grid max-w-[var(--container-max)] grid-cols-[2.5rem_minmax(0,1fr)_auto] gap-x-1.5 gap-y-2 py-2 [grid-template-areas:'brand_brand_user'_'menu_context_context'] md:block md:py-0">
+              <div className="shell-header-bar contents md:flex md:min-h-[var(--header-height)] md:items-center md:gap-3 md:py-2">
+                <Link
+                  href="/"
+                  className="brand-mark min-w-0 [grid-area:brand] md:hidden"
+                >
+                  <span className="brand-mark-badge">GS</span>
+                  <span className="truncate text-sm">{TH.brand}</span>
+                </Link>
+
                 <SheetTrigger asChild>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="navigation-trigger shell-menu-trigger size-10 !min-h-11 shrink-0 rounded-[0.85rem] !px-2.5"
+                    className="navigation-trigger shell-menu-trigger size-10 !min-h-11 shrink-0 rounded-[0.85rem] !px-2.5 [grid-area:menu]"
                     aria-expanded={mobileOpen}
                     aria-controls={drawerId}
                     aria-label="เปิดเมนู"
@@ -389,7 +399,7 @@ export function AppShell(props: {
                   />
                 </div>
 
-                <div className="shell-user-chip ml-auto flex min-w-0 flex-1 items-center justify-between gap-2 rounded-[0.9rem] border border-[var(--page-header-border)] bg-white/80 p-1 pl-2 shadow-[var(--shadow-xs)] sm:flex-none sm:justify-start sm:gap-2">
+                <div className="shell-user-chip ml-auto flex min-w-0 max-w-full flex-1 items-center justify-between gap-2 overflow-hidden rounded-[0.9rem] border border-[var(--page-header-border)] bg-white/80 p-1 pl-2 shadow-[var(--shadow-xs)] [grid-area:user] sm:flex-none sm:justify-start sm:gap-2">
                   <div
                     className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--gs-amber-accent)] to-[var(--primary-hover)] text-[0.65rem] font-bold text-white shadow-[var(--shadow-glow)] sm:size-9 sm:text-[0.7rem]"
                     aria-hidden="true"
@@ -413,7 +423,7 @@ export function AppShell(props: {
                   <LogoutButton className="shell-logout-trigger shrink-0" />
                 </div>
               </div>
-              <div className="mobile-context border-t border-[var(--page-header-border)] py-2">
+              <div className="mobile-context min-w-0 border-0 py-0 [grid-area:context] [&_.context-chip]:!min-w-0 [&_.context-chip]:!max-w-none [&_.context-chip]:!flex-1 [&_.context-chip-label]:hidden [&_.context-switcher]:!flex-row [&_.context-switcher]:!flex-nowrap md:border-t md:border-[var(--page-header-border)] md:py-2 md:[&_.context-chip-label]:inline">
                 <ContextSwitcher
                   organizations={props.organizations}
                   platformAdminOrganizations={adminOrganizations}
@@ -439,7 +449,11 @@ export function AppShell(props: {
         <SheetContent
           id={drawerId}
           side="left"
-          className="mobile-navigation border-[var(--page-header-border)] bg-transparent"
+          overlayClassName={cn(styles.mobileOverlay, "!top-[7.75rem] md:!top-0")}
+          className={cn(
+            styles.mobileDrawer,
+            "mobile-navigation !top-[7.75rem] !h-auto border-[var(--page-header-border)] bg-transparent md:!top-0 md:!h-full",
+          )}
           aria-describedby={undefined}
         >
             <div className="mobile-navigation-header flex h-[var(--header-height)] items-center border-b px-4 pr-14">

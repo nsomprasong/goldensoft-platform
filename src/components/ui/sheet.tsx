@@ -12,11 +12,13 @@ export const SheetClose = DialogPrimitive.Close;
 
 export function SheetContent({
   className,
+  overlayClassName,
   children,
   side = "right",
   ...props
 }: ComponentProps<typeof DialogPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left";
+  overlayClassName?: string;
 }) {
   const sides = {
     top: "inset-x-0 top-0 border-b",
@@ -26,7 +28,12 @@ export function SheetContent({
   };
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-[var(--overlay)] backdrop-blur-[1px]" />
+      <DialogPrimitive.Overlay
+        className={cn(
+          "fixed inset-0 z-40 bg-[var(--overlay)] backdrop-blur-[1px] transition-opacity duration-300 ease-out data-[state=closed]:opacity-0 data-[state=open]:opacity-100",
+          overlayClassName,
+        )}
+      />
       <DialogPrimitive.Content
         className={cn(
           "fixed z-50 flex flex-col border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow-lg)] outline-none",
