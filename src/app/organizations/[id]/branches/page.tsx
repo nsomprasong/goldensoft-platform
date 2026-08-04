@@ -1,4 +1,4 @@
-import { ArrowLeft, GitBranch, Pencil, Plus } from "lucide-react";
+import { GitBranch, Pencil, Plus } from "lucide-react";
 
 import { PlatformShell } from "@/components/platform-shell";
 import {
@@ -56,7 +56,9 @@ export default async function OrganizationBranchesPage({
 
   let branches;
   try {
-    branches = await listBranches(prisma, actor, id);
+    branches = await listBranches(prisma, actor, id, {
+      activeBranchId: ctx.activeBranch?.id ?? null,
+    });
   } catch {
     return (
       <PlatformShell {...shellProps}>
@@ -69,14 +71,22 @@ export default async function OrganizationBranchesPage({
     canManageOrganization(actor, id) &&
     perms.includes(PLATFORM_PERMISSIONS.branchManage);
 
+  const branchScopeNote = ctx.activeBranch
+    ? `กำลังแสดงเฉพาะสาขา ${ctx.activeBranch.name} (${ctx.activeBranch.code}) — เลือก「ทุกสาขา」เพื่อดูทั้งหมด`
+    : null;
+
   return (
     <PlatformShell {...shellProps}>
       <PageHeader
         title={TH.pages.branchesTitle}
-        description={TH.pages.branchesBody}
+        description={
+          branchScopeNote
+            ? `${TH.pages.branchesBody} · ${branchScopeNote}`
+            : TH.pages.branchesBody
+        }
         icon={<GitBranch size={24} />}
         actions={
-          canManage ? (
+          canManage && !ctx.activeBranch ? (
             <IconTextLink
               href={`/organizations/${id}/branches/new`}
               label={TH.branch.add}

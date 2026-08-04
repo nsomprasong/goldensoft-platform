@@ -6,6 +6,16 @@ export type PlatformContextCookie = {
   organizationId: string;
   branchId: string | null;
   /**
+   * Optional HR employee id for the active org. Ignored by Platform admin
+   * screens; validated server-side in HR before use.
+   */
+  employeeId?: string | null;
+  /**
+   * True after the user explicitly finished the branch step (picked a branch
+   * or 「ทุกสาขา」). Distinguishes first landing from intentional all-branch mode.
+   */
+  branchSelected?: boolean;
+  /**
    * membership: normal org membership.
    * platform_admin: SUPER_ADMIN managing an org without membership.
    * managed_org: staff (SALES/ACCOUNT_MANAGER, etc.) managing a customer
@@ -59,6 +69,14 @@ export function decodeContextCookie(
         typeof parsed.branchId === "string" || parsed.branchId === null
           ? parsed.branchId
           : null,
+      employeeId:
+        typeof parsed.employeeId === "string" || parsed.employeeId === null
+          ? parsed.employeeId
+          : undefined,
+      branchSelected:
+        typeof parsed.branchSelected === "boolean"
+          ? parsed.branchSelected
+          : undefined,
       mode:
         parsed.mode === "platform_admin" ||
         parsed.mode === "membership" ||

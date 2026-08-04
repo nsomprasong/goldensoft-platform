@@ -1,0 +1,84 @@
+/* Responsive shell composition. Core tokens and component chrome stay in globals.css. */
+.shell-header-bar { min-width: 0; }
+
+.mobile-context .context-switcher {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: var(--space-2);
+}
+.mobile-context .context-switcher-badges { min-height: 0; }
+.mobile-context .context-switcher-badge {
+  min-height: var(--control-height);
+  height: 100%;
+}
+.mobile-context .context-chip--org,
+.mobile-context .context-chip--branch {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+.mobile-context .context-chip {
+  min-height: var(--control-height);
+  padding: 0.3rem 0.6rem;
+}
+.mobile-context .context-chip-icon { width: 1.9rem; height: 1.9rem; }
+.mobile-context .context-chip-body { min-width: 0; }
+.mobile-context .context-chip-label { font-size: 0.68rem; }
+.mobile-context .context-chip-select {
+  width: 100%;
+  max-width: none;
+  font-size: 0.8rem;
+}
+
+@media (min-width: 1200px) {
+  .desktop-context .context-switcher {
+    flex-wrap: nowrap;
+    gap: var(--space-2);
+  }
+  .desktop-context .context-switcher-badges,
+  .desktop-context .context-switcher-badge { min-height: var(--control-height); }
+  .desktop-context .context-switcher-badge { padding-inline: var(--space-3); }
+  .desktop-context .context-chip {
+    min-height: var(--control-height);
+    padding-block: 0.3rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .shell-header-inner {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+  .shell-header-bar {
+    min-height: 3.5rem;
+    padding-block: 0.4rem;
+  }
+  .mobile-context { padding-block: 0.45rem; }
+  .mobile-context .context-switcher {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+  }
+  .mobile-context .context-switcher-badges {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .mobile-context .context-switcher-badge {
+    min-height: 2rem;
+    height: auto;
+    padding: 0.3rem 0.7rem;
+  }
+  .mobile-context .context-chip {
+    min-height: 2.4rem;
+    padding: 0.25rem 0.5rem;
+  }
+  .mobile-context .context-chip-icon { width: 1.75rem; height: 1.75rem; }
+  .mobile-context .context-chip-label { font-size: 0.64rem; }
+  .mobile-context .context-chip-select { font-size: 0.76rem; }
+  .shell-user-chip { max-width: calc(100vw - 4.75rem); }
+}
+
+@media (max-width: 390px) {
+  .shell-user-chip > div:nth-child(2) { max-width: 8.5rem; }
+  .mobile-context .context-chip-icon { display: none; }
+}

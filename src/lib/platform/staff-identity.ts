@@ -222,19 +222,6 @@ const nationalIdOptionalSchema = z.preprocess(
     .transform((digits) => (digits.length === 0 ? null : digits)),
 );
 
-/** Required national ID — used for individual customers (tax invoices). */
-const nationalIdRequiredSchema = z.preprocess(
-  (value) => (value === null || value === undefined ? "" : value),
-  z
-    .string()
-    .trim()
-    .transform(normalizeNationalId)
-    .refine((digits) => digits.length === 13, {
-      message: TH.staff.nationalIdFormatInvalid,
-    })
-    .refine(isValidThaiNationalId, { message: TH.staff.nationalIdInvalid }),
-);
-
 const staffIdentityBaseSchema = z.object({
   titleCode: z.enum(STAFF_TITLE_CODES),
   firstNameTh: z.string().trim().min(1).max(100),

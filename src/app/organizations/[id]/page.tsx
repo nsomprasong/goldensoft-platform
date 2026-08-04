@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { GitBranch, Pencil } from "lucide-react";
 import { notFound } from "next/navigation";
+import type { ComponentType, SVGProps } from "react";
 
 import { OrganizationAdminsPanel } from "@/components/organization-admins-panel";
 import { PlatformShell } from "@/components/platform-shell";
@@ -12,11 +13,21 @@ import {
   StatusBadge,
 } from "@/components/ui/admin-ui";
 import { IconTextLink } from "@/components/ui/labeled-icon-button";
+import {
+  IconBranch,
+  IconMail,
+  IconOrganization,
+  IconRoles,
+  IconSubscription,
+  IconUsers,
+} from "@/components/ui/icons";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { membershipOrganizationOptions } from "@/lib/auth/shell-props";
 import { labelStatus, TH } from "@/lib/i18n/th";
+import { filterBranchesForActiveContext } from "@/lib/platform/branch-data-scope";
 import { MASTER } from "@/lib/platform/master-codes";
+import { getPreferredCustomerAppOrigin } from "@/lib/platform/customer-products";
 import {
   detectEntitlementConsistency,
   listEntitlementsForOrganization,
@@ -31,6 +42,8 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ id: string }> };
+
+type IconComp = ComponentType<SVGProps<SVGSVGElement> & { size?: number }>;
 
 export default async function OrganizationDetailPage({ params }: Props) {
   const ctx = await requirePlatformPage();
@@ -104,6 +117,66 @@ export default async function OrganizationDetailPage({ params }: Props) {
 
   const canManage = canManageOrganization(actor, id);
   const isSuper = actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN);
+  const visibleBranches = filterBranchesForActiveContext(
+    org.branches,
+    ctx.activeBranch?.id ?? null,
+  );
+  const customerOrigin = getPreferredCustomerAppOrigin();
+  const customerAppHref = customerOrigin
+    ? `${customerOrigin}/auth/callback?next=${encodeURIComponent("/")}`
+    : null;
+
+  const menuTiles: Array<{
+    href: string;
+    label: string;
+    Icon: IconComp;
+    tone: "overview" | "organization" | "services" | "violet" | "system";
+    external?: boolean;
+  }> = [
+    {
+      href: `/organizations/${org.id}/branches`,
+      label: TH.nav.branches,
+      Icon: IconBranch,
+      tone: "organization",
+    },
+    {
+      href: "/users",
+      label: TH.nav.users,
+      Icon: IconUsers,
+      tone: "services",
+    },
+    {
+      href: "/users/invite",
+      label: TH.nav.inviteUser,
+      Icon: IconMail,
+      tone: "overview",
+    },
+    {
+      href: "/roles",
+      label: TH.nav.roles,
+      Icon: IconRoles,
+      tone: "violet",
+    },
+    {
+      href: "/subscriptions",
+      label: TH.nav.subscriptions,
+      Icon: IconSubscription,
+      tone: "system",
+    },
+  ];
+  if (customerAppHref) {
+    menuTiles.splice(1, 0, {
+      href: customerAppHref,
+      label: TH.nav.openCustomerApp,
+      Icon: IconOrganization,
+      tone: "services",
+      external: true,
+    });
+  }
+
+  const branchScopeNote = ctx.activeBranch
+    ? `กำลังดูสาขา ${ctx.activeBranch.name} (${ctx.activeBranch.code}) — ข้อมูลผู้ใช้/สาขาจะกรองตามสาขานี้`
+    : "เลือกสาขาที่หัวหน้าเพจเพื่อกรองผู้ใช้และข้อมูลให้ชัดเจน";
 
   return (
     <PlatformShell {...shellProps}>
@@ -111,7 +184,7 @@ export default async function OrganizationDetailPage({ params }: Props) {
         <section className="card">
           <PageHeader
             title={org.displayName}
-            description={`${org.legalName} · ${org.customerCode}`}
+            description={`${org.legalName} · ${org.customerCode} · ${branchScopeNote}`}
             meta={
               <StatusBadge
                 label={labelStatus(org.status.code)}
@@ -153,6 +226,27 @@ export default async function OrganizationDetailPage({ params }: Props) {
           />
         </section>
 
+        <section className="card" aria-label="เมนูองค์กร">
+          <SectionHeader title="เมนูองค์กร" />
+          <nav className="gs-settings-tile-grid" aria-label="เมนูจัดการองค์กร">
+            {menuTiles.map(({ href, label, Icon, tone, external }) => (
+              <Link
+                key={href}
+                href={href}
+                className={`gs-settings-tile gs-settings-tile--${tone}`}
+                {...(external
+                  ? { target: "_blank", rel: "noopener noreferrer" }
+                  : {})}
+              >
+                <span className="gs-settings-tile-icon" aria-hidden="true">
+                  <Icon size={22} />
+                </span>
+                <span className="gs-settings-tile-label">{label}</span>
+              </Link>
+            ))}
+          </nav>
+        </section>
+
         <OrganizationAdminsPanel
           organizationId={org.id}
           canManage={canManage}
@@ -160,14 +254,20 @@ export default async function OrganizationDetailPage({ params }: Props) {
         />
 
         <section className="card">
-          <SectionHeader title={TH.nav.branches} />
-          {org.branches.length === 0 ? (
+          <SectionHeader
+            title={
+              ctx.activeBranch
+                ? `${TH.nav.branches} · ${ctx.activeBranch.name}`
+                : TH.nav.branches
+            }
+          />
+          {visibleBranches.length === 0 ? (
             <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">
               {TH.common.empty}
             </p>
           ) : (
             <ul className="divide-y divide-[var(--border)]">
-              {org.branches.map((b) => (
+              {visibleBranches.map((b) => (
                 <li
                   key={b.id}
                   className="flex items-center justify-between gap-3 py-2.5 text-[length:var(--text-label)]"
@@ -175,6 +275,11 @@ export default async function OrganizationDetailPage({ params }: Props) {
                   <span>
                     <span className="font-medium">{b.name}</span>
                     <span className="ml-2 text-[var(--text-muted)]">{b.code}</span>
+                    {ctx.activeBranch?.id === b.id ? (
+                      <span className="ml-2 text-[length:var(--text-helper)] text-[var(--primary)]">
+                        · สาขาที่เลือก
+                      </span>
+                    ) : null}
                   </span>
                   <StatusBadge
                     label={labelStatus(b.status.code)}

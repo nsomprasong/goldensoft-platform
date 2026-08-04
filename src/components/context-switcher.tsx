@@ -2,9 +2,10 @@
 
 import { Building2, GitBranch } from "lucide-react";
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { TH } from "@/lib/i18n/th";
+import { pathAfterOrganizationSwitch } from "@/lib/navigation/stay-on-page";
 import {
   signalNavigationDone,
   signalNavigationPending,
@@ -17,10 +18,6 @@ type OrgOption = {
 };
 type BranchOption = { id: string; name: string; code: string };
 
-function isGoldenSoftOrg(customerCode: string | null | undefined): boolean {
-  return (customerCode ?? "").trim().toUpperCase() === "GOLDENSOFT";
-}
-
 export function ContextSwitcher(props: {
   organizations: OrgOption[];
   platformAdminOrganizations?: OrgOption[];
@@ -30,9 +27,11 @@ export function ContextSwitcher(props: {
   activeBranchId: string | null;
   contextMode?: "membership" | "platform_admin" | "managed_org";
   shellMode?: "platform" | "customer_support";
+  customerAppHref?: string | null;
   canUsePlatformAdminMode?: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname() || "/";
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -47,12 +46,6 @@ export function ContextSwitcher(props: {
   );
   const allOptions = [...props.organizations, ...adminOnly, ...managedOnly];
 
-  function destinationForOrg(org: OrgOption | undefined): string {
-    if (!org) return "/";
-    if (isGoldenSoftOrg(org.customerCode)) return "/";
-    return `/organizations/${org.id}`;
-  }
-
   async function switchContext(
     organizationId: string,
     branchId: string | null,
@@ -63,15 +56,22 @@ export function ContextSwitcher(props: {
     const res = await fetch("/api/platform/context", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ organizationId, branchId, mode }),
+      body: JSON.stringify({
+        organizationId,
+        branchId,
+        branchSelected: true,
+        mode,
+      }),
     });
     if (!res.ok) {
       setError(TH.access.forbidden);
       signalNavigationDone();
       return;
     }
-    const org = allOptions.find((row) => row.id === organizationId);
-    router.push(destinationForOrg(org));
+    const rewritten = pathAfterOrganizationSwitch(pathname, organizationId);
+    if (rewritten && rewritten !== pathname) {
+      router.push(rewritten);
+    }
     router.refresh();
   }
 
@@ -83,14 +83,18 @@ export function ContextSwitcher(props: {
 
   return (
     <div className="context-switcher flex w-full flex-wrap items-stretch gap-2 text-[length:var(--text-helper)]">
-      {showSupportBadge ? (
-        <span className="inline-flex items-center rounded-full border border-[var(--page-header-border)] bg-gradient-to-r from-[var(--primary-soft)] to-[#fff7ed] px-2.5 py-1 text-[length:var(--text-caption)] font-semibold text-[var(--primary)] shadow-[var(--shadow-xs)]">
-          {TH.nav.customerSupportBadge}
-        </span>
-      ) : props.contextMode === "platform_admin" ? (
-        <span className="inline-flex items-center rounded-full border border-[var(--page-header-border)] bg-gradient-to-r from-[var(--primary-soft)] to-[#fff7ed] px-2.5 py-1 text-[length:var(--text-caption)] font-semibold text-[var(--primary)] shadow-[var(--shadow-xs)]">
-          {TH.nav.platformHomeBadge}
-        </span>
+      {showSupportBadge || props.contextMode === "platform_admin" ? (
+        <div className="context-switcher-badges">
+          {showSupportBadge ? (
+            <span className="context-switcher-badge context-switcher-badge--amber">
+              {TH.nav.customerSupportBadge}
+            </span>
+          ) : (
+            <span className="context-switcher-badge context-switcher-badge--blue">
+              {TH.nav.platformHomeBadge}
+            </span>
+          )}
+        </div>
       ) : null}
 
       <label className="context-chip context-chip--org">
@@ -118,7 +122,10 @@ export function ContextSwitcher(props: {
                 {props.organizations.map((org) => (
                   <option key={org.id} value={org.id}>
                     {org.name}
-                    {isGoldenSoftOrg(org.customerCode) ? " (Platform)" : ""}
+                    {(org.customerCode ?? "").trim().toUpperCase() ===
+                    "GOLDENSOFT"
+                      ? " (Platform)"
+                      : ""}
                   </option>
                 ))}
               </optgroup>
@@ -128,7 +135,10 @@ export function ContextSwitcher(props: {
                 {adminOnly.map((org) => (
                   <option key={`admin-${org.id}`} value={org.id}>
                     {org.name}
-                    {isGoldenSoftOrg(org.customerCode) ? " (Platform)" : ""}
+                    {(org.customerCode ?? "").trim().toUpperCase() ===
+                    "GOLDENSOFT"
+                      ? " (Platform)"
+                      : ""}
                   </option>
                 ))}
               </optgroup>
@@ -190,7 +200,7 @@ export function ContextSwitcher(props: {
       </label>
 
       {error ? (
-        <span className="text-[length:var(--text-caption)] text-[var(--danger)]">
+        <span className="context-switcher-error">
           {error}
         </span>
       ) : null}

@@ -28,6 +28,12 @@ import {
   labelStatus,
 } from "@/lib/i18n/th";
 import { logServerTiming, measure } from "@/lib/perf/server-timing";
+import {
+  invitationVisibleInBranch,
+  membershipBranchLabels,
+  membershipVisibleInBranch,
+  parseBranchIdsJson,
+} from "@/lib/platform/branch-data-scope";
 import { MASTER } from "@/lib/platform/master-codes";
 import {
   PLATFORM_PERMISSIONS,
@@ -70,6 +76,7 @@ export default async function UsersPage({
   }
 
   const activeOrganizationId = ctx.activeOrganization?.id ?? null;
+  const activeBranchId = ctx.activeBranch?.id ?? null;
   const orgFilter = activeOrganizationId
     ? { organizationId: activeOrganizationId }
     : actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN) ||
@@ -87,90 +94,159 @@ export default async function UsersPage({
         };
 
   const q = params.q?.trim();
-  const [memberships, invitations] = await measure("data", () =>
-    Promise.all([
-      prisma.organizationMembership.findMany({
-        where: {
-          ...orgFilter,
-          ...(q
-            ? {
-                OR: [
-                  {
-                    userProfile: {
-                      email: { contains: q, mode: "insensitive" },
+  const [membershipRows, invitationRows, orgBranches] = await measure(
+    "data",
+    () =>
+      Promise.all([
+        prisma.organizationMembership.findMany({
+          where: {
+            ...orgFilter,
+            ...(q
+              ? {
+                  OR: [
+                    {
+                      userProfile: {
+                        email: { contains: q, mode: "insensitive" },
+                      },
                     },
-                  },
-                  {
-                    userProfile: {
-                      displayName: { contains: q, mode: "insensitive" },
+                    {
+                      userProfile: {
+                        displayName: { contains: q, mode: "insensitive" },
+                      },
                     },
-                  },
-                ],
-              }
-            : {}),
-        },
-        select: {
-          id: true,
-          userProfile: {
-            select: {
-              id: true,
-              displayName: true,
-              email: true,
-              status: { select: { code: true } },
+                  ],
+                }
+              : {}),
+          },
+          select: {
+            id: true,
+            userProfile: {
+              select: {
+                id: true,
+                displayName: true,
+                email: true,
+                status: { select: { code: true } },
+              },
+            },
+            organization: {
+              select: { displayName: true },
+            },
+            status: { select: { code: true } },
+            roles: {
+              where: { revokedAt: null },
+              select: {
+                role: { select: { code: true } },
+                status: { select: { code: true } },
+              },
+            },
+            branchScopes: {
+              select: {
+                branchId: true,
+                scopeType: { select: { code: true } },
+                branch: { select: { id: true, name: true, code: true } },
+              },
             },
           },
-          organization: {
-            select: { displayName: true },
+          orderBy: { createdAt: "desc" },
+          take: 200,
+        }),
+        prisma.userInvitation.findMany({
+          where: {
+            ...orgFilter,
+            ...(q
+              ? {
+                  OR: [
+                    { emailNormalized: { contains: q, mode: "insensitive" } },
+                    { displayName: { contains: q, mode: "insensitive" } },
+                  ],
+                }
+              : {}),
           },
-          status: { select: { code: true } },
-          roles: {
-            where: { revokedAt: null },
-            select: {
-              role: { select: { code: true } },
-              status: { select: { code: true } },
-            },
+          select: {
+            id: true,
+            emailNormalized: true,
+            displayName: true,
+            createdAt: true,
+            attemptCount: true,
+            branchIdsJson: true,
+            organization: { select: { displayName: true } },
+            organizationRole: { select: { code: true } },
+            branchScopeType: { select: { code: true } },
+            status: { select: { code: true } },
+            invitedByProfile: { select: { displayName: true } },
           },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 50,
-      }),
-      prisma.userInvitation.findMany({
-        where: {
-          ...orgFilter,
-          ...(q
-            ? {
-                OR: [
-                  { emailNormalized: { contains: q, mode: "insensitive" } },
-                  { displayName: { contains: q, mode: "insensitive" } },
-                ],
-              }
-            : {}),
-        },
-        select: {
-          id: true,
-          emailNormalized: true,
-          displayName: true,
-          createdAt: true,
-          attemptCount: true,
-          organization: { select: { displayName: true } },
-          organizationRole: { select: { code: true } },
-          status: { select: { code: true } },
-          invitedByProfile: { select: { displayName: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 50,
-      }),
-    ]),
+          orderBy: { createdAt: "desc" },
+          take: 200,
+        }),
+        activeOrganizationId
+          ? prisma.branch.findMany({
+              where: { organizationId: activeOrganizationId, deletedAt: null },
+              select: { id: true, name: true, code: true },
+            })
+          : Promise.resolve(
+              [] as Array<{ id: string; name: string; code: string }>,
+            ),
+      ]),
   );
   logServerTiming();
 
+  const branchNameById = new Map([
+    ...orgBranches.map((b) => [b.id, b.name] as const),
+    ...ctx.branches.map((b) => [b.id, b.name] as const),
+  ]);
+
+  const memberships = membershipRows
+    .filter((m) =>
+      activeBranchId
+        ? membershipVisibleInBranch(
+            m.branchScopes.map((s) => ({
+              scopeTypeCode: s.scopeType.code,
+              branchId: s.branchId,
+            })),
+            activeBranchId,
+          )
+        : true,
+    )
+    .slice(0, 50)
+    .map((m) => ({
+      ...m,
+      branchLabel: membershipBranchLabels(
+        m.branchScopes.map((s) => ({
+          scopeTypeCode: s.scopeType.code,
+          branchId: s.branchId,
+        })),
+        branchNameById,
+      ),
+    }));
+
+  const invitations = invitationRows
+    .filter((invitation) =>
+      activeBranchId
+        ? invitationVisibleInBranch(
+            {
+              scopeTypeCode: invitation.branchScopeType.code,
+              branchIds: parseBranchIdsJson(invitation.branchIdsJson),
+            },
+            activeBranchId,
+          )
+        : true,
+    )
+    .slice(0, 50);
+
   const canInvite = perms.includes(PLATFORM_PERMISSIONS.userInvite);
+  const branchScopeNote = ctx.activeBranch
+    ? `กำลังแสดงเฉพาะสาขา ${ctx.activeBranch.name} (${ctx.activeBranch.code}) — สมาชิกทุกสาขายังปรากฏ`
+    : null;
 
   return (
     <PlatformShell {...shellProps}>
       <PageHeader
         title={TH.pages.usersTitle}
-        description={TH.pages.usersBody}
+        description={
+          branchScopeNote
+            ? `${TH.pages.usersBody} · ${branchScopeNote}`
+            : TH.pages.usersBody
+        }
         icon={<Users size={24} />}
         actions={
           canInvite ? (
@@ -256,6 +332,13 @@ export default async function UsersPage({
                           {invitation.organization.displayName} ·{" "}
                           {labelRole(invitation.organizationRole.code)}
                           <br />
+                          {invitation.branchScopeType.code ===
+                          MASTER.branchScopeType.ALL_BRANCHES
+                            ? "ทุกสาขา"
+                            : parseBranchIdsJson(invitation.branchIdsJson)
+                                .map((id) => branchNameById.get(id) ?? id)
+                                .join(", ") || "—"}
+                          <br />
                           {invitation.createdAt.toLocaleString("th-TH")} ·{" "}
                           {invitation.invitedByProfile.displayName}
                         </>
@@ -271,6 +354,7 @@ export default async function UsersPage({
                 TH.users.email,
                 TH.nav.organizations,
                 "บทบาท",
+                TH.nav.branches,
                 "วันที่เชิญ",
                 "ผู้เชิญ",
                 TH.common.status,
@@ -296,6 +380,14 @@ export default async function UsersPage({
                   </td>
                   <td className="px-3 py-2.5">
                     {labelRole(invitation.organizationRole.code)}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {invitation.branchScopeType.code ===
+                    MASTER.branchScopeType.ALL_BRANCHES
+                      ? "ทุกสาขา"
+                      : parseBranchIdsJson(invitation.branchIdsJson)
+                          .map((id) => branchNameById.get(id) ?? id)
+                          .join(", ") || "—"}
                   </td>
                   <td className="px-3 py-2.5 tabular-nums">
                     {invitation.createdAt.toLocaleString("th-TH")}
@@ -355,6 +447,8 @@ export default async function UsersPage({
                               .filter((r) => r.status.code === "ACTIVE")
                               .map((r) => labelRole(r.role.code))
                               .join(", ") || "-"}
+                            <br />
+                            สาขา: {m.branchLabel}
                           </>
                         }
                       />
@@ -367,8 +461,9 @@ export default async function UsersPage({
                   TH.users.displayName,
                   TH.users.email,
                   TH.nav.organizations,
-                  TH.common.status,
                   "บทบาท",
+                  TH.nav.branches,
+                  TH.common.status,
                 ]}
               >
                 {memberships.map((m) => (
@@ -376,27 +471,30 @@ export default async function UsersPage({
                     key={m.id}
                     className="border-b border-[var(--border)] hover:bg-[var(--surface-muted)]/60"
                   >
-                    <td className="px-3 py-2.5 font-medium">
+                    <td className="px-3 py-2.5">
                       <Link
                         href={`/users/profiles/${m.userProfile.id}`}
-                        className="text-[var(--accent)] hover:underline"
+                        className="font-medium text-[var(--primary)]"
                       >
                         {m.userProfile.displayName}
                       </Link>
                     </td>
                     <td className="px-3 py-2.5">{m.userProfile.email}</td>
-                    <td className="px-3 py-2.5">{m.organization.displayName}</td>
+                    <td className="px-3 py-2.5">
+                      {m.organization.displayName}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {m.roles
+                        .filter((r) => r.status.code === "ACTIVE")
+                        .map((r) => labelRole(r.role.code))
+                        .join(", ") || "-"}
+                    </td>
+                    <td className="px-3 py-2.5">{m.branchLabel}</td>
                     <td className="px-3 py-2.5">
                       <StatusBadge
                         label={labelStatus(m.status.code)}
                         code={m.status.code}
                       />
-                    </td>
-                    <td className="px-3 py-2.5 text-[length:var(--text-helper)]">
-                      {m.roles
-                        .filter((r) => r.status.code === "ACTIVE")
-                        .map((r) => labelRole(r.role.code))
-                        .join(", ") || "-"}
                     </td>
                   </tr>
                 ))}

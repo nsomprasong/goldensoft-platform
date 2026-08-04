@@ -2,7 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requireAuthUser } from "@/lib/auth/request-auth";
+import {
+  COOKIE_NAME,
+  decodeContextCookie,
+} from "@/lib/context/cookie";
 import { TH } from "@/lib/i18n/th";
+import {
+  invitationVisibleInBranch,
+  parseBranchIdsJson,
+} from "@/lib/platform/branch-data-scope";
 import { MASTER } from "@/lib/platform/master-codes";
 import {
   PLATFORM_PERMISSIONS,
@@ -40,6 +48,14 @@ export async function GET(request: NextRequest) {
   ) {
     return NextResponse.json({ message: TH.common.forbidden }, { status: 403 });
   }
+
+  const cookie = decodeContextCookie(request.cookies.get(COOKIE_NAME)?.value);
+  const activeBranchId =
+    cookie &&
+    (!organizationId || cookie.organizationId === organizationId)
+      ? cookie.branchId
+      : null;
+
   const invitations = await prisma.userInvitation.findMany({
     where: {
       organizationId: organizationId
@@ -55,6 +71,7 @@ export async function GET(request: NextRequest) {
       createdAt: true,
       authInviteSentAt: true,
       attemptCount: true,
+      branchIdsJson: true,
       organization: { select: { id: true, displayName: true } },
       organizationRole: { select: { code: true } },
       branchScopeType: { select: { code: true } },
@@ -64,5 +81,21 @@ export async function GET(request: NextRequest) {
     orderBy: { createdAt: "desc" },
     take: 100,
   });
-  return NextResponse.json({ invitations });
+
+  const scoped = activeBranchId
+    ? invitations.filter((row) =>
+        invitationVisibleInBranch(
+          {
+            scopeTypeCode: row.branchScopeType.code,
+            branchIds: parseBranchIdsJson(row.branchIdsJson),
+          },
+          activeBranchId,
+        ),
+      )
+    : invitations;
+
+  return NextResponse.json({
+    invitations: scoped,
+    activeBranchId,
+  });
 }

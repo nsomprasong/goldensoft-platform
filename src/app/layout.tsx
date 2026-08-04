@@ -1,24 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Anuphan, Prompt } from "next/font/google";
 import { Suspense } from "react";
 
 import { NavigationPending } from "@/components/navigation-pending";
 
 import "./globals.css";
-
-const anuphan = Anuphan({
-  subsets: ["thai", "latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-anuphan",
-  display: "swap",
-});
-
-const prompt = Prompt({
-  subsets: ["thai", "latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-prompt",
-  display: "swap",
-});
+import "./shell-responsive.css";
 
 export const metadata: Metadata = {
   title: "GoldenSoft Platform",
@@ -39,11 +25,7 @@ export default function RootLayout({
   return (
     // Chrome/iPad (and similar) may inject attrs like __gcrremoteframetoken
     // onto the root html element before React hydrates.
-    <html
-      lang="th"
-      suppressHydrationWarning
-      className={`${anuphan.variable} ${prompt.variable}`}
-    >
+    <html lang="th" suppressHydrationWarning>
       <body className="antialiased">
         <Suspense fallback={null}>
           <NavigationPending />

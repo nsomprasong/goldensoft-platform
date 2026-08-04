@@ -110,7 +110,52 @@ describe("Phase 4 access decisions", () => {
     }
   });
 
-  it("requires selection when multiple organizations exist", () => {
+  it("enters shell for one org with many branches (header picks branch)", () => {
+    const d = decideAccess({
+      authenticated: true,
+      profile: {
+        statusCode: "ACTIVE",
+        displayName: "ทดสอบ",
+        email: "a@b.c",
+      },
+      memberships: [
+        membership({
+          organizationId: "org-1",
+          organizationName: "องค์กรเดียว",
+        }),
+      ],
+    });
+    assert.equal(d.kind, "ready");
+    if (d.kind === "ready") {
+      assert.equal(d.organizationId, "org-1");
+      assert.equal(d.autoSelected, true);
+      assert.equal(d.autoBranchId, null);
+      assert.equal(d.branches.length, 2);
+    }
+  });
+
+  it("ready after branchSelected cookie flag (all-branches mode)", () => {
+    const d = decideAccess({
+      authenticated: true,
+      profile: {
+        statusCode: "ACTIVE",
+        displayName: "ทดสอบ",
+        email: "a@b.c",
+      },
+      memberships: [
+        membership({
+          organizationId: "org-1",
+          organizationName: "องค์กรเดียว",
+        }),
+      ],
+      claimedOrganizationId: "org-1",
+      claimedBranchId: null,
+      branchSelected: true,
+    });
+    assert.equal(d.kind, "ready");
+  });
+
+  it("enters shell with first org when multiple organizations exist", () => {
     const d = decideAccess({
       authenticated: true,
       profile: {
@@ -123,7 +168,32 @@ describe("Phase 4 access decisions", () => {
         membership({ organizationId: "org-2", organizationName: "B" }),
       ],
     });
-    assert.equal(d.kind, "select_organization");
+    assert.equal(d.kind, "ready");
+    if (d.kind === "ready") {
+      assert.equal(d.organizationId, "org-1");
+      assert.equal(d.autoSelected, false);
+    }
+  });
+
+  it("after org claim, multi-branch still enters shell (header picks branch)", () => {
+    const d = decideAccess({
+      authenticated: true,
+      profile: {
+        statusCode: "ACTIVE",
+        displayName: "ทดสอบ",
+        email: "a@b.c",
+      },
+      memberships: [
+        membership({ organizationId: "org-1", organizationName: "A" }),
+        membership({ organizationId: "org-2", organizationName: "B" }),
+      ],
+      claimedOrganizationId: "org-2",
+    });
+    assert.equal(d.kind, "ready");
+    if (d.kind === "ready") {
+      assert.equal(d.organizationId, "org-2");
+      assert.equal(d.autoBranchId, null);
+    }
   });
 
   it("rejects organization and branch outside membership", () => {
@@ -133,6 +203,7 @@ describe("Phase 4 access decisions", () => {
     assert.equal(canAccessOrganization(memberships, "org-2"), false);
     assert.equal(canAccessBranch(memberships, "org-1", "b99"), false);
     assert.equal(canAccessBranch(memberships, "org-1", "b1"), true);
+    assert.equal(canAccessBranch(memberships, "org-2", "b1"), false);
   });
 
   it("rejects tampered context cookie signatures", () => {
@@ -144,6 +215,37 @@ describe("Phase 4 access decisions", () => {
     });
     const tampered = raw.replace(/\.[^.]+$/, ".invalidsignature");
     assert.equal(decodeContextCookie(tampered), null);
+  });
+
+  it("decodes legacy context cookies without employeeId or branchSelected", () => {
+    process.env.PLATFORM_CONTEXT_COOKIE_SECRET =
+      process.env.PLATFORM_CONTEXT_COOKIE_SECRET || "phase4-test-secret-key";
+    const raw = encodeContextCookie({
+      organizationId: "11111111-1111-1111-1111-111111111111",
+      branchId: "22222222-2222-2222-2222-222222222222",
+    });
+    const decoded = decodeContextCookie(raw);
+    assert.ok(decoded);
+    assert.equal(decoded.organizationId, "11111111-1111-1111-1111-111111111111");
+    assert.equal(decoded.branchId, "22222222-2222-2222-2222-222222222222");
+    assert.equal(decoded.employeeId, undefined);
+    assert.equal(decoded.branchSelected, undefined);
+  });
+
+  it("round-trips optional employeeId and branchSelected on context cookie", () => {
+    process.env.PLATFORM_CONTEXT_COOKIE_SECRET =
+      process.env.PLATFORM_CONTEXT_COOKIE_SECRET || "phase4-test-secret-key";
+    const raw = encodeContextCookie({
+      organizationId: "11111111-1111-1111-1111-111111111111",
+      branchId: null,
+      employeeId: "33333333-3333-3333-3333-333333333333",
+      branchSelected: true,
+      mode: "membership",
+    });
+    const decoded = decodeContextCookie(raw);
+    assert.ok(decoded);
+    assert.equal(decoded.employeeId, "33333333-3333-3333-3333-333333333333");
+    assert.equal(decoded.branchSelected, true);
   });
 
   it("filters navigation by roles", () => {

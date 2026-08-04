@@ -286,10 +286,11 @@ export class InMemoryStaffAuthAdapter implements StaffAuthPort {
     this.passwords.set(input.authUserId, input.password);
   }
 
-  async updateUserPhone(_input: {
+  async updateUserPhone(input: {
     authUserId: string;
     phone: string;
   }): Promise<void> {
+    void input;
     // In-memory auth has no phone identity; email login path covers tests.
   }
 

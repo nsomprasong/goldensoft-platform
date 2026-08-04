@@ -120,7 +120,7 @@ describe("Phase 7 database round trips", () => {
       ["src/app/subscriptions/page.tsx", /take: 100/],
       ["src/app/products/page.tsx", /take: 100/],
       ["src/app/plans/page.tsx", /take: 100/],
-      ["src/app/users/page.tsx", /take: 50/],
+      ["src/app/users/page.tsx", /take: 200/],
       ["src/app/audit-logs/page.tsx", /take,/],
       ["src/app/organizations/[id]/page.tsx", /take: 200/],
     ];

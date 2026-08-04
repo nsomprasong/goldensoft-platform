@@ -73,13 +73,20 @@ export async function listBranches(
   db: PrismaClient,
   actor: ActorAccess,
   organizationId: string,
+  options?: { activeBranchId?: string | null },
 ) {
   if (!canViewOrganization(actor, organizationId)) {
     throw new BranchAdminError("FORBIDDEN", TH.common.forbidden);
   }
 
-  return db.branch.findMany({
-    where: { organizationId, deletedAt: null },
+  const rows = await db.branch.findMany({
+    where: {
+      organizationId,
+      deletedAt: null,
+      ...(options?.activeBranchId
+        ? { id: options.activeBranchId }
+        : {}),
+    },
     select: {
       id: true,
       organizationId: true,
@@ -99,6 +106,7 @@ export async function listBranches(
     },
     orderBy: { code: "asc" },
   });
+  return rows;
 }
 
 export async function createBranch(

@@ -61,7 +61,11 @@ export async function GET(request: NextRequest) {
   const response = NextResponse.redirect(new URL(next, origin), 303);
   response.cookies.set(
     COOKIE_NAME,
-    encodeContextCookie({ organizationId, branchId }),
+    encodeContextCookie({
+      organizationId,
+      branchId,
+      branchSelected: branchId != null,
+    }),
     contextCookieOptions(),
   );
   response.headers.set("Cache-Control", "no-store");

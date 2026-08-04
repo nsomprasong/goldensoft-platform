@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { Ban, Pause, Play, Save, X } from "lucide-react";
+import { Pause, Play, Save, X } from "lucide-react";
 
 import { FormField } from "@/components/ui/admin-ui";
 import { IconTextButton } from "@/components/ui/labeled-icon-button";

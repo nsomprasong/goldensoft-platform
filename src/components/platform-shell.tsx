@@ -2,17 +2,13 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { filterNavForRoles, PLATFORM_NAV } from "@/lib/auth/access";
-import {
-  buildCustomerSupportNav,
-  resolvePlatformShellMode,
-} from "@/lib/auth/shell-mode";
+import { resolvePlatformShellMode } from "@/lib/auth/shell-mode";
 import { TH } from "@/lib/i18n/th";
-import { getPreferredCustomerAppOrigin } from "@/lib/platform/customer-products";
 
 /**
  * Platform Admin shell (“ศูนย์บริหาร GoldenSoft”).
- * When a customer org is selected, sidebar switches to customer-support nav.
- * Selecting GOLDENSOFT restores full Platform Admin menus.
+ * Sidebar always shows full Platform menus; when a customer org is selected,
+ * Customer App entry stays inside the menu only.
  */
 export function PlatformShell(props: {
   children: ReactNode;
@@ -43,38 +39,61 @@ export function PlatformShell(props: {
   contextMode?: "membership" | "platform_admin" | "managed_org";
   permissions?: string[];
 }) {
-  const shellMode = resolvePlatformShellMode(props.activeOrganization);
-  const customerAppOrigin = getPreferredCustomerAppOrigin();
+  return <PlatformShellInner {...props} />;
+}
 
-  const nav =
-    shellMode === "customer_support" && props.activeOrganization
-      ? buildCustomerSupportNav({
-          organizationId: props.activeOrganization.id,
-          platformRoles: props.platformRoles,
-          organizationRoles: props.organizationRoles,
-          permissions: props.permissions,
-          customerAppOrigin,
-        })
-      : filterNavForRoles({
-          platformRoles: props.platformRoles,
-          organizationRoles: props.organizationRoles,
-          permissions: props.permissions,
-          items: PLATFORM_NAV,
-        }).map((item) => {
-          if (item.href === "/branches" && props.activeOrganization) {
-            return {
-              ...item,
-              href: `/organizations/${props.activeOrganization.id}/branches`,
-            };
-          }
-          return item;
-        });
+async function PlatformShellInner(props: {
+  children: ReactNode;
+  displayName: string;
+  platformRoles: string[];
+  organizationRoles: string[];
+  organizations: Array<{ id: string; name: string; customerCode?: string | null }>;
+  platformAdminOrganizations?: Array<{
+    id: string;
+    name: string;
+    customerCode?: string | null;
+  }>;
+  managedOrganizations?: Array<{
+    id: string;
+    name: string;
+    customerCode?: string | null;
+  }>;
+  canUseManagedOrgMode?: boolean;
+  branches: Array<{ id: string; name: string; code: string }>;
+  activeOrganization: {
+    id: string;
+    name: string;
+    customerCode?: string | null;
+  } | null;
+  activeBranch: { id: string; name: string; code: string } | null;
+  pageTitle?: string;
+  contextMode?: "membership" | "platform_admin" | "managed_org";
+  permissions?: string[];
+}) {
+  const shellMode = resolvePlatformShellMode(props.activeOrganization);
+
+  const nav = filterNavForRoles({
+    platformRoles: props.platformRoles,
+    organizationRoles: props.organizationRoles,
+    permissions: props.permissions,
+    items: PLATFORM_NAV,
+  }).map((item) => {
+    if (item.href === "/branches" && props.activeOrganization) {
+      return {
+        ...item,
+        href: `/organizations/${props.activeOrganization.id}/branches`,
+      };
+    }
+    return item;
+  });
+
+  const navItems = nav.map((item) => ({ href: item.href, label: item.label }));
 
   return (
     <AppShell
       displayName={props.displayName}
       roles={[...props.platformRoles, ...props.organizationRoles]}
-      navItems={nav.map((item) => ({ href: item.href, label: item.label }))}
+      navItems={navItems}
       organizations={props.organizations}
       platformAdminOrganizations={props.platformAdminOrganizations}
       managedOrganizations={props.managedOrganizations}

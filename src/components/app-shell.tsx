@@ -37,8 +37,8 @@ const GROUP_LABEL: Record<ShellNavItem["group"], string> = {
   system: "ระบบและความปลอดภัย",
 };
 
-/** Static tone classes — never interpolate Tailwind color tokens. */
-const GROUP_TONE: Record<
+/** HR / Customer App nav tone classes — never interpolate color tokens. */
+const NAV_TONE_CLASS: Record<
   ShellNavItem["group"],
   {
     label: string;
@@ -49,44 +49,32 @@ const GROUP_TONE: Record<
   }
 > = {
   overview: {
-    label: "text-[var(--primary)]",
-    iconIdle:
-      "bg-[var(--primary-soft)] text-[var(--primary)] ring-1 ring-[var(--page-header-border)]",
-    iconActive:
-      "bg-gradient-to-br from-[#d97706] to-[#b45309] text-white shadow-[0_6px_14px_rgba(180,83,9,0.28)]",
-    rowActive:
-      "bg-gradient-to-r from-[var(--primary-soft)] via-[#fff7ed] to-transparent font-semibold text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(180,83,9,0.14)]",
-    accent: "bg-[var(--primary)] shadow-[0_0_12px_rgba(180,83,9,0.45)]",
+    label: "nav-tone-overview",
+    iconIdle: "nav-icon-idle-overview",
+    iconActive: "nav-icon-active-overview",
+    rowActive: "nav-row-active-overview",
+    accent: "nav-accent-overview",
   },
   organization: {
-    label: "text-[var(--dashboard-blue)]",
-    iconIdle:
-      "bg-[var(--dashboard-blue-soft)] text-[var(--dashboard-blue)] ring-1 ring-[var(--info-border)]",
-    iconActive:
-      "bg-gradient-to-br from-[#3b82f6] to-[#2563eb] text-white shadow-[0_6px_14px_rgba(37,99,235,0.28)]",
-    rowActive:
-      "bg-gradient-to-r from-[var(--dashboard-blue-soft)] via-[#eff6ff] to-transparent font-semibold text-[var(--dashboard-blue)] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.14)]",
-    accent: "bg-[var(--dashboard-blue)] shadow-[0_0_12px_rgba(37,99,235,0.4)]",
+    label: "nav-tone-organization",
+    iconIdle: "nav-icon-idle-organization",
+    iconActive: "nav-icon-active-organization",
+    rowActive: "nav-row-active-organization",
+    accent: "nav-accent-organization",
   },
   services: {
-    label: "text-[var(--dashboard-green)]",
-    iconIdle:
-      "bg-[var(--dashboard-green-soft)] text-[var(--dashboard-green)] ring-1 ring-[var(--success-border)]",
-    iconActive:
-      "bg-gradient-to-br from-[#10b981] to-[#059669] text-white shadow-[0_6px_14px_rgba(5,150,105,0.28)]",
-    rowActive:
-      "bg-gradient-to-r from-[var(--dashboard-green-soft)] via-[#ecfdf5] to-transparent font-semibold text-[var(--dashboard-green)] shadow-[inset_0_0_0_1px_rgba(5,150,105,0.14)]",
-    accent: "bg-[var(--dashboard-green)] shadow-[0_0_12px_rgba(5,150,105,0.4)]",
+    label: "nav-tone-services",
+    iconIdle: "nav-icon-idle-services",
+    iconActive: "nav-icon-active-services",
+    rowActive: "nav-row-active-services",
+    accent: "nav-accent-services",
   },
   system: {
-    label: "text-[var(--dashboard-amber)]",
-    iconIdle:
-      "bg-[var(--dashboard-amber-soft)] text-[var(--dashboard-amber)] ring-1 ring-[var(--warning-border)]",
-    iconActive:
-      "bg-gradient-to-br from-[#f59e0b] to-[#d97706] text-white shadow-[0_6px_14px_rgba(217,119,6,0.28)]",
-    rowActive:
-      "bg-gradient-to-r from-[var(--dashboard-amber-soft)] via-[#fffbeb] to-transparent font-semibold text-[var(--dashboard-amber)] shadow-[inset_0_0_0_1px_rgba(217,119,6,0.16)]",
-    accent: "bg-[var(--dashboard-amber)] shadow-[0_0_12px_rgba(217,119,6,0.4)]",
+    label: "nav-tone-system",
+    iconIdle: "nav-icon-idle-system",
+    iconActive: "nav-icon-active-system",
+    rowActive: "nav-row-active-system",
+    accent: "nav-accent-system",
   },
 };
 
@@ -131,88 +119,88 @@ function NavGroups(props: {
     .filter((entry) => entry.items.length > 0);
 
   return (
-    <div className="space-y-5">
+    <div className={props.collapsed ? "platform-nav is-collapsed" : "platform-nav"}>
       {groups.map((entry) => {
-        const tone = GROUP_TONE[entry.group];
+        const tone = NAV_TONE_CLASS[entry.group];
         return (
-          <div key={entry.group}>
+          <section
+            key={entry.group}
+            className={`nav-group nav-group--${entry.group}`}
+            data-tone={entry.group}
+          >
             {!props.collapsed ? (
-              <p
-                className={[
-                  "mb-2 px-3 text-[0.68rem] font-semibold uppercase tracking-[0.08em]",
-                  tone.label,
-                ].join(" ")}
-              >
-                {GROUP_LABEL[entry.group]}
-              </p>
+              <div className="nav-group-head">
+                <div className={`nav-group-title ${tone.label}`}>
+                  {GROUP_LABEL[entry.group]}
+                </div>
+              </div>
             ) : null}
-            <ul className="space-y-1.5">
-              {entry.items.map((item) => {
-                const external = isExternalHref(item.href);
-                const active = external
-                  ? false
-                  : isNavigationItemActive(props.pathname, item);
-                const className = [
-                  "shell-nav-link relative flex min-h-12 items-center rounded-[0.9rem] px-2.5 text-[length:var(--text-label)] transition-[background-color,color,box-shadow,transform] duration-200",
-                  active
-                    ? tone.rowActive
-                    : "font-medium text-[var(--text-secondary)] hover:-translate-y-px hover:bg-white hover:text-[var(--text-primary)] hover:shadow-[var(--shadow-sm)]",
-                  props.collapsed ? "justify-center" : "gap-2.5",
-                ].join(" ");
-                const content = (
-                  <>
-                    {active ? (
+            <div className="nav-group-body">
+              <div className={`nav-section nav-section--${entry.group}`}>
+                {entry.items.map((item) => {
+                  const external = isExternalHref(item.href);
+                  const active = external
+                    ? false
+                    : isNavigationItemActive(props.pathname, item);
+                  const className = [
+                    "shell-nav-link",
+                    active ? `active ${tone.rowActive}` : "",
+                    props.collapsed ? "is-collapsed" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+                  const content = (
+                    <>
+                      {active ? (
+                        <span
+                          className={`shell-nav-accent ${tone.accent}`}
+                          aria-hidden="true"
+                        />
+                      ) : null}
                       <span
                         className={[
-                          "absolute inset-y-2 left-0 w-1 rounded-full",
-                          tone.accent,
+                          "shell-nav-icon",
+                          active ? tone.iconActive : tone.iconIdle,
                         ].join(" ")}
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                    <span
-                      className={[
-                        "inline-flex size-8 shrink-0 items-center justify-center rounded-[0.7rem]",
-                        active ? tone.iconActive : tone.iconIdle,
-                      ].join(" ")}
+                      >
+                        <NavIcon
+                          name={navIconKeyForHref(
+                            external ? "/products" : item.href,
+                          )}
+                          size={18}
+                        />
+                      </span>
+                      {!props.collapsed ? (
+                        <span className="shell-nav-label">{item.label}</span>
+                      ) : null}
+                    </>
+                  );
+                  return external ? (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      title={props.collapsed ? item.label : undefined}
+                      onClick={props.onNavigate}
+                      className={className}
                     >
-                      <NavIcon
-                        name={navIconKeyForHref(external ? "/products" : item.href)}
-                        size={18}
-                      />
-                    </span>
-                    {!props.collapsed ? (
-                      <span className="truncate">{item.label}</span>
-                    ) : null}
-                  </>
-                );
-                return (
-                  <li key={item.href}>
-                    {external ? (
-                      <a
-                        href={item.href}
-                        title={props.collapsed ? item.label : undefined}
-                        onClick={props.onNavigate}
-                        className={className}
-                      >
-                        {content}
-                      </a>
-                    ) : (
-                      <Link
-                        href={item.href}
-                        title={props.collapsed ? item.label : undefined}
-                        aria-current={active ? "page" : undefined}
-                        onClick={props.onNavigate}
-                        className={className}
-                      >
-                        {content}
-                      </Link>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+                      {content}
+                    </a>
+                  ) : (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={props.collapsed ? item.label : undefined}
+                      aria-current={active ? "page" : undefined}
+                      onClick={props.onNavigate}
+                      className={className}
+                    >
+                      {content}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
         );
       })}
     </div>
@@ -244,6 +232,8 @@ export function AppShell(props: {
   activeBranch: { id: string; name: string; code: string } | null;
   contextMode?: "membership" | "platform_admin" | "managed_org";
   shellMode?: "platform" | "customer_support";
+  /** Absolute Customer App handoff URL when supporting a customer org. */
+  customerAppHref?: string | null;
   canUsePlatformAdminMode?: boolean;
   canUseManagedOrgMode?: boolean;
   pageTitle?: string;
@@ -384,24 +374,6 @@ export function AppShell(props: {
                   </Button>
                 </SheetTrigger>
 
-                <div className="min-w-0 flex-1">
-                  <p
-                    className="truncate text-[length:var(--text-label)] font-semibold text-[var(--text-primary)]"
-                    title={
-                      props.pageTitle ??
-                      props.activeOrganization?.name ??
-                      TH.shellName
-                    }
-                  >
-                    {props.pageTitle ?? props.activeOrganization?.name ?? TH.shellName}
-                  </p>
-                  <p className="truncate text-[length:var(--text-caption)] text-[var(--primary)]">
-                    {props.activeOrganization?.name ?? TH.common.notFound}
-                    {" · "}
-                    {props.activeBranch?.name ?? TH.common.noBranch}
-                  </p>
-                </div>
-
                 <div className="desktop-context min-w-0 items-center">
                   <ContextSwitcher
                     organizations={props.organizations}
@@ -412,20 +384,21 @@ export function AppShell(props: {
                     activeBranchId={props.activeBranch?.id ?? null}
                     contextMode={props.contextMode}
                     shellMode={props.shellMode}
+                    customerAppHref={props.customerAppHref}
                     canUsePlatformAdminMode={props.canUsePlatformAdminMode}
                   />
                 </div>
 
-                <div className="shell-user-chip flex shrink-0 items-center gap-1.5 rounded-[0.9rem] border border-[var(--page-header-border)] bg-white/80 p-1 pl-1.5 shadow-[var(--shadow-xs)] sm:gap-2 sm:pl-2">
+                <div className="shell-user-chip ml-auto flex min-w-0 flex-1 items-center justify-between gap-2 rounded-[0.9rem] border border-[var(--page-header-border)] bg-white/80 p-1 pl-2 shadow-[var(--shadow-xs)] sm:flex-none sm:justify-start sm:gap-2">
                   <div
-                    className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#d97706] to-[#92400e] text-[0.65rem] font-bold text-white shadow-[0_4px_10px_rgba(180,83,9,0.28)] sm:size-9 sm:text-[0.7rem]"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--gs-amber-accent)] to-[var(--primary-hover)] text-[0.65rem] font-bold text-white shadow-[var(--shadow-glow)] sm:size-9 sm:text-[0.7rem]"
                     aria-hidden="true"
                   >
                     {initials || "GS"}
                   </div>
-                  <div className="hidden min-w-0 max-w-[10rem] text-left sm:block lg:max-w-[14rem]">
+                  <div className="min-w-0 flex-1 text-left sm:flex-none sm:max-w-[10rem] lg:max-w-[14rem]">
                     <p
-                      className="truncate text-[length:var(--text-label)] font-semibold"
+                      className="truncate text-[length:var(--text-label)] font-semibold leading-tight"
                       title={props.displayName}
                     >
                       {props.displayName}
@@ -440,8 +413,7 @@ export function AppShell(props: {
                   <LogoutButton className="shell-logout-trigger shrink-0" />
                 </div>
               </div>
-
-              <div className="tablet-context border-t border-[var(--page-header-border)] py-2">
+              <div className="mobile-context border-t border-[var(--page-header-border)] py-2">
                 <ContextSwitcher
                   organizations={props.organizations}
                   platformAdminOrganizations={adminOrganizations}
@@ -451,6 +423,7 @@ export function AppShell(props: {
                   activeBranchId={props.activeBranch?.id ?? null}
                   contextMode={props.contextMode}
                   shellMode={props.shellMode}
+                  customerAppHref={props.customerAppHref}
                   canUsePlatformAdminMode={props.canUsePlatformAdminMode}
                 />
               </div>
@@ -491,7 +464,7 @@ export function AppShell(props: {
             <div className="mobile-navigation-footer border-t p-4 text-[length:var(--text-helper)]">
               <div className="flex items-center gap-3 rounded-[0.9rem] border border-[var(--page-header-border)] bg-white/80 px-3 py-2.5 shadow-[var(--shadow-xs)]">
                 <div
-                  className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#d97706] to-[#92400e] text-[0.75rem] font-bold text-white shadow-[0_4px_12px_rgba(180,83,9,0.28)]"
+                  className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--gs-amber-accent)] to-[var(--primary-hover)] text-[0.75rem] font-bold text-white shadow-[var(--shadow-glow)]"
                   aria-hidden="true"
                 >
                   {initials || "GS"}

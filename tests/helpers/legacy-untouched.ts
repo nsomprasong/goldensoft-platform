@@ -43,6 +43,19 @@ export function assertResidentLegacyUntouched(testDirname: string): void {
       );
       return;
     }
+    if (
+      err &&
+      typeof err === "object" &&
+      "stderr" in err &&
+      typeof (err as { stderr?: unknown }).stderr === "string" &&
+      String((err as { stderr?: string }).stderr).includes("dubious ownership")
+    ) {
+      assert.equal(
+        fs.existsSync(path.join(legacyRoot, ".platform-mvp-touched")),
+        false,
+      );
+      return;
+    }
     throw err;
   }
 }

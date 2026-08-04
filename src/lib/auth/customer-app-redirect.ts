@@ -62,10 +62,10 @@ export async function resolveCustomerAppEntryUrl(
   const origin = getPreferredCustomerAppOrigin(process.env, requestHost);
   if (!origin) return null;
 
+  // Always land in the Customer App shell. Multi-org / multi-branch users
+  // switch from the header ContextSwitcher — no full-page pickers after login.
   let nextPath = "/";
-  if (input.memberships.length > 1) {
-    nextPath = "/select-organization";
-  } else if (input.memberships.length === 1) {
+  if (input.memberships.length >= 1) {
     const orgId = input.memberships[0]!.organizationId;
     const entitlements = await listEntitlementsForOrganization(db, orgId);
     const inactiveSub = new Set(["SUSPENDED", "CANCELLED", "EXPIRED"]);

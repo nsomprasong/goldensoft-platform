@@ -91,6 +91,8 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
       : null,
     memberships: bundle.memberships,
     claimedOrganizationId: cookie?.organizationId ?? null,
+    claimedBranchId: cookie?.branchId ?? null,
+    branchSelected: cookie?.branchSelected,
     platformRoles: bundle.platformRoles,
     managedOrganizationIds,
     contextMode: cookie?.mode,
@@ -109,7 +111,8 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     // Platform staff are not organization members. Let them into the shell when
     // there is nothing to pick yet (SUPER_ADMIN always; SALES/ACCOUNT_MANAGER
     // with an empty customer portfolio so they can create the first org).
-    // Staff who already have managed customers must pick one first.
+    // Staff who already have managed customers must pick one first (full-page
+    // picker — they have no membership header ContextSwitcher).
     const canContinueWithoutOrg =
       bundle.memberships.length === 0 &&
       (bundle.platformRoles.includes("SUPER_ADMIN") ||
@@ -119,14 +122,17 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
       redirect("/select-organization");
     }
   }
+  // select_branch is unused for customer login — org/branch switch happens in
+  // the header ContextSwitcher after entering the shell.
 
   if (decision.kind === "ready") {
     const needsOrgBootstrap =
       !cookie || cookie.organizationId !== decision.organizationId;
 
+    // Bind cookie for any ready membership context (single- or multi-org) so
+    // the shell opens with header switchers — no full-page pickers.
     if (
       needsOrgBootstrap &&
-      decision.autoSelected &&
       cookie?.mode !== "platform_admin" &&
       cookie?.mode !== "managed_org"
     ) {

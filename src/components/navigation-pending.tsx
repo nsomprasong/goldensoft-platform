@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   NAVIGATION_DONE_EVENT,
@@ -48,7 +48,7 @@ export function NavigationPending() {
   const safetyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeRef = useRef(false);
 
-  const clearPending = () => {
+  const clearPending = useCallback(() => {
     activeRef.current = false;
     if (overlayTimer.current) {
       clearTimeout(overlayTimer.current);
@@ -60,9 +60,9 @@ export function NavigationPending() {
     }
     setBarVisible(false);
     setOverlayVisible(false);
-  };
+  }, []);
 
-  const startPending = () => {
+  const startPending = useCallback(() => {
     if (activeRef.current) return;
     activeRef.current = true;
     setBarVisible(true);
@@ -75,11 +75,11 @@ export function NavigationPending() {
     safetyTimer.current = setTimeout(() => {
       clearPending();
     }, SAFETY_CLEAR_MS);
-  };
+  }, [clearPending]);
 
   useEffect(() => {
     clearPending();
-  }, [pathname, searchParams]);
+  }, [clearPending, pathname, searchParams]);
 
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
@@ -127,7 +127,7 @@ export function NavigationPending() {
       if (overlayTimer.current) clearTimeout(overlayTimer.current);
       if (safetyTimer.current) clearTimeout(safetyTimer.current);
     };
-  }, []);
+  }, [clearPending, startPending]);
 
   if (!barVisible && !overlayVisible) return null;
 

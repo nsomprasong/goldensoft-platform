@@ -140,15 +140,17 @@ describe("Phase 6 design tokens", () => {
     assert.match(shell, /<main className="page-container flex-1">/);
   });
 
-  it("uses an intentional two-row tablet header until 1200px", () => {
-    const css = read("src/app/globals.css");
+  it("uses one responsive context row below desktop width", () => {
+    const css = `${read("src/app/globals.css")}\n${read("src/app/shell-responsive.css")}`;
     const shell = read("src/components/app-shell.tsx");
     assert.match(shell, /desktop-context/);
-    assert.match(shell, /tablet-context/);
+    assert.match(shell, /mobile-context/);
     assert.match(shell, /desktop-sidebar/);
     assert.match(shell, /navigation-trigger/);
     assert.match(css, /\.desktop-context\s*\{\s*display:\s*none/);
-    assert.match(css, /\.tablet-context\s*\{\s*display:\s*block/);
+    assert.match(css, /\.mobile-context\s*\{\s*display:\s*block/);
+    assert.match(css, /\.mobile-context \.context-switcher\s*\{/);
+    assert.match(css, /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
     assert.match(css, /@media \(min-width: 1200px\)/);
     assert.doesNotMatch(shell, /lg:flex|lg:hidden/);
     assert.doesNotMatch(shell, /padding-top|pt-\[/);
@@ -157,10 +159,10 @@ describe("Phase 6 design tokens", () => {
   it("keeps safe-area padding on the outer header only", () => {
     const css = read("src/app/globals.css");
     const pageContainer = css.match(
-      /\.page-container\s*\{([\s\S]*?)\n\}/,
+      /\.page-container\s*\{([\s\S]*?)\}/,
     )?.[1];
     const shellHeader = css.match(
-      /\.shell-header-inner\s*\{([\s\S]*?)\n\}/,
+      /\.shell-header-inner\s*\{([\s\S]*?)\}/,
     )?.[1];
     assert.ok(pageContainer);
     assert.ok(shellHeader);
@@ -308,7 +310,7 @@ describe("Phase 6 shared UI components", () => {
 
   it("keeps StatCard visual chrome outside breakpoint media queries", () => {
     const css = read("src/app/globals.css");
-    const base = css.match(/\.stat-card\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+    const base = css.match(/\.stat-card\s*\{([\s\S]*?)\}/)?.[1] ?? "";
     assert.match(base, /padding:\s*20px/);
     assert.match(base, /border:\s*1px solid/);
     assert.match(base, /border-radius:/);
@@ -349,10 +351,11 @@ describe("Phase 6 shared UI components", () => {
     assert.match(css, /@container dashboard-summary \(min-width: 560px\)/);
     assert.match(css, /@container dashboard-summary \(min-width: 960px\)/);
 
-    const shellOnly = css.match(
-      /@media \(min-width: 1200px\)\s*\{([\s\S]*?)\n\}/,
-    )?.[1];
-    assert.ok(shellOnly);
+    const shellStart = css.indexOf("@media (min-width: 1200px)");
+    const wideStart = css.indexOf("@media (min-width: 1280px)", shellStart);
+    assert.ok(shellStart >= 0);
+    assert.ok(wideStart > shellStart);
+    const shellOnly = css.slice(shellStart, wideStart);
     assert.match(shellOnly, /\.desktop-sidebar/);
     assert.doesNotMatch(shellOnly, /\.stat-card/);
     assert.doesNotMatch(shellOnly, /\.dashboard-stat-grid/);

@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 
 import { checkAdditiveMigrationSql } from "../src/lib/db/migration-safety";
 import { canAccessOrganization, decideAccess } from "../src/lib/auth/access";
+import { pathAfterOrganizationSwitch } from "../src/lib/navigation/stay-on-page";
 import {
   PLATFORM_PERMISSIONS,
   permissionsForRoles,
@@ -233,6 +234,22 @@ describe("Staff portfolio UI has no fake buttons", () => {
     const src = read("src/components/staff-portfolio-form.tsx");
     assert.match(src, /fetch\("\/api\/platform\/staff-organization-assignments"/);
     assert.doesNotMatch(src, /onClick=\{?\(\)\s*=>\s*\{?\s*\}\}?/);
+  });
+
+  it("context switcher stays on the current page after org/branch change", () => {
+    const src = read("src/components/context-switcher.tsx");
+    assert.match(src, /pathAfterOrganizationSwitch/);
+    assert.match(src, /router\.refresh\(\)/);
+    assert.doesNotMatch(src, /destinationForOrg/);
+    assert.equal(pathAfterOrganizationSwitch("/users", "org-b"), null);
+    assert.equal(
+      pathAfterOrganizationSwitch("/organizations/org-a/branches", "org-b"),
+      "/organizations/org-b/branches",
+    );
+    assert.equal(
+      pathAfterOrganizationSwitch("/organizations/org-a", "org-a"),
+      null,
+    );
   });
 
   it("context switcher only offers managed orgs the staff member is actually assigned", () => {

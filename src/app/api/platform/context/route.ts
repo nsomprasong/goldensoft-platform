@@ -25,6 +25,9 @@ import { prisma } from "@/lib/prisma";
 const switchSchema = z.object({
   organizationId: z.string().uuid(),
   branchId: z.string().uuid().nullable().optional(),
+  employeeId: z.string().uuid().nullable().optional(),
+  /** Explicitly finish the branch-selection step (including 「ทุกสาขา」). */
+  branchSelected: z.boolean().optional(),
   mode: z.enum(["membership", "platform_admin", "managed_org"]).optional(),
 });
 
@@ -225,7 +228,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { organizationId, branchId = null } = parsed.data;
+  const { organizationId, branchId = null, employeeId = null } = parsed.data;
+  const previous = decodeContextCookie(
+    request.cookies.get(COOKIE_NAME)?.value,
+  );
+  let branchSelected = false;
+  if (parsed.data.branchSelected === true || branchId != null) {
+    branchSelected = true;
+  } else if (parsed.data.branchSelected === false) {
+    branchSelected = false;
+  } else if (
+    previous?.organizationId === organizationId &&
+    previous.branchSelected === true
+  ) {
+    branchSelected = true;
+  }
   const isSuper = bundle.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN);
   const requestedPlatformAdmin = parsed.data.mode === "platform_admin";
   if (requestedPlatformAdmin && !isSuper) {
@@ -308,10 +325,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const previous = decodeContextCookie(
-    request.cookies.get(COOKIE_NAME)?.value,
-  );
-
   const mode = platformAdminAccess
     ? "platform_admin"
     : managedOrgAccess
@@ -320,6 +333,8 @@ export async function POST(request: NextRequest) {
   const encoded = encodeContextCookie({
     organizationId,
     branchId,
+    employeeId,
+    branchSelected,
     mode,
   });
 
@@ -361,6 +376,18 @@ export async function POST(request: NextRequest) {
     void writeAuditLog(prisma, auditPayload);
   });
 
+  const availableBranches =
+    membership?.branches ??
+    (resolvedBranch
+      ? [
+          {
+            id: resolvedBranch.id,
+            name: resolvedBranch.name,
+            code: resolvedBranch.code,
+          },
+        ]
+      : []);
+
   const response = NextResponse.json({
     ok: true,
     message: TH.common.saved,
@@ -376,6 +403,11 @@ export async function POST(request: NextRequest) {
           code: resolvedBranch.code,
         }
       : null,
+    availableBranches,
+    needsBranchSelection:
+      !branchSelected &&
+      availableBranches.length > 1 &&
+      mode === "membership",
     statusHint: MASTER.organizationStatus.ACTIVE,
   });
 

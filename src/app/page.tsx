@@ -234,7 +234,7 @@ export default async function DashboardPage() {
             className="dashboard-hero-accent pointer-events-none absolute bottom-0 left-0 h-1 w-full"
             aria-hidden="true"
           />
-          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="relative flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
               <div
                 className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[1rem] bg-gradient-to-br from-white to-[var(--primary-soft)] text-[var(--primary)] shadow-[var(--shadow-md)] ring-1 ring-[var(--page-header-border)]"

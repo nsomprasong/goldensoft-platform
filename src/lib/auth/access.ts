@@ -20,6 +20,10 @@ export type ProfileAccessInput = {
   };
   memberships: MembershipSummary[];
   claimedOrganizationId?: string | null;
+  /** Active branch from context cookie (null = not chosen / all-branches mode). */
+  claimedBranchId?: string | null;
+  /** Explicit branch step completed (see context cookie branchSelected). */
+  branchSelected?: boolean;
   platformRoles?: string[];
   /** Customer organizations assigned to this staff member via the portfolio (Phase 1). */
   managedOrganizationIds?: string[];
@@ -35,6 +39,12 @@ export type AccessDecision =
   | {
       kind: "select_organization";
       organizations: Array<{ id: string; name: string }>;
+    }
+  | {
+      kind: "select_branch";
+      organizationId: string;
+      organizationName: string;
+      branches: Array<{ id: string; name: string; code: string }>;
     }
   | {
       kind: "ready";
@@ -171,7 +181,11 @@ export function decideAccess(input: ProfileAccessInput): AccessDecision {
       organizationId: org.organizationId,
       autoSelected: true,
       branches: org.branches,
-      autoBranchId,
+      autoBranchId:
+        input.claimedBranchId &&
+        org.branches.some((b) => b.id === input.claimedBranchId)
+          ? input.claimedBranchId
+          : autoBranchId,
     };
   }
 
@@ -185,7 +199,30 @@ export function decideAccess(input: ProfileAccessInput): AccessDecision {
       organizationId: org.organizationId,
       autoSelected: false,
       branches: org.branches,
-      autoBranchId,
+      autoBranchId:
+        input.claimedBranchId &&
+        org.branches.some((b) => b.id === input.claimedBranchId)
+          ? input.claimedBranchId
+          : autoBranchId,
+    };
+  }
+
+  // Multi-org without a claimed cookie: still enter the shell. Pick the first
+  // membership so header ContextSwitcher can finish org/branch selection.
+  if (activeOrgs.length > 1) {
+    const org = activeOrgs[0]!;
+    const autoBranchId =
+      org.branches.length === 1 ? org.branches[0]!.id : null;
+    return {
+      kind: "ready",
+      organizationId: org.organizationId,
+      autoSelected: false,
+      branches: org.branches,
+      autoBranchId:
+        input.claimedBranchId &&
+        org.branches.some((b) => b.id === input.claimedBranchId)
+          ? input.claimedBranchId
+          : autoBranchId,
     };
   }
 

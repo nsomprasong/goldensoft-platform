@@ -47,7 +47,7 @@ function RoleCard(props: {
   const content = (
     <div className="flex min-w-0 items-start gap-3">
       <span
-        className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[#fde68a] bg-[#fffbeb] text-[#b45309]"
+        className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--warning-border)] bg-[var(--warning-soft)] text-[var(--primary)]"
         aria-hidden="true"
       >
         <ShieldCheck className="size-5" />

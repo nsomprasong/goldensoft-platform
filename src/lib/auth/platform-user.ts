@@ -15,6 +15,7 @@ export type PlatformUserBundle = {
   profile: null | {
     id: string;
     email: string;
+    phone: string | null;
     displayName: string;
     statusCode: string;
   };
@@ -47,6 +48,7 @@ async function loadPlatformUserBundleUncached(
           select: {
             id: true,
             email: true,
+            phone: true,
             displayName: true,
             status: { select: { code: true } },
           },
@@ -205,6 +207,7 @@ async function loadPlatformUserBundleUncached(
     profile: {
       id: profile.id,
       email: profile.email,
+      phone: profile.phone ?? null,
       displayName: profile.displayName,
       statusCode: profile.status.code,
     },

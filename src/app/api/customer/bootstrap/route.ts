@@ -36,6 +36,7 @@ const responseSchema = z.object({
     .object({
       displayName: z.string(),
       email: z.string(),
+      phone: z.string().nullable().optional(),
       statusCode: z.string(),
     })
     .nullable(),
@@ -174,7 +175,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(cachedBootstrap);
   }
 
-  const organizationId =
+  let organizationId =
     cookie?.organizationId ??
     (bundle.memberships.length === 1
       ? bundle.memberships[0]!.organizationId
@@ -186,6 +187,31 @@ export async function GET(request: NextRequest) {
     organizationId &&
     bundle.memberships.length === 1
   ) {
+    persistContextCookie = true;
+  }
+
+  // Multi-org: restore last organization so login opens the shell with the
+  // header ContextSwitcher — no full-page org picker.
+  if (!organizationId && bundle.profile && bundle.memberships.length > 1) {
+    const preference = await prisma.userPreference.findUnique({
+      where: { userProfileId: bundle.profile.id },
+      select: { lastOrganizationId: true },
+    });
+    if (
+      preference?.lastOrganizationId &&
+      bundle.memberships.some(
+        (m) => m.organizationId === preference.lastOrganizationId,
+      )
+    ) {
+      organizationId = preference.lastOrganizationId;
+      persistContextCookie = true;
+    }
+  }
+
+  // First-time multi-org with no preference: pick first membership so the user
+  // lands in the shell and can switch from the header.
+  if (!organizationId && bundle.memberships.length > 1) {
+    organizationId = bundle.memberships[0]!.organizationId;
     persistContextCookie = true;
   }
 
@@ -379,6 +405,7 @@ export async function GET(request: NextRequest) {
       ? {
           displayName: bundle.profile.displayName,
           email: bundle.profile.email,
+          phone: bundle.profile.phone ?? null,
           statusCode: bundle.profile.statusCode,
         }
       : null,
@@ -439,6 +466,9 @@ export async function GET(request: NextRequest) {
       encodeContextCookie({
         organizationId,
         branchId,
+        branchSelected:
+          branchId != null ||
+          (membership != null && membership.branches.length <= 1),
         mode: "membership",
       }),
       contextCookieOptions(),

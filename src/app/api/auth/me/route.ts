@@ -19,6 +19,7 @@ const meResponseSchema = z.object({
     .object({
       displayName: z.string(),
       email: z.string(),
+      phone: z.string().nullable().optional(),
       statusCode: z.string(),
     })
     .nullable(),
@@ -91,6 +92,7 @@ export async function GET(request: NextRequest) {
       ? {
           displayName: bundle.profile.displayName,
           email: bundle.profile.email,
+          phone: bundle.profile.phone ?? null,
           statusCode: bundle.profile.statusCode,
         }
       : null,
