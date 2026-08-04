@@ -2,7 +2,10 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { filterNavForRoles, PLATFORM_NAV } from "@/lib/auth/access";
-import { resolvePlatformShellMode } from "@/lib/auth/shell-mode";
+import {
+  buildCustomerSupportNav,
+  resolvePlatformShellMode,
+} from "@/lib/auth/shell-mode";
 import { TH } from "@/lib/i18n/th";
 
 /**
@@ -71,12 +74,24 @@ async function PlatformShellInner(props: {
   permissions?: string[];
 }) {
   const shellMode = resolvePlatformShellMode(props.activeOrganization);
+  const customerAppItem =
+    shellMode === "customer_support" && props.activeOrganization
+      ? buildCustomerSupportNav({
+          organizationId: props.activeOrganization.id,
+          platformRoles: props.platformRoles,
+          organizationRoles: props.organizationRoles,
+          permissions: props.permissions,
+        }).find((item) => item.label === TH.nav.openCustomerApp)
+      : undefined;
+  const navSource = customerAppItem
+    ? [PLATFORM_NAV[0], customerAppItem, ...PLATFORM_NAV.slice(1)]
+    : PLATFORM_NAV;
 
   const nav = filterNavForRoles({
     platformRoles: props.platformRoles,
     organizationRoles: props.organizationRoles,
     permissions: props.permissions,
-    items: PLATFORM_NAV,
+    items: navSource,
   }).map((item) => {
     if (item.href === "/branches" && props.activeOrganization) {
       return {
@@ -102,6 +117,7 @@ async function PlatformShellInner(props: {
       activeBranch={props.activeBranch}
       contextMode={props.contextMode ?? "membership"}
       shellMode={shellMode}
+      customerAppHref={customerAppItem?.href ?? null}
       pageTitle={props.pageTitle}
       canUsePlatformAdminMode={props.platformRoles.includes("SUPER_ADMIN")}
       canUseManagedOrgMode={props.canUseManagedOrgMode}

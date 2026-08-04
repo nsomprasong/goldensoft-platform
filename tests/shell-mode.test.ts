@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -59,5 +60,12 @@ describe("buildCustomerSupportNav", () => {
     assert.ok(nav.some((item) => item.href === "/organizations/org-2"));
     assert.ok(nav.some((item) => item.href === "/organizations/org-2/branches"));
     assert.ok(!nav.some((item) => item.href === "/settings"));
+  });
+
+  it("wires the customer app entry into PlatformShell support mode", () => {
+    const source = readFileSync("src/components/platform-shell.tsx", "utf8");
+    assert.match(source, /buildCustomerSupportNav/);
+    assert.match(source, /item\.label === TH\.nav\.openCustomerApp/);
+    assert.match(source, /customerAppHref=\{customerAppItem\?\.href \?\? null\}/);
   });
 });
