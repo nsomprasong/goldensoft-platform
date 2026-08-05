@@ -8,6 +8,8 @@ import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { membershipOrganizationOptions } from "@/lib/auth/shell-props";
 import { TH } from "@/lib/i18n/th";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions/codes";
+import { loadPermissionRegistry } from "@/lib/permissions/registry";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +35,7 @@ export default async function NewCustomRolePage() {
       </PlatformShell>
     );
   }
+  const permissionCatalog = await loadPermissionRegistry(prisma, { organizationId: ctx.activeOrganization.id });
 
   return (
     <PlatformShell {...shellProps}>
@@ -52,6 +55,7 @@ export default async function NewCustomRolePage() {
       <CustomRoleForm
         mode="create"
         organizationId={ctx.activeOrganization.id}
+        permissionCatalog={permissionCatalog}
       />
     </PlatformShell>
   );

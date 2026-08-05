@@ -15,6 +15,7 @@ import {
 import { IconTextButton } from "@/components/ui/labeled-icon-button";
 import { Input } from "@/components/ui/input";
 import { TH } from "@/lib/i18n/th";
+import type { PermissionRegistryItem } from "@/lib/permissions/registry";
 
 export function CustomRoleForm(props: {
   /** Null for platform-wide system / platform roles. */
@@ -27,6 +28,7 @@ export function CustomRoleForm(props: {
   allowSystemPermissionEdit?: boolean;
   /** Platform SUPER_ADMIN role itself — permissions are locked (always all). */
   lockPermissions?: boolean;
+  permissionCatalog?: PermissionRegistryItem[];
   initial?: {
     code: string;
     nameTh: string;
@@ -57,15 +59,18 @@ export function CustomRoleForm(props: {
   const metadataReadOnly = isSystem || roleKind === "platform";
 
   const grouped = useMemo(() => {
-    const assignablePerms =
-      roleKind === "platform"
+    const assignablePerms = props.permissionCatalog?.length
+      ? props.permissionCatalog.map((item) => item.code)
+      : roleKind === "platform"
         ? Object.values(PLATFORM_PERMISSIONS)
         : ORGANIZATION_ASSIGNABLE_PERMISSIONS;
     const q = query.trim().toLowerCase();
-    const map = new Map<string, PlatformPermission[]>();
+    const map = new Map<string, string[]>();
     for (const code of assignablePerms) {
-      const label = PLATFORM_PERMISSION_LABELS[code];
-      const desc = PLATFORM_PERMISSION_DESCRIPTIONS[code];
+      const legacyCode = code as PlatformPermission;
+      const registry = props.permissionCatalog?.find((item) => item.code === code);
+      const label = registry?.menuNameTh ?? PLATFORM_PERMISSION_LABELS[legacyCode] ?? code;
+      const desc = registry?.descriptionTh ?? PLATFORM_PERMISSION_DESCRIPTIONS[legacyCode] ?? "";
       if (
         q &&
         !label.toLowerCase().includes(q) &&
@@ -74,25 +79,39 @@ export function CustomRoleForm(props: {
       ) {
         continue;
       }
-      const group = permissionResourceGroup(code);
+      const group = registry?.categoryTh ?? permissionResourceGroup(legacyCode);
       const list = map.get(group) ?? [];
       list.push(code);
       map.set(group, list);
     }
     return [...map.entries()];
-  }, [query, roleKind]);
+  }, [props.permissionCatalog, query, roleKind]);
 
   function toggle(code: string) {
     if (permissionsReadOnly) return;
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(code)) next.delete(code);
-      else next.add(code);
+      if (next.has(code)) {
+        next.delete(code);
+        const item = props.permissionCatalog?.find((row) => row.code === code);
+        if (item?.action === "read") {
+          for (const sibling of props.permissionCatalog ?? []) {
+            if (sibling.productCode === item.productCode && sibling.menuCode === item.menuCode) next.delete(sibling.code);
+          }
+        }
+      } else {
+        next.add(code);
+        const item = props.permissionCatalog?.find((row) => row.code === code);
+        if (item && item.action !== "read") {
+          const read = props.permissionCatalog?.find((row) => row.productCode === item.productCode && row.menuCode === item.menuCode && row.action === "read");
+          if (read) next.add(read.code);
+        }
+      }
       return next;
     });
   }
 
-  function toggleGroup(codes: PlatformPermission[]) {
+  function toggleGroup(codes: string[]) {
     if (permissionsReadOnly) return;
     setSelected((prev) => {
       const next = new Set(prev);
@@ -229,9 +248,16 @@ export function CustomRoleForm(props: {
 
       <section className="card grid gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-[length:var(--text-section)] font-semibold">
-            สิทธิ์ของบทบาท
-          </h2>
+          <div>
+            <h2 className="text-[length:var(--text-section)] font-semibold">สิทธิ์การใช้งาน</h2>
+            <p className="text-[length:var(--text-caption)] text-[var(--text-muted)]">เลือกแล้ว {selected.size} สิทธิ์</p>
+          </div>
+          {!permissionsReadOnly ? (
+            <div className="flex gap-2">
+              <button type="button" className="btn btn-sm" onClick={() => setSelected(new Set((props.permissionCatalog ?? []).map((item) => item.code)))}>เลือกทั้งหมด</button>
+              <button type="button" className="btn btn-sm" onClick={() => setSelected(new Set())}>ยกเลิกทั้งหมด</button>
+            </div>
+          ) : null}
           <Input
             className="max-w-xs"
             placeholder="ค้นหาสิทธิ์..."
@@ -266,10 +292,10 @@ export function CustomRoleForm(props: {
                     />
                     <span>
                       <span className="block font-medium">
-                        {PLATFORM_PERMISSION_LABELS[perm]}
+                        {props.permissionCatalog?.find((item) => item.code === perm)?.menuNameTh ?? PLATFORM_PERMISSION_LABELS[perm as PlatformPermission] ?? perm}
                       </span>
                       <span className="block text-[length:var(--text-caption)] text-[var(--text-secondary)]">
-                        {PLATFORM_PERMISSION_DESCRIPTIONS[perm]}
+                        {props.permissionCatalog?.find((item) => item.code === perm)?.actionNameTh ?? PLATFORM_PERMISSION_DESCRIPTIONS[perm as PlatformPermission] ?? "สิทธิ์การใช้งาน"}
                       </span>
                     </span>
                   </label>

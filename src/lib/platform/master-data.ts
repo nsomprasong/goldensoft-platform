@@ -41,6 +41,9 @@ type MasterDelegate = {
   findUnique: (args: {
     where: { id?: string; code?: string };
   }) => Promise<MasterRow | null>;
+  findFirst?: (args: {
+    where: { code: string; organizationId?: null };
+  }) => Promise<MasterRow | null>;
   update: (args: {
     where: { id: string };
     data: Partial<{
@@ -64,7 +67,10 @@ export async function getMasterByCode(
   table: MasterTableName,
   code: string,
 ): Promise<MasterRow | null> {
-  const row = await delegate(db, table).findUnique({ where: { code } });
+  const masterDelegate = delegate(db, table);
+  const row = table === "organizationRole" && masterDelegate.findFirst
+    ? await masterDelegate.findFirst({ where: { code, organizationId: null } })
+    : await masterDelegate.findUnique({ where: { code } });
   return row;
 }
 

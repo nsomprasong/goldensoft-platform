@@ -7,6 +7,7 @@ import { AccessDenied, PageHeader } from "@/components/ui/admin-ui";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
 import { membershipOrganizationOptions } from "@/lib/auth/shell-props";
 import { TH } from "@/lib/i18n/th";
+import { loadPermissionRegistry } from "@/lib/permissions/registry";
 import { MASTER } from "@/lib/platform/master-codes";
 import { displayPermissionCodesForPlatformRole } from "@/lib/platform/platform-roles";
 import { prisma } from "@/lib/prisma";
@@ -57,6 +58,7 @@ export default async function EditPlatformRolePage({ params }: Props) {
     code: role.code,
     dbPermissionCodes: role.permissions.map((p) => p.permission.code),
   });
+  const permissionCatalog = await loadPermissionRegistry(prisma, { platform: true });
 
   return (
     <PlatformShell {...shellProps}>
@@ -76,6 +78,7 @@ export default async function EditPlatformRolePage({ params }: Props) {
         organizationId={null}
         allowSystemPermissionEdit={!isSuperRole}
         lockPermissions={isSuperRole}
+        permissionCatalog={permissionCatalog}
         initial={{
           code: role.code,
           nameTh: role.nameTh,

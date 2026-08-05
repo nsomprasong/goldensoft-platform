@@ -47,3 +47,6 @@ yarn-error.log*
 
 # prisma
 /src/generated
+
+# Never commit per-account Auth reset evidence.
+/docs/reset-evidence/*preserved-auth.json

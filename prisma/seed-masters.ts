@@ -85,6 +85,35 @@ export async function seedAllMasters(prisma: PrismaClient) {
 
   const pairs: Array<[keyof PrismaClient, MasterSeed[]]> = [
     [
+      "roleType",
+      [
+        { code: "PLATFORM", nameTh: "บทบาทระดับแพลตฟอร์ม", nameEn: "Platform role", sortOrder: 10 },
+        { code: "SYSTEM_STANDARD", nameTh: "บทบาทมาตรฐาน", nameEn: "System standard role", sortOrder: 20 },
+        { code: "ORGANIZATION_CUSTOM", nameTh: "บทบาทขององค์กร", nameEn: "Organization custom role", sortOrder: 30 },
+      ],
+    ],
+    [
+      "roleStatus",
+      [
+        { code: "ACTIVE", nameTh: "เปิดใช้งาน", nameEn: "Active", sortOrder: 10 },
+        { code: "INACTIVE", nameTh: "ปิดใช้งาน", nameEn: "Inactive", sortOrder: 20 },
+      ],
+    ],
+    [
+      "permissionAction",
+      ([
+        ["read", "ดูข้อมูล", "Read"], ["create", "เพิ่มข้อมูล", "Create"], ["update", "แก้ไขข้อมูล", "Update"],
+        ["delete", "ลบข้อมูล", "Delete"], ["manage", "จัดการ", "Manage"], ["approve", "อนุมัติ", "Approve"],
+        ["export", "ส่งออกข้อมูล", "Export"], ["invite", "เชิญผู้ใช้งาน", "Invite"], ["reset_password", "รีเซ็ตรหัสผ่าน", "Reset password"],
+        ["configure", "ตั้งค่าระบบ", "Configure"], ["assign", "กำหนด", "Assign"], ["assign_privileged", "กำหนดบทบาทสำคัญ", "Assign privileged"],
+        ["calculate", "คำนวณ", "Calculate"], ["deactivate", "ปิดใช้งาน", "Deactivate"], ["link_user", "เชื่อมผู้ใช้งาน", "Link user"],
+        ["lock", "ล็อก", "Lock"], ["mark_paid", "บันทึกว่าจ่ายแล้ว", "Mark paid"], ["override", "แก้ไขแทน", "Override"],
+        ["publish", "เผยแพร่", "Publish"], ["review", "ตรวจสอบ", "Review"], ["self", "ใช้งานข้อมูลของตนเอง", "Self service"],
+        ["adjust", "ปรับปรุง", "Adjust"], ["record", "บันทึก", "Record"], ["suspend", "ระงับ", "Suspend"],
+        ["password_reset", "รีเซ็ตรหัสผ่าน", "Password reset"],
+      ] as Array<[string, string, string]>).map(([code, nameTh, nameEn], index) => ({ code, nameTh, nameEn, sortOrder: (index + 1) * 10 })),
+    ],
+    [
       "userProfileStatus",
       [
         { code: "ACTIVE", nameTh: "ใช้งาน", nameEn: "Active", sortOrder: 1 },

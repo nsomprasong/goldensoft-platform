@@ -67,7 +67,7 @@ function RoleCard(props: {
           {props.subtitle}
         </p>
         {props.meta ? (
-          <p className="mt-1 font-mono text-[length:var(--text-caption)] text-[var(--text-muted)]">
+          <p className="mt-1 text-[length:var(--text-caption)] text-[var(--text-muted)]">
             {props.meta}
           </p>
         ) : null}
@@ -137,7 +137,7 @@ export default async function RolesPage() {
   const [platformRoles, organizationRoles] = await Promise.all([
     ctx.activeOrganization
       ? Promise.resolve([])
-      : prisma.platformRole.findMany({ orderBy: { sortOrder: "asc" } }),
+      : prisma.platformRole.findMany({ orderBy: { sortOrder: "asc" }, include: { _count: { select: { assignments: true } } } }),
     prisma.organizationRole.findMany({
       where: {
         OR: [
@@ -148,11 +148,22 @@ export default async function RolesPage() {
         ],
       },
       orderBy: [{ isSystem: "desc" }, { isActive: "desc" }, { sortOrder: "asc" }],
+      include: { _count: { select: { assignments: true } } },
     }),
   ]);
   const isSuper = ctx.bundle.platformRoles.includes(
     MASTER.platformRole.SUPER_ADMIN,
   );
+  const positionCountRows = ctx.activeOrganization
+    ? await prisma.$queryRaw<Array<{ role_id: string; count: bigint }>>`
+        SELECT pr.organization_role_id::text AS role_id, COUNT(*)::bigint AS count
+        FROM hr.position_roles pr
+        JOIN hr.positions p ON p.id = pr.position_id
+        WHERE p.organization_id = ${ctx.activeOrganization.id}::uuid
+        GROUP BY pr.organization_role_id
+      `
+    : [];
+  const positionCounts = new Map(positionCountRows.map((row) => [row.role_id, Number(row.count)]));
   const inOrgContext = Boolean(ctx.activeOrganization);
   const permissionCodes = inOrgContext
     ? [...ORGANIZATION_ASSIGNABLE_PERMISSIONS]
@@ -194,8 +205,8 @@ export default async function RolesPage() {
                   href={isSuper ? `/roles/platform/${r.id}` : undefined}
                   title={labelRole(r.code)}
                   subtitle={r.nameTh}
-                  meta={isSuper ? r.code : undefined}
-                  badge="แพลตฟอร์ม"
+                  meta={`พนักงานที่ใช้บทบาท ${r._count.assignments} คน · ${r.isActive ? "เปิดใช้งาน" : "ปิดใช้งาน"} · แก้ไขล่าสุด ${new Intl.DateTimeFormat("th-TH", { dateStyle: "medium" }).format(r.updatedAt)}`}
+                  badge="บทบาทระดับแพลตฟอร์ม"
                   action={
                     isSuper ? (
                       <SoftEditLink
@@ -240,12 +251,12 @@ export default async function RolesPage() {
                   href={`/roles/${r.id}`}
                   title={r.nameTh || labelRole(r.code)}
                   subtitle={
-                    `${r.isSystem ? "บทบาทระบบ" : "บทบาทกำหนดเอง"}${
+                    `${r.isSystem ? "บทบาทมาตรฐาน · ใช้ได้ทุกองค์กร" : "บทบาทที่องค์กรสร้าง · ใช้เฉพาะองค์กรนี้"}${
                       r.isActive ? "" : " · ปิดใช้งาน"
                     }`
                   }
-                  meta={isSuper ? r.code : undefined}
-                  badge={r.isSystem ? "ระบบ" : "กำหนดเอง"}
+                  meta={`ตำแหน่งที่ผูก ${positionCounts.get(r.id) ?? 0} ตำแหน่ง · พนักงานที่ใช้บทบาท ${r._count.assignments} คน · ${r.isActive ? "เปิดใช้งาน" : "ปิดใช้งาน"} · แก้ไขล่าสุด ${new Intl.DateTimeFormat("th-TH", { dateStyle: "medium" }).format(r.updatedAt)}`}
+                  badge={r.isSystem ? "บทบาทมาตรฐาน" : "บทบาทขององค์กร"}
                   action={
                     canEditRole || canDeleteRole ? (
                       <div className="flex flex-wrap items-center justify-end gap-2">

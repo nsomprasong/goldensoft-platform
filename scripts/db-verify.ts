@@ -10,7 +10,7 @@ import {
 // +1 user_password_resets (0008), +1 staff_profiles (0009),
 // +1 platform_role_permissions (0012), +1 system_settings (0013).
 // 0011/0014 alter existing tables only.
-export const EXPECTED_PLATFORM_TABLE_COUNT = 69;
+export const EXPECTED_PLATFORM_TABLE_COUNT = 72;
 
 export const INVITATION_MIGRATION_NAME = "0003_user_invitations";
 

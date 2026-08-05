@@ -46,7 +46,13 @@ model PlatformRole {
 
   assignments PlatformRoleAssignment[]
   permissions PlatformRolePermission[]
+  roleTypeId  String?  @map("role_type_id") @db.Uuid
+  roleStatusId String? @map("role_status_id") @db.Uuid
+  roleType    RoleType? @relation(fields: [roleTypeId], references: [id], onDelete: Restrict)
+  roleStatus  RoleStatus? @relation(fields: [roleStatusId], references: [id], onDelete: Restrict)
 
+  @@index([roleTypeId])
+  @@index([roleStatusId])
   @@map("platform_roles")
   @@schema("platform")
 }
@@ -163,9 +169,49 @@ model OrganizationRole {
   assignments  OrganizationMembershipRole[]
   invitations  UserInvitation[]
   permissions  OrganizationRolePermission[]
+  roleTypeId   String? @map("role_type_id") @db.Uuid
+  roleStatusId String? @map("role_status_id") @db.Uuid
+  roleType     RoleType? @relation(fields: [roleTypeId], references: [id], onDelete: Restrict)
+  roleStatus   RoleStatus? @relation(fields: [roleStatusId], references: [id], onDelete: Restrict)
 
   @@index([organizationId])
+  @@index([roleTypeId])
+  @@index([roleStatusId])
   @@map("organization_roles")
+  @@schema("platform")
+}
+
+model RoleType {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  nameTh      String   @map("name_th")
+  nameEn      String   @map("name_en")
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  isSystem    Boolean  @default(true) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  platformRoles PlatformRole[]
+  organizationRoles OrganizationRole[]
+  @@map("role_types")
+  @@schema("platform")
+}
+
+model RoleStatus {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  nameTh      String   @map("name_th")
+  nameEn      String   @map("name_en")
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  isSystem    Boolean  @default(true) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  platformRoles PlatformRole[]
+  organizationRoles OrganizationRole[]
+  @@map("role_statuses")
   @@schema("platform")
 }
 
@@ -179,6 +225,14 @@ model Permission {
   productCode   String   @default("PLATFORM") @map("product_code")
   resource      String
   action        String
+  featureCode   String?  @map("feature_code")
+  menuCode      String?  @map("menu_code")
+  menuNameTh    String?  @map("menu_name_th")
+  menuCategoryTh String? @map("menu_category_th")
+  routePath     String?  @map("route_path")
+  isNavigation  Boolean  @default(false) @map("is_navigation")
+  parentMenuCode String? @map("parent_menu_code")
+  permissionActionId String? @map("permission_action_id") @db.Uuid
   sortOrder     Int      @default(0) @map("sort_order")
   isActive      Boolean  @default(true) @map("is_active")
   isSystem      Boolean  @default(true) @map("is_system")
@@ -187,10 +241,28 @@ model Permission {
 
   rolePermissions         OrganizationRolePermission[]
   platformRolePermissions PlatformRolePermission[]
+  permissionAction PermissionAction? @relation(fields: [permissionActionId], references: [id], onDelete: Restrict)
 
   @@index([productCode, resource])
   @@index([isActive])
+  @@index([permissionActionId])
   @@map("permissions")
+  @@schema("platform")
+}
+
+model PermissionAction {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  nameTh      String   @map("name_th")
+  nameEn      String   @map("name_en")
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  isSystem    Boolean  @default(true) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  permissions Permission[]
+  @@map("permission_actions")
   @@schema("platform")
 }
 

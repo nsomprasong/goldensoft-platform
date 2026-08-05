@@ -58,6 +58,8 @@ const REQUIRED: Array<[string, string, string, string]> = [
   ["hr.advance.approve", "อนุมัติเบิกล่วงหน้า", "advance", "approve"],
   ["hr.department.manage", "จัดการแผนก", "department", "manage"],
   ["hr.position.manage", "จัดการตำแหน่ง", "position", "manage"],
+  ["hr.employee.role.assign", "กำหนดบทบาทให้พนักงาน", "employee_role", "assign"],
+  ["hr.employee.role.assign_privileged", "กำหนดบทบาทสำคัญให้พนักงาน", "employee_role", "assign_privileged"],
   ["hr.shift.read", "ดูกะงาน", "shift", "read"],
   ["hr.shift.manage", "จัดการกะงาน", "shift", "manage"],
   ["hr.location.manage", "จัดการสถานที่ทำงาน", "location", "manage"],

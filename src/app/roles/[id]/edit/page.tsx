@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Shield } from "lucide-react";
 
 import { CustomRoleForm } from "@/components/custom-role-form";
+import { RolePositionsPanel } from "@/components/role-positions-panel";
 import { PlatformShell } from "@/components/platform-shell";
 import { AccessDenied, PageHeader } from "@/components/ui/admin-ui";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
@@ -10,6 +11,7 @@ import { TH } from "@/lib/i18n/th";
 import {
   PLATFORM_PERMISSIONS,
 } from "@/lib/permissions/codes";
+import { loadPermissionRegistry } from "@/lib/permissions/registry";
 import { displayPermissionCodesForRole } from "@/lib/platform/custom-roles";
 import { MASTER } from "@/lib/platform/master-codes";
 import { prisma } from "@/lib/prisma";
@@ -68,6 +70,7 @@ export default async function EditOrganizationRolePage({ params }: Props) {
     code: role.code,
     dbPermissionCodes: role.permissions.map((p) => p.permission.code),
   });
+  const permissionCatalog = await loadPermissionRegistry(prisma, { organizationId: role.organizationId });
 
   return (
     <PlatformShell {...shellProps}>
@@ -85,6 +88,7 @@ export default async function EditOrganizationRolePage({ params }: Props) {
         roleId={role.id}
         organizationId={role.organizationId}
         allowSystemPermissionEdit={canEditSystem}
+        permissionCatalog={permissionCatalog}
         initial={{
           code: role.code,
           nameTh: role.nameTh,
@@ -94,6 +98,9 @@ export default async function EditOrganizationRolePage({ params }: Props) {
           isSystem: role.isSystem,
         }}
       />
+      {!role.isSystem && role.organizationId ? (
+        <RolePositionsPanel roleId={role.id} organizationId={role.organizationId} branches={ctx.branches.map((branch) => ({ id: branch.id, name: branch.name }))} />
+      ) : null}
     </PlatformShell>
   );
 }

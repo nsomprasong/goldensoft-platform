@@ -1,0 +1,10 @@
+prisma/migrations/0008_staff_password_reset/migration.sql text eol=lf
+prisma/migrations/0009_staff_identity_profiles/migration.sql text eol=lf
+prisma/migrations/0010_staff_national_id_optional/migration.sql text eol=lf
+prisma/migrations/0011_organization_entity_type/migration.sql text eol=lf
+prisma/migrations/0012_platform_role_permissions/migration.sql text eol=lf
+prisma/migrations/0001_platform_initial/migration.sql -text
+prisma/migrations/0002_phase5_admin_fields/migration.sql -text
+prisma/migrations/0003_user_invitations/migration.sql -text
+prisma/migrations/0004_phase7_operations/migration.sql -text
+prisma/migrations/0005_phase7b_subscription_history/migration.sql -text

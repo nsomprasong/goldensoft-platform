@@ -323,13 +323,19 @@ export async function createCustomRole(
       }
 
       const existing = await tx.organizationRole.findFirst({
-        where: { organizationId: input.organizationId, code },
+        where: {
+          organizationId: input.organizationId,
+          OR: [
+            { code },
+            { nameTh: { equals: input.nameTh.trim(), mode: "insensitive" } },
+          ],
+        },
         select: { id: true },
       });
       if (existing) {
         throw new CustomRoleError(
           "ROLE_CODE_EXISTS",
-          "รหัสบทบาทนี้มีอยู่แล้วในองค์กร",
+          "ชื่อหรือรหัสบทบาทนี้มีอยู่แล้วในองค์กร",
         );
       }
 
