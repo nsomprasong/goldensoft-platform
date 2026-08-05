@@ -13,7 +13,7 @@ import {
 import { getAuthUser } from "@/lib/auth/session";
 import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
 import { COOKIE_NAME, decodeContextCookie } from "@/lib/context/cookie";
-import { listActiveManagedOrganizationIds } from "@/lib/platform/customer-portfolio";
+import { listActiveManagedOrganizationIds, resolveActiveCustomerAssignmentScope } from "@/lib/platform/customer-portfolio";
 import { resolveActorPermissionCodes } from "@/lib/platform/custom-roles";
 import { setServerTimingRoute } from "@/lib/perf/server-timing";
 
@@ -190,6 +190,9 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
   }
 
   if (cookie && !membership && (isManagedOrgMode || (isSuper && cookie.mode === "platform_admin"))) {
+    const managedScope = isManagedOrgMode
+      ? await resolveActiveCustomerAssignmentScope(prisma, bundle.profile!.id, activeOrgId!)
+      : null;
     const org = await prisma.organization.findFirst({
       where: {
         id: activeOrgId!,
@@ -201,7 +204,13 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
         displayName: true,
         customerCode: true,
         branches: {
-          where: { deletedAt: null, status: { code: "ACTIVE" } },
+          where: {
+            deletedAt: null,
+            status: { code: "ACTIVE" },
+            ...(managedScope && !managedScope.allBranches
+              ? { id: { in: managedScope.branchIds } }
+              : {}),
+          },
           select: { id: true, name: true, code: true },
           orderBy: { code: "asc" },
           take: 200,

@@ -17,7 +17,7 @@ async function session(request: NextRequest, roleId: string) {
   return { user, actor, role };
 }
 
-export async function GET(request: NextRequest, context: Context) {
+async function loadRolePositions(request: NextRequest, context: Context) {
   const { id } = await context.params;
   const auth = await session(request, id);
   if (!auth) return NextResponse.json({ message: "ไม่มีสิทธิ์ดูตำแหน่งของบทบาทนี้" }, { status: 403 });
@@ -30,6 +30,18 @@ export async function GET(request: NextRequest, context: Context) {
     GROUP BY p.id,p.name_th,p.branch_id,b.name,p.is_system_standard,p.is_active ORDER BY p.is_system_standard DESC,p.branch_id NULLS FIRST,p.name_th
   `;
   return NextResponse.json({ positions: rows.map((row) => ({ id: row.id, name: row.name_th, scope: row.is_system_standard ? "ตำแหน่งมาตรฐาน" : row.branch_id ? "ใช้เฉพาะสาขา" : "ใช้ทุกสาขาในองค์กร", branchName: row.branch_name, employeeCount: Number(row.employee_count), isActive: row.is_active })) });
+}
+
+export async function GET(request: NextRequest, context: Context) {
+  try {
+    return await loadRolePositions(request, context);
+  } catch (error) {
+    console.error("Failed to load role positions", error);
+    return NextResponse.json(
+      { message: "ไม่สามารถโหลดตำแหน่งของบทบาทได้" },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(request: NextRequest, context: Context) {

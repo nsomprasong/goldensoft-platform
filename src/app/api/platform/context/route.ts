@@ -16,7 +16,7 @@ import {
 import { TH } from "@/lib/i18n/th";
 import { writeAuditLog } from "@/lib/platform/audit";
 import { invalidateCustomerBootstrapCache } from "@/lib/platform/customer-bootstrap-cache";
-import { listActiveManagedOrganizationIds } from "@/lib/platform/customer-portfolio";
+import { listActiveManagedOrganizationIds, resolveActiveCustomerAssignmentScope } from "@/lib/platform/customer-portfolio";
 import { MASTER } from "@/lib/platform/master-codes";
 import { invalidateEffectiveCodesCache } from "@/lib/permissions/effective-codes-cache";
 import { permissionsForRoles } from "@/lib/permissions/codes";
@@ -270,6 +270,9 @@ export async function POST(request: NextRequest) {
     !memberAccess &&
     !platformAdminAccess &&
     managedOrganizationIds.includes(organizationId);
+  const managedScope = managedOrgAccess
+    ? await resolveActiveCustomerAssignmentScope(prisma, bundle.profile.id, organizationId)
+    : null;
 
   if (!memberAccess && !platformAdminAccess && !managedOrgAccess) {
     return NextResponse.json(
@@ -283,6 +286,7 @@ export async function POST(request: NextRequest) {
     membership && branchId
       ? (membership.branches.find((b) => b.id === branchId) ?? null)
       : null;
+  let contextBranches: Array<{ id: string; name: string; code: string }> = membership?.branches ?? [];
 
   if (platformAdminAccess || managedOrgAccess) {
     const org = await prisma.organization.findFirst({
@@ -295,7 +299,13 @@ export async function POST(request: NextRequest) {
         id: true,
         displayName: true,
         branches: {
-          where: { deletedAt: null, status: { code: MASTER.branchStatus.ACTIVE } },
+          where: {
+            deletedAt: null,
+            status: { code: MASTER.branchStatus.ACTIVE },
+            ...(managedScope && !managedScope.allBranches
+              ? { id: { in: managedScope.branchIds } }
+              : {}),
+          },
           select: { id: true, name: true, code: true },
           orderBy: { code: "asc" },
           take: 200,
@@ -309,6 +319,7 @@ export async function POST(request: NextRequest) {
       );
     }
     activeOrganizationName = org.displayName;
+    contextBranches = org.branches;
     if (branchId) {
       resolvedBranch = org.branches.find((b) => b.id === branchId) ?? null;
       if (!resolvedBranch) {
@@ -376,17 +387,7 @@ export async function POST(request: NextRequest) {
     void writeAuditLog(prisma, auditPayload);
   });
 
-  const availableBranches =
-    membership?.branches ??
-    (resolvedBranch
-      ? [
-          {
-            id: resolvedBranch.id,
-            name: resolvedBranch.name,
-            code: resolvedBranch.code,
-          },
-        ]
-      : []);
+  const availableBranches = contextBranches;
 
   const response = NextResponse.json({
     ok: true,

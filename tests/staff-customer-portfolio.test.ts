@@ -13,6 +13,7 @@ import {
 import {
   canManageCustomerOrganization,
   canManagePortfolioAssignments,
+  canTransferPortfolioAssignments,
 } from "../src/lib/platform/customer-portfolio";
 
 const ROOT = path.resolve(__dirname, "..");
@@ -146,6 +147,27 @@ describe("Staff customer-portfolio authorization", () => {
     );
     assert.equal(canManagePortfolioAssignments({ platformRoles: [] }), false);
   });
+
+  it("uses explicit manage/transfer permissions and keeps SALES self-service disabled", () => {
+    assert.equal(canManagePortfolioAssignments({ platformRoles: [], permissionCodes: [PLATFORM_PERMISSIONS.customerAssignmentManage] }), true);
+    assert.equal(canTransferPortfolioAssignments({ platformRoles: [], permissionCodes: [PLATFORM_PERMISSIONS.customerAssignmentTransfer] }), true);
+    assert.equal(canTransferPortfolioAssignments({ platformRoles: ["SALES"], permissionCodes: [] }), false);
+    const source = read("src/lib/platform/customer-portfolio.ts");
+    assert.match(source, /ไม่สามารถเพิ่มองค์กรที่รับผิดชอบให้ตนเองได้/);
+    assert.match(source, /ไม่สามารถถอนตนเองออกจากองค์กรที่รับผิดชอบได้/);
+    assert.match(source, /ผู้รับผิดชอบไม่สามารถโอนองค์กรที่ตนรับผิดชอบได้/);
+  });
+});
+
+describe("0017 customer assignment foundation", () => {
+  it("extends the existing portfolio assignment additively without enums", () => {
+    const sql = read("prisma/migrations/0017_customer_organization_access_foundation/migration.sql");
+    assert.match(sql, /ALTER TABLE platform\.staff_organization_assignments/);
+    assert.match(sql, /staff_organization_assignment_branches/);
+    assert.match(sql, /ALL_CURRENT_AND_FUTURE|customer_assignment_scope_types/);
+    assert.doesNotMatch(sql, /CREATE\s+TYPE|AS\s+ENUM/i);
+    assert.doesNotMatch(sql, /DROP\s+TABLE|TRUNCATE/i);
+  });
 });
 
 describe("permissionsForRoles: SALES / ACCOUNT_MANAGER", () => {
@@ -255,7 +277,8 @@ describe("Staff portfolio UI has no fake buttons", () => {
   it("context switcher only offers managed orgs the staff member is actually assigned", () => {
     const src = read("src/components/context-switcher.tsx");
     assert.match(src, /managedOrganizations/);
-    assert.match(src, /managedOrgGroupLabel/);
+    assert.match(src, /responsibleOrganizations/);
+    assert.match(src, /GOLDENSOFT/);
   });
 });
 

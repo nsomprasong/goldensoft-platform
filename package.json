@@ -16,6 +16,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "seed:phase7": "tsx scripts/seed-phase7.ts",
     "seed:hr-permissions": "tsx scripts/seed-hr-permission-catalog.ts",
+    "seed:customer-assignments": "tsx scripts/seed-customer-assignment-foundation.ts",
+    "verify:customer-assignments": "tsx scripts/verify-customer-assignment-foundation.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:demo:cleanup": "tsx scripts/seed-demo-cleanup.ts",
     "seed:login-test": "tsx scripts/seed-login-test.ts",

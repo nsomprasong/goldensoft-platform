@@ -4,6 +4,8 @@ import { z } from "zod";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requireAuthUser } from "@/lib/auth/request-auth";
 import { TH } from "@/lib/i18n/th";
+import { PLATFORM_PERMISSIONS } from "@/lib/permissions/codes";
+import { resolveActorPermissionCodes } from "@/lib/platform/custom-roles";
 import {
   PlatformRoleAssignError,
   PlatformRoleError,
@@ -16,6 +18,7 @@ type Params = { params: Promise<{ id: string }> };
 const updateSchema = z.object({
   description: z.string().max(500).optional().nullable(),
   permissionCodes: z.array(z.string().min(3)).min(1).optional(),
+  isActive: z.boolean().optional(),
 });
 
 export async function GET(_request: NextRequest, { params }: Params) {
@@ -27,7 +30,11 @@ export async function GET(_request: NextRequest, { params }: Params) {
     );
   }
   const actor = await loadActorAccess(prisma, user.id);
-  if (!actor.platformRoles.includes("SUPER_ADMIN")) {
+  const permissions = await resolveActorPermissionCodes(prisma, {
+    platformRoles: actor.platformRoles,
+    organizationRoles: [],
+  });
+  if (!permissions.includes(PLATFORM_PERMISSIONS.roleRead)) {
     return NextResponse.json(
       { code: "FORBIDDEN", message: TH.access.deniedBody },
       { status: 403 },

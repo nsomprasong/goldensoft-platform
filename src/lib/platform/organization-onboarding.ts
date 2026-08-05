@@ -448,7 +448,7 @@ export async function onboardOrganization(
           staffUserProfileId: creatorProfile.id,
           organizationId: org.id,
           assignedByAuthUserId: input.actorAuthUserId,
-          note: "ผูกอัตโนมัติเมื่อพนักงานขายสร้างองค์กรลูกค้า",
+          note: "ผู้รับผิดชอบหลัก · ทุกสาขาปัจจุบันและอนาคต",
           autoAssigned: true,
         });
         portfolioAssignmentId = assignment.id;

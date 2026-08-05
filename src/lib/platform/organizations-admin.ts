@@ -246,15 +246,19 @@ export async function createOrganization(
           where: { authUserId: actor.authUserId },
           select: { id: true },
         });
-        if (profile) {
-          await createStaffOrganizationAssignment(tx, {
-            staffUserProfileId: profile.id,
-            organizationId: created.id,
-            assignedByAuthUserId: actor.authUserId,
-            note: "ผูกอัตโนมัติเมื่อพนักงานขายสร้างองค์กรลูกค้า",
-            autoAssigned: true,
-          });
+        if (!profile) {
+          throw new OrganizationAdminError(
+            "VALIDATION",
+            "ไม่พบโปรไฟล์ผู้สร้าง จึงไม่สามารถสร้างผู้รับผิดชอบหลักได้",
+          );
         }
+        await createStaffOrganizationAssignment(tx, {
+          staffUserProfileId: profile.id,
+          organizationId: created.id,
+          assignedByAuthUserId: actor.authUserId,
+          note: "ผู้รับผิดชอบหลัก · ทุกสาขาปัจจุบันและอนาคต",
+          autoAssigned: true,
+        });
       }
 
       return created;

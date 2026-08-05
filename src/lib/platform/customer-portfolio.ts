@@ -22,7 +22,10 @@ export class CustomerPortfolioError extends Error {
 
 /** Minimal actor shape needed for portfolio authorization decisions. */
 export type PortfolioActor = {
+  authUserId?: string;
+  profileId?: string | null;
   platformRoles: string[];
+  permissionCodes?: string[];
   managedOrganizationIds: string[];
 };
 
@@ -36,6 +39,36 @@ export async function listActiveManagedOrganizationIds(
     select: { organizationId: true },
   });
   return [...new Set(rows.map((row) => row.organizationId))];
+}
+
+export async function resolveActiveCustomerAssignmentScope(
+  db: Db,
+  staffUserProfileId: string,
+  organizationId: string,
+): Promise<{ assignmentId: string; allBranches: boolean; branchIds: string[] } | null> {
+  const assignment = await db.staffOrganizationAssignment.findFirst({
+    where: {
+      staffUserProfileId,
+      organizationId,
+      revokedAt: null,
+      startsAt: { lte: new Date() },
+      OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
+      AND: [{ OR: [{ statusId: null }, { status: { code: "ACTIVE" } }] }],
+    },
+    select: {
+      id: true,
+      scopeType: { select: { code: true } },
+      branchScopes: { select: { branchId: true } },
+    },
+    orderBy: { assignedAt: "asc" },
+  });
+  if (!assignment) return null;
+  return {
+    assignmentId: assignment.id,
+    allBranches:
+      !assignment.scopeType || assignment.scopeType.code === "ALL_CURRENT_AND_FUTURE",
+    branchIds: assignment.branchScopes.map((scope) => scope.branchId),
+  };
 }
 
 /** True if the platform role set is portfolio-capable (sales/account mgmt or role-assign capable). */
@@ -83,11 +116,25 @@ export function assertCanManageCustomerOrganization(
 /** Only SUPER_ADMIN (or a role granted platform.customer_portfolio.manage) may assign/revoke portfolios. */
 export function canManagePortfolioAssignments(actor: {
   platformRoles: string[];
+  permissionCodes?: string[];
 }): boolean {
-  return permissionsForRoles({
+  const permissions = actor.permissionCodes ?? permissionsForRoles({
+      platformRoles: actor.platformRoles,
+      organizationRoles: [],
+    });
+  return permissions.includes(PLATFORM_PERMISSIONS.customerAssignmentManage) ||
+    permissions.includes(PLATFORM_PERMISSIONS.customerPortfolioManage);
+}
+
+export function canTransferPortfolioAssignments(actor: {
+  platformRoles: string[];
+  permissionCodes?: string[];
+}): boolean {
+  const permissions = actor.permissionCodes ?? permissionsForRoles({
     platformRoles: actor.platformRoles,
     organizationRoles: [],
-  }).includes(PLATFORM_PERMISSIONS.customerPortfolioManage);
+  });
+  return permissions.includes(PLATFORM_PERMISSIONS.customerAssignmentTransfer);
 }
 
 export function assertCanManagePortfolioAssignments(actor: {
@@ -114,6 +161,10 @@ export async function listStaffOrganizationAssignments(
       assignedAt: true,
       revokedAt: true,
       note: true,
+      assignmentRole: { select: { code: true, nameTh: true } },
+      scopeType: { select: { code: true, nameTh: true } },
+      status: { select: { code: true, nameTh: true } },
+      branchScopes: { select: { branchId: true, branch: { select: { name: true, code: true } } } },
       staffUserProfile: {
         select: { id: true, displayName: true, email: true },
       },
@@ -129,13 +180,23 @@ export async function listStaffOrganizationAssignments(
 export async function assignStaffToOrganization(
   db: PrismaClient,
   input: {
-    actor: { authUserId: string; platformRoles: string[] };
+    actor: { authUserId: string; profileId?: string | null; platformRoles: string[]; permissionCodes?: string[] };
     staffUserProfileId: string;
     organizationId: string;
     note?: string | null;
+    assignmentRoleCode?: "CO_OWNER" | "SUPPORT";
+    scopeTypeCode?: "ALL_CURRENT_AND_FUTURE" | "SELECTED_BRANCHES";
+    branchIds?: string[];
   },
 ) {
   assertCanManagePortfolioAssignments(input.actor);
+
+  if (input.actor.profileId === input.staffUserProfileId) {
+    throw new CustomerPortfolioError(
+      "FORBIDDEN",
+      "ไม่สามารถเพิ่มองค์กรที่รับผิดชอบให้ตนเองได้",
+    );
+  }
 
   const [staff, organization] = await Promise.all([
     db.userProfile.findUnique({
@@ -172,6 +233,9 @@ export async function assignStaffToOrganization(
       assignedByAuthUserId: input.actor.authUserId,
       note: input.note?.trim() || null,
       autoAssigned: false,
+      assignmentRoleCode: input.assignmentRoleCode ?? "SUPPORT",
+      scopeTypeCode: input.scopeTypeCode ?? "ALL_CURRENT_AND_FUTURE",
+      branchIds: input.branchIds,
     });
   });
 }
@@ -188,14 +252,60 @@ export async function createStaffOrganizationAssignment(
     assignedByAuthUserId: string;
     note?: string | null;
     autoAssigned?: boolean;
+    assignmentRoleCode?: "PRIMARY" | "CO_OWNER" | "SUPPORT";
+    scopeTypeCode?: "ALL_CURRENT_AND_FUTURE" | "SELECTED_BRANCHES";
+    branchIds?: string[];
   },
 ) {
+  const assignmentRoleCode = input.assignmentRoleCode ?? (input.autoAssigned ? "PRIMARY" : "SUPPORT");
+  const scopeTypeCode = input.scopeTypeCode ?? "ALL_CURRENT_AND_FUTURE";
+  if (scopeTypeCode === "SELECTED_BRANCHES") {
+    const branchIds = [...new Set(input.branchIds ?? [])];
+    if (branchIds.length === 0) {
+      throw new CustomerPortfolioError("VALIDATION", "กรุณาเลือกสาขาอย่างน้อยหนึ่งสาขา");
+    }
+    const validBranchCount = await db.branch.count({
+      where: { id: { in: branchIds }, organizationId: input.organizationId, deletedAt: null },
+    });
+    if (validBranchCount !== branchIds.length) {
+      throw new CustomerPortfolioError("FORBIDDEN", "พบสาขาที่ไม่อยู่ในองค์กรเป้าหมาย");
+    }
+  }
+  const [assignmentRole, scopeType, status] = await Promise.all([
+    db.customerAssignmentRole.upsert({
+      where: { code: assignmentRoleCode },
+      create: { code: assignmentRoleCode, nameTh: assignmentRoleCode === "PRIMARY" ? "ผู้รับผิดชอบหลัก" : assignmentRoleCode === "CO_OWNER" ? "ผู้รับผิดชอบร่วม" : "ทีม Support", nameEn: assignmentRoleCode, isSystem: true },
+      update: {},
+    }),
+    db.customerAssignmentScopeType.upsert({
+      where: { code: scopeTypeCode },
+      create: { code: scopeTypeCode, nameTh: scopeTypeCode === "ALL_CURRENT_AND_FUTURE" ? "ทุกสาขาปัจจุบันและอนาคต" : "เฉพาะสาขาที่เลือก", nameEn: scopeTypeCode, isSystem: true },
+      update: {},
+    }),
+    db.customerAssignmentStatus.upsert({
+      where: { code: "ACTIVE" },
+      create: { code: "ACTIVE", nameTh: "ใช้งาน", nameEn: "Active", isSystem: true },
+      update: {},
+    }),
+  ]);
   const created = await db.staffOrganizationAssignment.create({
     data: {
       staffUserProfileId: input.staffUserProfileId,
       organizationId: input.organizationId,
       assignedByAuthUserId: input.assignedByAuthUserId,
       note: input.note?.trim() || null,
+      assignmentRoleId: assignmentRole.id,
+      scopeTypeId: scopeType.id,
+      statusId: status.id,
+      startsAt: new Date(),
+      branchScopes: scopeTypeCode === "SELECTED_BRANCHES" && input.branchIds?.length
+        ? {
+            create: [...new Set(input.branchIds)].map((branchId) => ({
+              branchId,
+              assignedByAuthUserId: input.assignedByAuthUserId,
+            })),
+          }
+        : undefined,
     },
   });
   await writeAuditLog(db, {
@@ -208,6 +318,8 @@ export async function createStaffOrganizationAssignment(
       staffUserProfileId: input.staffUserProfileId,
       organizationId: input.organizationId,
       autoAssigned: input.autoAssigned === true,
+      assignmentRole: assignmentRoleCode,
+      branchScope: scopeTypeCode,
     },
   });
   return created;
@@ -216,7 +328,7 @@ export async function createStaffOrganizationAssignment(
 export async function revokeStaffOrganizationAssignment(
   db: PrismaClient,
   input: {
-    actor: { authUserId: string; platformRoles: string[] };
+    actor: { authUserId: string; profileId?: string | null; platformRoles: string[]; permissionCodes?: string[] };
     assignmentId: string;
   },
 ) {
@@ -227,6 +339,9 @@ export async function revokeStaffOrganizationAssignment(
   });
   if (!existing || existing.revokedAt) {
     throw new CustomerPortfolioError("NOT_FOUND", TH.common.notFound);
+  }
+  if (input.actor.profileId === existing.staffUserProfileId) {
+    throw new CustomerPortfolioError("FORBIDDEN", "ไม่สามารถถอนตนเองออกจากองค์กรที่รับผิดชอบได้");
   }
 
   return db.$transaction(async (tx) => {
@@ -246,5 +361,59 @@ export async function revokeStaffOrganizationAssignment(
       },
     });
     return updated;
+  });
+}
+
+export async function transferPrimaryStaffOrganizationAssignment(
+  db: PrismaClient,
+  input: {
+    actor: { authUserId: string; profileId?: string | null; platformRoles: string[]; permissionCodes?: string[] };
+    assignmentId: string;
+    targetStaffUserProfileId: string;
+    note?: string | null;
+  },
+) {
+  if (!canTransferPortfolioAssignments(input.actor)) {
+    throw new CustomerPortfolioError("FORBIDDEN", TH.common.forbidden);
+  }
+  if (input.actor.profileId === input.targetStaffUserProfileId) {
+    throw new CustomerPortfolioError("FORBIDDEN", "ไม่สามารถโอนองค์กรให้ตนเองได้");
+  }
+  const existing = await db.staffOrganizationAssignment.findUnique({
+    where: { id: input.assignmentId },
+  });
+  if (!existing || existing.revokedAt) {
+    throw new CustomerPortfolioError("NOT_FOUND", TH.common.notFound);
+  }
+  if (input.actor.profileId === existing.staffUserProfileId) {
+    throw new CustomerPortfolioError("FORBIDDEN", "ผู้รับผิดชอบไม่สามารถโอนองค์กรที่ตนรับผิดชอบได้");
+  }
+  const target = await db.userProfile.findFirst({
+    where: { id: input.targetStaffUserProfileId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!target) throw new CustomerPortfolioError("NOT_FOUND", TH.common.notFound);
+
+  return db.$transaction(async (tx) => {
+    const revoked = await tx.staffOrganizationAssignment.update({
+      where: { id: existing.id },
+      data: { revokedAt: new Date() },
+    });
+    const created = await createStaffOrganizationAssignment(tx, {
+      staffUserProfileId: target.id,
+      organizationId: existing.organizationId,
+      assignedByAuthUserId: input.actor.authUserId,
+      note: input.note?.trim() || "โอนผู้รับผิดชอบหลัก",
+    });
+    await writeAuditLog(tx, {
+      organizationId: existing.organizationId,
+      actorAuthUserId: input.actor.authUserId,
+      actionCode: "customer_assignment.transfer",
+      entityType: "staff_organization_assignment",
+      entityId: created.id,
+      before: { assignmentId: revoked.id, staffUserProfileId: existing.staffUserProfileId },
+      after: { assignmentId: created.id, staffUserProfileId: target.id },
+    });
+    return { revoked, created };
   });
 }

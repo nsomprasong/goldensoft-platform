@@ -44,12 +44,12 @@ model PlatformRole {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  assignments PlatformRoleAssignment[]
-  permissions PlatformRolePermission[]
-  roleTypeId  String?  @map("role_type_id") @db.Uuid
-  roleStatusId String? @map("role_status_id") @db.Uuid
-  roleType    RoleType? @relation(fields: [roleTypeId], references: [id], onDelete: Restrict)
-  roleStatus  RoleStatus? @relation(fields: [roleStatusId], references: [id], onDelete: Restrict)
+  assignments  PlatformRoleAssignment[]
+  permissions  PlatformRolePermission[]
+  roleTypeId   String?                  @map("role_type_id") @db.Uuid
+  roleStatusId String?                  @map("role_status_id") @db.Uuid
+  roleType     RoleType?                @relation(fields: [roleTypeId], references: [id], onDelete: Restrict)
+  roleStatus   RoleStatus?              @relation(fields: [roleStatusId], references: [id], onDelete: Restrict)
 
   @@index([roleTypeId])
   @@index([roleStatusId])
@@ -88,10 +88,10 @@ model AssignmentStatus {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  platformRoleAssignments              PlatformRoleAssignment[]
-  organizationMembershipRoles          OrganizationMembershipRole[]
-  organizationMembershipBranchScopes   OrganizationMembershipBranchScope[]
-  subscriptionFeatureOverrides         SubscriptionFeatureOverride[]
+  platformRoleAssignments            PlatformRoleAssignment[]
+  organizationMembershipRoles        OrganizationMembershipRole[]
+  organizationMembershipBranchScopes OrganizationMembershipBranchScope[]
+  subscriptionFeatureOverrides       SubscriptionFeatureOverride[]
 
   @@map("assignment_statuses")
   @@schema("platform")
@@ -165,14 +165,14 @@ model OrganizationRole {
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization?                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization?                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignments  OrganizationMembershipRole[]
   invitations  UserInvitation[]
   permissions  OrganizationRolePermission[]
-  roleTypeId   String? @map("role_type_id") @db.Uuid
-  roleStatusId String? @map("role_status_id") @db.Uuid
-  roleType     RoleType? @relation(fields: [roleTypeId], references: [id], onDelete: Restrict)
-  roleStatus   RoleStatus? @relation(fields: [roleStatusId], references: [id], onDelete: Restrict)
+  roleTypeId   String?                      @map("role_type_id") @db.Uuid
+  roleStatusId String?                      @map("role_status_id") @db.Uuid
+  roleType     RoleType?                    @relation(fields: [roleTypeId], references: [id], onDelete: Restrict)
+  roleStatus   RoleStatus?                  @relation(fields: [roleStatusId], references: [id], onDelete: Restrict)
 
   @@index([organizationId])
   @@index([roleTypeId])
@@ -182,68 +182,72 @@ model OrganizationRole {
 }
 
 model RoleType {
-  id          String   @id @default(uuid()) @db.Uuid
-  code        String   @unique
-  nameTh      String   @map("name_th")
-  nameEn      String   @map("name_en")
-  description String?
-  sortOrder   Int      @default(0) @map("sort_order")
-  isActive    Boolean  @default(true) @map("is_active")
-  isSystem    Boolean  @default(true) @map("is_system")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  platformRoles PlatformRole[]
+  id                String             @id @default(uuid()) @db.Uuid
+  code              String             @unique
+  nameTh            String             @map("name_th")
+  nameEn            String             @map("name_en")
+  description       String?
+  sortOrder         Int                @default(0) @map("sort_order")
+  isActive          Boolean            @default(true) @map("is_active")
+  isSystem          Boolean            @default(true) @map("is_system")
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  platformRoles     PlatformRole[]
   organizationRoles OrganizationRole[]
+
   @@map("role_types")
   @@schema("platform")
 }
 
 model RoleStatus {
-  id          String   @id @default(uuid()) @db.Uuid
-  code        String   @unique
-  nameTh      String   @map("name_th")
-  nameEn      String   @map("name_en")
-  description String?
-  sortOrder   Int      @default(0) @map("sort_order")
-  isActive    Boolean  @default(true) @map("is_active")
-  isSystem    Boolean  @default(true) @map("is_system")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  platformRoles PlatformRole[]
+  id                String             @id @default(uuid()) @db.Uuid
+  code              String             @unique
+  nameTh            String             @map("name_th")
+  nameEn            String             @map("name_en")
+  description       String?
+  sortOrder         Int                @default(0) @map("sort_order")
+  isActive          Boolean            @default(true) @map("is_active")
+  isSystem          Boolean            @default(true) @map("is_system")
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  platformRoles     PlatformRole[]
   organizationRoles OrganizationRole[]
+
   @@map("role_statuses")
   @@schema("platform")
 }
 
 model Permission {
-  id            String   @id @default(uuid()) @db.Uuid
-  code          String   @unique
-  nameTh        String   @map("name_th")
-  nameEn        String   @map("name_en")
-  descriptionTh String?  @map("description_th")
-  descriptionEn String?  @map("description_en")
-  productCode   String   @default("PLATFORM") @map("product_code")
-  resource      String
-  action        String
-  featureCode   String?  @map("feature_code")
-  menuCode      String?  @map("menu_code")
-  menuNameTh    String?  @map("menu_name_th")
-  menuCategoryTh String? @map("menu_category_th")
-  routePath     String?  @map("route_path")
-  isNavigation  Boolean  @default(false) @map("is_navigation")
-  parentMenuCode String? @map("parent_menu_code")
-  permissionActionId String? @map("permission_action_id") @db.Uuid
-  sortOrder     Int      @default(0) @map("sort_order")
-  isActive      Boolean  @default(true) @map("is_active")
-  isSystem      Boolean  @default(true) @map("is_system")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                 String   @id @default(uuid()) @db.Uuid
+  code               String   @unique
+  nameTh             String   @map("name_th")
+  nameEn             String   @map("name_en")
+  descriptionTh      String?  @map("description_th")
+  descriptionEn      String?  @map("description_en")
+  productCode        String   @default("PLATFORM") @map("product_code")
+  scopeCode          String   @default("ORGANIZATION") @map("scope_code")
+  resource           String
+  action             String
+  featureCode        String?  @map("feature_code")
+  menuCode           String?  @map("menu_code")
+  menuNameTh         String?  @map("menu_name_th")
+  menuCategoryTh     String?  @map("menu_category_th")
+  routePath          String?  @map("route_path")
+  isNavigation       Boolean  @default(false) @map("is_navigation")
+  parentMenuCode     String?  @map("parent_menu_code")
+  permissionActionId String?  @map("permission_action_id") @db.Uuid
+  sortOrder          Int      @default(0) @map("sort_order")
+  isActive           Boolean  @default(true) @map("is_active")
+  isSystem           Boolean  @default(true) @map("is_system")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   rolePermissions         OrganizationRolePermission[]
   platformRolePermissions PlatformRolePermission[]
-  permissionAction PermissionAction? @relation(fields: [permissionActionId], references: [id], onDelete: Restrict)
+  permissionAction        PermissionAction?            @relation(fields: [permissionActionId], references: [id], onDelete: Restrict)
 
   @@index([productCode, resource])
+  @@index([scopeCode, productCode])
   @@index([isActive])
   @@index([permissionActionId])
   @@map("permissions")
@@ -251,17 +255,18 @@ model Permission {
 }
 
 model PermissionAction {
-  id          String   @id @default(uuid()) @db.Uuid
-  code        String   @unique
-  nameTh      String   @map("name_th")
-  nameEn      String   @map("name_en")
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique
+  nameTh      String       @map("name_th")
+  nameEn      String       @map("name_en")
   description String?
-  sortOrder   Int      @default(0) @map("sort_order")
-  isActive    Boolean  @default(true) @map("is_active")
-  isSystem    Boolean  @default(true) @map("is_system")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  sortOrder   Int          @default(0) @map("sort_order")
+  isActive    Boolean      @default(true) @map("is_active")
+  isSystem    Boolean      @default(true) @map("is_system")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
   permissions Permission[]
+
   @@map("permission_actions")
   @@schema("platform")
 }
@@ -298,7 +303,7 @@ model BranchScopeType {
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   branchScopes OrganizationMembershipBranchScope[]
-  invitations UserInvitation[]
+  invitations  UserInvitation[]
 
   @@map("branch_scope_types")
   @@schema("platform")
@@ -560,17 +565,17 @@ model UserInvitationStatus {
 // ─── Business tables ──────────────────────────────────────────────────────
 
 model UserProfile {
-  id             String   @id @default(uuid()) @db.Uuid
-  authUserId     String   @unique @map("auth_user_id") @db.Uuid
-  email          String   @unique
+  id             String    @id @default(uuid()) @db.Uuid
+  authUserId     String    @unique @map("auth_user_id") @db.Uuid
+  email          String    @unique
   /// E.164 mobile when the account uses phone login (optional).
-  phone          String?  @unique
-  displayName    String   @map("display_name")
-  statusId       String   @map("status_id") @db.Uuid
-  sessionVersion Int      @default(0) @map("session_version")
+  phone          String?   @unique
+  displayName    String    @map("display_name")
+  statusId       String    @map("status_id") @db.Uuid
+  sessionVersion Int       @default(0) @map("session_version")
   lastLoginAt    DateTime? @map("last_login_at") @db.Timestamptz(6)
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   status                     UserProfileStatus               @relation(fields: [statusId], references: [id])
@@ -578,9 +583,9 @@ model UserProfile {
   memberships                OrganizationMembership[]
   preference                 UserPreference?
   organizationProductMembers OrganizationProductMembership[]
-  invitationsSent            UserInvitation[]              @relation("InvitationInviter")
-  staffPortfolioAssignments  StaffOrganizationAssignment[] @relation("StaffPortfolioAssignments")
-  passwordResets             UserPasswordReset[]           @relation("UserPasswordResets")
+  invitationsSent            UserInvitation[]                @relation("InvitationInviter")
+  staffPortfolioAssignments  StaffOrganizationAssignment[]   @relation("StaffPortfolioAssignments")
+  passwordResets             UserPasswordReset[]             @relation("UserPasswordResets")
   staffProfile               StaffProfile?
 
   @@index([statusId])
@@ -673,23 +678,23 @@ model Organization {
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  status                 OrganizationStatus             @relation(fields: [statusId], references: [id])
-  branches               Branch[]
-  memberships            OrganizationMembership[]
-  subscriptions          Subscription[]
-  productMemberships     OrganizationProductMembership[]
-  auditLogs              AuditLog[]
-  legacyIdentityMappings LegacyIdentityMapping[]
-  userInvitations        UserInvitation[]
-  organizationRoles      OrganizationRole[]
-  entitlements           Entitlement[]
-  onboardings            OrganizationOnboarding[]
-  subscriptionHistories  SubscriptionHistory[]
-  billingAccounts        BillingAccount[]
-  creditTransactions     CreditTransaction[]
-  invoices               Invoice[]
-  payments               Payment[]
-  billingContacts        BillingContact[]
+  status                    OrganizationStatus              @relation(fields: [statusId], references: [id])
+  branches                  Branch[]
+  memberships               OrganizationMembership[]
+  subscriptions             Subscription[]
+  productMemberships        OrganizationProductMembership[]
+  auditLogs                 AuditLog[]
+  legacyIdentityMappings    LegacyIdentityMapping[]
+  userInvitations           UserInvitation[]
+  organizationRoles         OrganizationRole[]
+  entitlements              Entitlement[]
+  onboardings               OrganizationOnboarding[]
+  subscriptionHistories     SubscriptionHistory[]
+  billingAccounts           BillingAccount[]
+  creditTransactions        CreditTransaction[]
+  invoices                  Invoice[]
+  payments                  Payment[]
+  billingContacts           BillingContact[]
   staffPortfolioAssignments StaffOrganizationAssignment[]
 
   @@index([statusId])
@@ -718,9 +723,10 @@ model Branch {
   updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organization Organization                         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  status       BranchStatus                         @relation(fields: [statusId], references: [id])
-  branchScopes OrganizationMembershipBranchScope[]
+  organization            Organization                        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  status                  BranchStatus                        @relation(fields: [statusId], references: [id])
+  branchScopes            OrganizationMembershipBranchScope[]
+  staffAssignmentBranches StaffOrganizationAssignmentBranch[]
 
   @@unique([organizationId, code])
   @@index([organizationId, statusId])
@@ -919,12 +925,12 @@ model PlanVersion {
 }
 
 model PlanVersionFeature {
-  id              String   @id @default(uuid()) @db.Uuid
-  planVersionId   String   @map("plan_version_id") @db.Uuid
-  featureId       String   @map("feature_id") @db.Uuid
-  limitValue      String?  @map("limit_value")
-  valueTypeId     String?  @map("value_type_id") @db.Uuid
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id            String   @id @default(uuid()) @db.Uuid
+  planVersionId String   @map("plan_version_id") @db.Uuid
+  featureId     String   @map("feature_id") @db.Uuid
+  limitValue    String?  @map("limit_value")
+  valueTypeId   String?  @map("value_type_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   planVersion PlanVersion       @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
   feature     Feature           @relation(fields: [featureId], references: [id], onDelete: Cascade)
@@ -991,20 +997,20 @@ model SubscriptionChangeType {
 }
 
 model SubscriptionHistory {
-  id                     String   @id @default(uuid()) @db.Uuid
-  subscriptionId         String   @map("subscription_id") @db.Uuid
-  organizationId         String   @map("organization_id") @db.Uuid
-  changeTypeId           String   @map("change_type_id") @db.Uuid
-  fromStatusCode         String?  @map("from_status_code")
-  toStatusCode           String?  @map("to_status_code")
-  fromPlanCode           String?  @map("from_plan_code")
-  toPlanCode             String?  @map("to_plan_code")
-  fromPlanVersionNumber  Int?     @map("from_plan_version_number")
-  toPlanVersionNumber    Int?     @map("to_plan_version_number")
-  snapshotJson           Json     @default("{}") @map("snapshot_json") @db.JsonB
-  reason                 String?
-  actorAuthUserId        String?  @map("actor_auth_user_id") @db.Uuid
-  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                    String   @id @default(uuid()) @db.Uuid
+  subscriptionId        String   @map("subscription_id") @db.Uuid
+  organizationId        String   @map("organization_id") @db.Uuid
+  changeTypeId          String   @map("change_type_id") @db.Uuid
+  fromStatusCode        String?  @map("from_status_code")
+  toStatusCode          String?  @map("to_status_code")
+  fromPlanCode          String?  @map("from_plan_code")
+  toPlanCode            String?  @map("to_plan_code")
+  fromPlanVersionNumber Int?     @map("from_plan_version_number")
+  toPlanVersionNumber   Int?     @map("to_plan_version_number")
+  snapshotJson          Json     @default("{}") @map("snapshot_json") @db.JsonB
+  reason                String?
+  actorAuthUserId       String?  @map("actor_auth_user_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   subscription Subscription           @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1093,8 +1099,8 @@ model OrganizationOnboarding {
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization?                 @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  status       OrganizationOnboardingStatus  @relation(fields: [statusId], references: [id])
+  organization Organization?                @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  status       OrganizationOnboardingStatus @relation(fields: [statusId], references: [id])
 
   @@index([statusId])
   @@index([organizationId])
@@ -1103,17 +1109,17 @@ model OrganizationOnboarding {
 }
 
 model SubscriptionFeatureOverride {
-  id               String    @id @default(uuid()) @db.Uuid
-  subscriptionId   String    @map("subscription_id") @db.Uuid
-  featureId        String    @map("feature_id") @db.Uuid
-  overrideTypeId   String    @map("override_type_id") @db.Uuid
-  limitValue       String?   @map("limit_value")
-  reason           String
-  approvedBy       String    @map("approved_by")
-  statusId         String    @map("status_id") @db.Uuid
-  startsAt         DateTime  @map("starts_at") @db.Timestamptz(6)
-  endsAt           DateTime? @map("ends_at") @db.Timestamptz(6)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  id             String    @id @default(uuid()) @db.Uuid
+  subscriptionId String    @map("subscription_id") @db.Uuid
+  featureId      String    @map("feature_id") @db.Uuid
+  overrideTypeId String    @map("override_type_id") @db.Uuid
+  limitValue     String?   @map("limit_value")
+  reason         String
+  approvedBy     String    @map("approved_by")
+  statusId       String    @map("status_id") @db.Uuid
+  startsAt       DateTime  @map("starts_at") @db.Timestamptz(6)
+  endsAt         DateTime? @map("ends_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   subscription Subscription             @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   feature      Feature                  @relation(fields: [featureId], references: [id], onDelete: Cascade)
@@ -1214,16 +1220,16 @@ model IdempotencyKey {
 }
 
 model LegacyIdentityMapping {
-  id                  String   @id @default(uuid()) @db.Uuid
-  organizationId      String   @map("organization_id") @db.Uuid
-  legacyAuthUserId    String   @map("legacy_auth_user_id")
-  centralAuthUserId   String   @map("central_auth_user_id") @db.Uuid
-  legacyEmployeeId    String   @map("legacy_employee_id")
-  newEmployeeId       String?  @map("new_employee_id")
-  migrationStatusId   String   @map("migration_status_id") @db.Uuid
-  notes               String?
-  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String   @id @default(uuid()) @db.Uuid
+  organizationId    String   @map("organization_id") @db.Uuid
+  legacyAuthUserId  String   @map("legacy_auth_user_id")
+  centralAuthUserId String   @map("central_auth_user_id") @db.Uuid
+  legacyEmployeeId  String   @map("legacy_employee_id")
+  newEmployeeId     String?  @map("new_employee_id")
+  migrationStatusId String   @map("migration_status_id") @db.Uuid
+  notes             String?
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   migrationStatus LegacyMigrationStatus @relation(fields: [migrationStatusId], references: [id])
@@ -1345,17 +1351,17 @@ model PaymentMethod {
 }
 
 model BillingAccount {
-  id                      String    @id @default(uuid()) @db.Uuid
-  organizationId          String    @unique @map("organization_id") @db.Uuid
-  currency                String    @default("THB")
-  statusId                String    @map("status_id") @db.Uuid
-  currentBalanceSnapshot  Decimal?  @map("current_balance_snapshot") @db.Decimal(18, 2)
-  creditLimit             Decimal?  @map("credit_limit") @db.Decimal(18, 2)
-  allowNegativeBalance    Boolean   @default(false) @map("allow_negative_balance")
-  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                     String   @id @default(uuid()) @db.Uuid
+  organizationId         String   @unique @map("organization_id") @db.Uuid
+  currency               String   @default("THB")
+  statusId               String   @map("status_id") @db.Uuid
+  currentBalanceSnapshot Decimal? @map("current_balance_snapshot") @db.Decimal(18, 2)
+  creditLimit            Decimal? @map("credit_limit") @db.Decimal(18, 2)
+  allowNegativeBalance   Boolean  @default(false) @map("allow_negative_balance")
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   status       BillingAccountStatus @relation(fields: [statusId], references: [id])
   transactions CreditTransaction[]
   invoices     Invoice[]
@@ -1401,29 +1407,29 @@ model CreditTransaction {
 }
 
 model Invoice {
-  id                String    @id @default(uuid()) @db.Uuid
-  organizationId    String    @map("organization_id") @db.Uuid
-  billingAccountId  String    @map("billing_account_id") @db.Uuid
-  invoiceNumber     String    @unique @map("invoice_number")
-  currency          String    @default("THB")
-  subtotal          Decimal   @default(0) @db.Decimal(18, 2)
-  discountTotal     Decimal   @default(0) @map("discount_total") @db.Decimal(18, 2)
-  taxTotal          Decimal   @default(0) @map("tax_total") @db.Decimal(18, 2)
-  grandTotal        Decimal   @default(0) @map("grand_total") @db.Decimal(18, 2)
-  paidTotal         Decimal   @default(0) @map("paid_total") @db.Decimal(18, 2)
-  outstandingTotal  Decimal   @default(0) @map("outstanding_total") @db.Decimal(18, 2)
-  statusId          String    @map("status_id") @db.Uuid
-  issueDate         DateTime? @map("issue_date") @db.Date
-  dueDate           DateTime? @map("due_date") @db.Date
-  paidAt            DateTime? @map("paid_at") @db.Timestamptz(6)
-  notes             String?
-  createdBy         String?   @map("created_by") @db.Uuid
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  billingAccountId String    @map("billing_account_id") @db.Uuid
+  invoiceNumber    String    @unique @map("invoice_number")
+  currency         String    @default("THB")
+  subtotal         Decimal   @default(0) @db.Decimal(18, 2)
+  discountTotal    Decimal   @default(0) @map("discount_total") @db.Decimal(18, 2)
+  taxTotal         Decimal   @default(0) @map("tax_total") @db.Decimal(18, 2)
+  grandTotal       Decimal   @default(0) @map("grand_total") @db.Decimal(18, 2)
+  paidTotal        Decimal   @default(0) @map("paid_total") @db.Decimal(18, 2)
+  outstandingTotal Decimal   @default(0) @map("outstanding_total") @db.Decimal(18, 2)
+  statusId         String    @map("status_id") @db.Uuid
+  issueDate        DateTime? @map("issue_date") @db.Date
+  dueDate          DateTime? @map("due_date") @db.Date
+  paidAt           DateTime? @map("paid_at") @db.Timestamptz(6)
+  notes            String?
+  createdBy        String?   @map("created_by") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  billingAccount BillingAccount       @relation(fields: [billingAccountId], references: [id])
-  status         InvoiceStatus        @relation(fields: [statusId], references: [id])
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  billingAccount BillingAccount      @relation(fields: [billingAccountId], references: [id])
+  status         InvoiceStatus       @relation(fields: [statusId], references: [id])
   items          InvoiceItem[]
   allocations    PaymentAllocation[]
 
@@ -1434,21 +1440,21 @@ model Invoice {
 }
 
 model InvoiceItem {
-  id              String   @id @default(uuid()) @db.Uuid
-  invoiceId       String   @map("invoice_id") @db.Uuid
-  itemType        String   @map("item_type")
-  productId       String?  @map("product_id") @db.Uuid
-  planId          String?  @map("plan_id") @db.Uuid
-  subscriptionId  String?  @map("subscription_id") @db.Uuid
-  description     String
-  quantity        Decimal  @default(1) @db.Decimal(18, 4)
-  unitPrice       Decimal  @default(0) @map("unit_price") @db.Decimal(18, 2)
-  discountAmount  Decimal  @default(0) @map("discount_amount") @db.Decimal(18, 2)
-  taxAmount       Decimal  @default(0) @map("tax_amount") @db.Decimal(18, 2)
-  lineTotal       Decimal  @default(0) @map("line_total") @db.Decimal(18, 2)
-  metadata        Json     @default("{}") @db.JsonB
-  sortOrder       Int      @default(0) @map("sort_order")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id             String   @id @default(uuid()) @db.Uuid
+  invoiceId      String   @map("invoice_id") @db.Uuid
+  itemType       String   @map("item_type")
+  productId      String?  @map("product_id") @db.Uuid
+  planId         String?  @map("plan_id") @db.Uuid
+  subscriptionId String?  @map("subscription_id") @db.Uuid
+  description    String
+  quantity       Decimal  @default(1) @db.Decimal(18, 4)
+  unitPrice      Decimal  @default(0) @map("unit_price") @db.Decimal(18, 2)
+  discountAmount Decimal  @default(0) @map("discount_amount") @db.Decimal(18, 2)
+  taxAmount      Decimal  @default(0) @map("tax_amount") @db.Decimal(18, 2)
+  lineTotal      Decimal  @default(0) @map("line_total") @db.Decimal(18, 2)
+  metadata       Json     @default("{}") @db.JsonB
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
@@ -1458,23 +1464,23 @@ model InvoiceItem {
 }
 
 model Payment {
-  id                String    @id @default(uuid()) @db.Uuid
-  organizationId    String    @map("organization_id") @db.Uuid
-  billingAccountId  String    @map("billing_account_id") @db.Uuid
-  paymentNumber     String    @unique @map("payment_number")
-  paymentMethodId   String    @map("payment_method_id") @db.Uuid
-  statusId          String    @map("status_id") @db.Uuid
-  amount            Decimal   @db.Decimal(18, 2)
-  currency          String    @default("THB")
-  paidAt            DateTime  @map("paid_at") @db.Timestamptz(6)
-  referenceNumber   String?   @map("reference_number")
-  evidenceUrl       String?   @map("evidence_url")
-  notes             String?
-  recordedBy        String?   @map("recorded_by") @db.Uuid
-  confirmedBy       String?   @map("confirmed_by") @db.Uuid
-  confirmedAt       DateTime? @map("confirmed_at") @db.Timestamptz(6)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  billingAccountId String    @map("billing_account_id") @db.Uuid
+  paymentNumber    String    @unique @map("payment_number")
+  paymentMethodId  String    @map("payment_method_id") @db.Uuid
+  statusId         String    @map("status_id") @db.Uuid
+  amount           Decimal   @db.Decimal(18, 2)
+  currency         String    @default("THB")
+  paidAt           DateTime  @map("paid_at") @db.Timestamptz(6)
+  referenceNumber  String?   @map("reference_number")
+  evidenceUrl      String?   @map("evidence_url")
+  notes            String?
+  recordedBy       String?   @map("recorded_by") @db.Uuid
+  confirmedBy      String?   @map("confirmed_by") @db.Uuid
+  confirmedAt      DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   billingAccount BillingAccount      @relation(fields: [billingAccountId], references: [id])
@@ -1535,17 +1541,89 @@ model StaffOrganizationAssignment {
   assignedByAuthUserId String?   @map("assigned_by_auth_user_id") @db.Uuid
   assignedAt           DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(6)
   revokedAt            DateTime? @map("revoked_at") @db.Timestamptz(6)
+  assignmentRoleId     String?   @map("assignment_role_id") @db.Uuid
+  scopeTypeId          String?   @map("scope_type_id") @db.Uuid
+  statusId             String?   @map("status_id") @db.Uuid
+  startsAt             DateTime  @default(now()) @map("starts_at") @db.Timestamptz(6)
+  endsAt               DateTime? @map("ends_at") @db.Timestamptz(6)
   note                 String?
   createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  staffUserProfile UserProfile  @relation("StaffPortfolioAssignments", fields: [staffUserProfileId], references: [id], onDelete: Cascade)
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  staffUserProfile UserProfile                         @relation("StaffPortfolioAssignments", fields: [staffUserProfileId], references: [id], onDelete: Cascade)
+  organization     Organization                        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignmentRole   CustomerAssignmentRole?             @relation(fields: [assignmentRoleId], references: [id], onDelete: Restrict)
+  scopeType        CustomerAssignmentScopeType?        @relation(fields: [scopeTypeId], references: [id], onDelete: Restrict)
+  status           CustomerAssignmentStatus?           @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  branchScopes     StaffOrganizationAssignmentBranch[]
 
   @@index([staffUserProfileId])
   @@index([organizationId])
   @@index([staffUserProfileId, organizationId])
   @@map("staff_organization_assignments")
+  @@schema("platform")
+}
+
+model CustomerAssignmentRole {
+  id          String                        @id @default(uuid()) @db.Uuid
+  code        String                        @unique
+  nameTh      String                        @map("name_th")
+  nameEn      String                        @map("name_en")
+  sortOrder   Int                           @default(0) @map("sort_order")
+  isActive    Boolean                       @default(true) @map("is_active")
+  isSystem    Boolean                       @default(true) @map("is_system")
+  createdAt   DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  assignments StaffOrganizationAssignment[]
+
+  @@map("customer_assignment_roles")
+  @@schema("platform")
+}
+
+model CustomerAssignmentScopeType {
+  id          String                        @id @default(uuid()) @db.Uuid
+  code        String                        @unique
+  nameTh      String                        @map("name_th")
+  nameEn      String                        @map("name_en")
+  sortOrder   Int                           @default(0) @map("sort_order")
+  isActive    Boolean                       @default(true) @map("is_active")
+  isSystem    Boolean                       @default(true) @map("is_system")
+  createdAt   DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  assignments StaffOrganizationAssignment[]
+
+  @@map("customer_assignment_scope_types")
+  @@schema("platform")
+}
+
+model CustomerAssignmentStatus {
+  id          String                        @id @default(uuid()) @db.Uuid
+  code        String                        @unique
+  nameTh      String                        @map("name_th")
+  nameEn      String                        @map("name_en")
+  sortOrder   Int                           @default(0) @map("sort_order")
+  isActive    Boolean                       @default(true) @map("is_active")
+  isSystem    Boolean                       @default(true) @map("is_system")
+  createdAt   DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  assignments StaffOrganizationAssignment[]
+
+  @@map("customer_assignment_statuses")
+  @@schema("platform")
+}
+
+model StaffOrganizationAssignmentBranch {
+  id                   String                      @id @default(uuid()) @db.Uuid
+  assignmentId         String                      @map("assignment_id") @db.Uuid
+  branchId             String                      @map("branch_id") @db.Uuid
+  assignedByAuthUserId String?                     @map("assigned_by_auth_user_id") @db.Uuid
+  createdAt            DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  assignment           StaffOrganizationAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  branch               Branch                      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, branchId])
+  @@index([branchId, assignmentId])
+  @@map("staff_organization_assignment_branches")
   @@schema("platform")
 }
 

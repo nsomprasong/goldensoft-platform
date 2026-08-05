@@ -4,6 +4,16 @@ import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { IconTextButton } from "@/components/ui/labeled-icon-button";
 import { pushToast } from "@/components/ui/toast";
 import { TH } from "@/lib/i18n/th";
@@ -11,6 +21,7 @@ import { cn } from "@/lib/utils";
 
 export function DeleteCustomRoleButton(props: {
   roleId: string;
+  organizationId: string;
   roleName: string;
   size?: "sm" | "default";
   redirectTo?: string;
@@ -21,57 +32,55 @@ export function DeleteCustomRoleButton(props: {
   const [error, setError] = useState<string | null>(null);
 
   function onDelete() {
-    const ok = window.confirm(
-      `ลบบทบาท「${props.roleName}」ถาวร?\nการลบจะทำไม่ได้หากยังมีผู้ใช้หรือคำเชิญอ้างอิงบทบาทนี้`,
-    );
-    if (!ok) return;
     setError(null);
     start(async () => {
-      const res = await fetch(`/api/platform/roles/${props.roleId}`, {
-        method: "DELETE",
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        message?: string;
-      };
-      if (!res.ok) {
+      const query = new URLSearchParams({ organizationId: props.organizationId });
+      const response = await fetch(`/api/platform/roles/${props.roleId}?${query}`, { method: "DELETE" });
+      const data = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok) {
         const message = data.message ?? "ลบบทบาทไม่สำเร็จ";
         setError(message);
         pushToast(message);
         return;
       }
       pushToast("ลบบทบาทแล้ว");
-      if (props.redirectTo) {
-        router.push(props.redirectTo);
-      }
+      if (props.redirectTo) router.push(props.redirectTo);
       router.refresh();
     });
   }
 
   return (
     <div className="grid gap-1">
-      <IconTextButton
-        type="button"
-        size={props.size}
-        variant="outline"
-        disabled={pending}
-        onClick={onDelete}
-        icon={
-          <Trash2
-            className={cn("size-3.5", pending ? "animate-pulse" : undefined)}
-            aria-hidden="true"
+      <Dialog>
+        <DialogTrigger asChild>
+          <IconTextButton
+            type="button"
+            size={props.size}
+            variant="outline"
+            disabled={pending}
+            icon={<Trash2 className={cn("size-3.5", pending ? "animate-pulse" : undefined)} aria-hidden="true" />}
+            label={pending ? TH.common.loading : TH.common.delete}
+            className={cn("border-[var(--destructive-border)] bg-[var(--destructive-soft)] text-[var(--destructive)] shadow-none", props.className)}
           />
-        }
-        label={pending ? TH.common.loading : TH.common.delete}
-        className={cn(
-          "border-red-200 bg-red-50 text-red-700 shadow-none hover:border-red-300 hover:bg-red-100 hover:text-red-800",
-          props.className,
-        )}
-      />
-      {error ? (
-        <p className="max-w-[12rem] text-right text-[11px] text-[var(--danger)]">
-          {error}
-        </p>
-      ) : null}
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ยืนยันการลบบทบาท</DialogTitle>
+            <DialogDescription>
+              ต้องการลบบทบาท “{props.roleName}” หรือไม่ การลบจะทำไม่ได้หากยังมีผู้ใช้หรือคำเชิญอ้างอิงบทบาทนี้
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <IconTextButton type="button" variant="outline" label="ยกเลิก" />
+            </DialogClose>
+            <DialogClose asChild>
+              <IconTextButton type="button" disabled={pending} onClick={onDelete} icon={<Trash2 aria-hidden="true" />} label="ยืนยันการลบ" />
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {error ? <p className="max-w-[12rem] text-right text-[11px] text-[var(--danger)]">{error}</p> : null}
     </div>
   );
 }

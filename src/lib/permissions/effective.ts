@@ -30,7 +30,7 @@ export type EffectivePermissionRow = {
   resource: string;
   action: string;
   sourceRole: string;
-  sourceKind: "platform" | "organization_system" | "organization_custom";
+  sourceKind: "platform" | "customer_support" | "organization_system" | "organization_custom";
   organizationId: string | null;
   organizationScope: string;
   branchScope: string;
@@ -194,13 +194,67 @@ export const resolveEffectivePermissions = cache(
       db,
       platformRoles,
     );
+    const customerSupportContext = input.organizationId
+      ? platformRoles.includes(MASTER.platformRole.SUPER_ADMIN) ||
+        (await db.staffOrganizationAssignment.count({
+          where: {
+            staffUserProfileId: profile.id,
+            organizationId: input.organizationId,
+            revokedAt: null,
+          },
+        })) > 0
+      : false;
+    const entitledProducts = input.organizationId
+      ? new Set(
+          (
+            await db.entitlement.findMany({
+              where: {
+                organizationId: input.organizationId,
+                status: { code: "ACTIVE" },
+                OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
+              },
+              select: { product: { select: { code: true } } },
+            })
+          ).map((row) => row.product.code),
+        )
+      : new Set<string>();
     for (const roleCode of platformRoles) {
-      const rolePerms = permissionsForRoles({
+      let rolePerms = permissionsForRoles({
         platformRoles: [roleCode],
         organizationRoles: [],
         platformRolePermissionOverrides: platformOverrides,
       });
-      for (const code of rolePerms) {
+      if (
+        input.organizationId &&
+        roleCode === MASTER.platformRole.SUPER_ADMIN
+      ) {
+        rolePerms = (
+          await db.permission.findMany({
+            where: { isActive: true },
+            select: { code: true },
+          })
+        ).map((permission) => permission.code);
+      }
+      const permissionMetadata = await db.permission.findMany({
+        where: { code: { in: rolePerms }, isActive: true },
+        select: { code: true, scopeCode: true, productCode: true },
+      });
+      const allowedCodes = new Set(
+        permissionMetadata
+          .filter((permission) => {
+            if (!input.organizationId) {
+              return permission.scopeCode === "PLATFORM" || permission.scopeCode === "BOTH";
+            }
+            if (!customerSupportContext) return false;
+            const organizationScope =
+              permission.scopeCode === "ORGANIZATION" || permission.scopeCode === "BOTH";
+            const entitled =
+              permission.productCode === "PLATFORM" || entitledProducts.has(permission.productCode);
+            return organizationScope && entitled;
+          })
+          .map((permission) => permission.code),
+      );
+      for (const code of rolePerms.filter((permission) => allowedCodes.has(permission))) {
         const meta = parsePermissionMeta(code);
         addRow({
           code,
@@ -209,10 +263,12 @@ export const resolveEffectivePermissions = cache(
           resource: meta.resource,
           action: meta.action,
           sourceRole: roleCode,
-          sourceKind: "platform",
-          organizationId: null,
-          organizationScope: "แพลตฟอร์ม",
-          branchScope: "ทั้งหมด",
+          sourceKind: input.organizationId ? "customer_support" : "platform",
+          organizationId: input.organizationId ?? null,
+          organizationScope: input.organizationId
+            ? "องค์กรลูกค้าที่ได้รับมอบหมาย"
+            : "แพลตฟอร์ม",
+          branchScope: input.organizationId ? "ตามขอบเขตที่ได้รับมอบหมาย" : "ทั้งหมด",
         });
       }
     }

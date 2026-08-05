@@ -43,7 +43,10 @@ export async function GET(request: NextRequest) {
     actor.managedOrganizationIds.includes(organizationId)
       ? roles
       : [];
-  return NextResponse.json({ roles: visible });
+  return NextResponse.json(
+    { scope: "organization", organizationId, roles: visible },
+    { headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } },
+  );
 }
 
 export async function POST(request: NextRequest) {

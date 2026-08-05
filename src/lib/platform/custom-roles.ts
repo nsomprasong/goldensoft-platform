@@ -9,10 +9,12 @@ import {
   PLATFORM_PERMISSIONS,
   defaultPermissionsForOrganizationRole,
   isOrganizationAssignablePermission,
+  permissionSupportsScope,
   permissionsForRoles,
   type PlatformPermission,
 } from "@/lib/permissions/codes";
 import { loadPlatformRolePermissionOverrides } from "@/lib/platform/platform-roles";
+import { loadPermissionRegistry } from "@/lib/permissions/registry";
 
 export class CustomRoleError extends Error {
   constructor(
@@ -36,7 +38,14 @@ function assertRoleCode(code: string) {
 }
 
 function assertOrganizationAssignablePermissionCodes(codes: string[]) {
-  const forbidden = codes.filter((code) => !isOrganizationAssignablePermission(code));
+  const knownPlatformPermissions = new Set<string>(
+    Object.values(PLATFORM_PERMISSIONS),
+  );
+  const forbidden = codes.filter(
+    (code) =>
+      (knownPlatformPermissions.has(code) &&
+        !isOrganizationAssignablePermission(code)),
+  );
   if (forbidden.length > 0) {
     throw new CustomRoleError(
       "PLATFORM_PERMISSION_NOT_ALLOWED",
@@ -228,7 +237,7 @@ export async function listOrganizationRoles(
   db: PrismaClient,
   organizationId: string,
 ) {
-  return db.organizationRole.findMany({
+  const roles = await db.organizationRole.findMany({
     where: {
       OR: [{ organizationId: null, isSystem: true }, { organizationId }],
     },
@@ -244,7 +253,12 @@ export async function listOrganizationRoles(
       isActive: true,
       codeLocked: true,
       permissions: {
-        where: { revokedAt: null },
+        where: {
+          revokedAt: null,
+          permission: {
+            is: { isActive: true },
+          },
+        },
         select: {
           permission: {
             select: {
@@ -267,6 +281,12 @@ export async function listOrganizationRoles(
       },
     },
   });
+  return roles.map((role) => ({
+    ...role,
+    permissions: role.permissions.filter((row) =>
+      permissionSupportsScope(row.permission.code, "organization"),
+    ),
+  }));
 }
 
 export async function createCustomRole(
@@ -308,6 +328,17 @@ export async function createCustomRole(
     );
   }
   assertOrganizationAssignablePermissionCodes(uniquePerms);
+  const allowedPermissionCodes = new Set(
+    (await loadPermissionRegistry(db, { organizationId: input.organizationId })).map(
+      (permission) => permission.code,
+    ),
+  );
+  if (uniquePerms.some((code) => !allowedPermissionCodes.has(code))) {
+    throw new CustomRoleError(
+      "PERMISSION_SCOPE_MISMATCH",
+      "มีสิทธิ์ที่อยู่นอก Product Entitlement ขององค์กรหรือเป็นสิทธิ์ระดับแพลตฟอร์ม",
+    );
+  }
 
   return db.$transaction(
     async (tx) => {
@@ -370,6 +401,8 @@ export async function createCustomRole(
         actionTypeId: createActionId,
         entityId: role.id,
         afterJson: {
+          contextType: "ORGANIZATION_CONTEXT",
+          organizationId: input.organizationId,
           code: role.code,
           nameTh: role.nameTh,
           permissionCodes: uniquePerms,
@@ -388,6 +421,7 @@ export async function updateCustomRole(
     actor: ActorAccess & { organizationRoles?: string[] };
     actorAuthUserId: string;
     roleId: string;
+    organizationId: string;
     nameTh?: string;
     nameEn?: string;
     description?: string | null;
@@ -406,6 +440,12 @@ export async function updateCustomRole(
   });
   if (!role) {
     throw new CustomRoleError("NOT_FOUND", "ไม่พบบทบาท");
+  }
+  if (
+    (role.organizationId !== null && role.organizationId !== input.organizationId) ||
+    (role.organizationId === null && !role.isSystem)
+  ) {
+    throw new CustomRoleError("ROLE_SCOPE_MISMATCH", "บทบาทไม่อยู่ในขอบเขตองค์กรที่ระบุ");
   }
 
   const isSuper = input.actor.platformRoles.includes(
@@ -444,6 +484,17 @@ export async function updateCustomRole(
   if (input.permissionCodes) {
     const uniquePerms = [...new Set(input.permissionCodes)];
     assertOrganizationAssignablePermissionCodes(uniquePerms);
+    const allowedPermissionCodes = new Set(
+      (await loadPermissionRegistry(db, { organizationId: input.organizationId })).map(
+        (permission) => permission.code,
+      ),
+    );
+    if (uniquePerms.some((code) => !allowedPermissionCodes.has(code))) {
+      throw new CustomRoleError(
+        "PERMISSION_SCOPE_MISMATCH",
+        "มีสิทธิ์ที่อยู่นอก Product Entitlement ขององค์กรหรือเป็นสิทธิ์ระดับแพลตฟอร์ม",
+      );
+    }
     await ensurePermissionCatalog(db, uniquePerms);
     activePermissions = await db.permission.findMany({
       where: { code: { in: uniquePerms }, isActive: true },
@@ -523,6 +574,8 @@ export async function updateCustomRole(
         entityId: role.id,
         beforeJson: before,
         afterJson: {
+          contextType: "ORGANIZATION_CONTEXT",
+          organizationId: input.organizationId,
           nameTh: updated.nameTh,
           nameEn: updated.nameEn,
           description: updated.description,
@@ -544,6 +597,7 @@ export async function deleteCustomRole(
     actor: ActorAccess & { organizationRoles?: string[] };
     actorAuthUserId: string;
     roleId: string;
+    organizationId: string;
   },
 ) {
   const role = await db.organizationRole.findUnique({
@@ -551,6 +605,9 @@ export async function deleteCustomRole(
   });
   if (!role) {
     throw new CustomRoleError("NOT_FOUND", "ไม่พบบทบาท");
+  }
+  if (role.organizationId !== input.organizationId) {
+    throw new CustomRoleError("ROLE_SCOPE_MISMATCH", "บทบาทไม่อยู่ในขอบเขตองค์กรที่ระบุ");
   }
   if (role.isSystem || !role.organizationId) {
     throw new CustomRoleError(
@@ -633,7 +690,7 @@ export async function loadSystemOrganizationRolePermissionOverrides(
     select: {
       code: true,
       permissions: {
-        where: { revokedAt: null, permission: { isActive: true } },
+        where: { revokedAt: null, permission: { is: { isActive: true } } },
         select: { permission: { select: { code: true } } },
       },
     },
@@ -721,7 +778,7 @@ export async function resolveCustomPermissionCodes(
     },
     select: {
       permissions: {
-        where: { revokedAt: null, permission: { isActive: true } },
+        where: { revokedAt: null, permission: { is: { isActive: true } } },
         select: { permission: { select: { code: true } } },
       },
     },

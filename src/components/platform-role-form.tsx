@@ -14,6 +14,7 @@ type PlatformRoleOption = {
   id: string;
   code: string;
   nameTh: string;
+  permissionLabels?: string[];
 };
 
 export function PlatformRoleAssignForm(props: {
@@ -28,6 +29,7 @@ export function PlatformRoleAssignForm(props: {
   const [roleId, setRoleId] = useState(available[0]?.id ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const selectedRole = available.find((role) => role.id === roleId) ?? null;
 
   async function assign() {
     if (!roleId) return;
@@ -104,6 +106,18 @@ export function PlatformRoleAssignForm(props: {
           label={pending ? TH.common.loading : "กำหนดบทบาทแพลตฟอร์ม"}
         />
       </div>
+      {selectedRole ? (
+        <div className="rounded-[var(--radius-md)] border border-[var(--info-border)] bg-[var(--info-soft)] p-3">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">
+            สิทธิ์ระดับแพลตฟอร์ม {selectedRole.permissionLabels?.length ?? 0} รายการ
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">
+            {selectedRole.permissionLabels?.length
+              ? selectedRole.permissionLabels.join(" · ")
+              : "บทบาทนี้ยังไม่ได้กำหนดสิทธิ์ระดับแพลตฟอร์ม"}
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

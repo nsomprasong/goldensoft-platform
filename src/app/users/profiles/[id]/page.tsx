@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Building2, History, ShieldCheck, UserRound } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { BranchScopeForm } from "@/components/branch-scope-form";
@@ -15,8 +15,10 @@ import {
   AccessDenied,
   DetailList,
   PageHeader,
+  SectionHeader,
   StatusBadge,
 } from "@/components/ui/admin-ui";
+import { Badge } from "@/components/ui/badge";
 import { IconTextLink } from "@/components/ui/labeled-icon-button";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requirePlatformPage } from "@/lib/auth/require-platform-page";
@@ -230,29 +232,35 @@ export default async function UserProfileAdminPage({
 
   return (
     <PlatformShell {...shellProps}>
-      <PageHeader
-        title={profile.displayName}
-        description={profile.email}
-        status={
-          <StatusBadge
-            label={labelStatus(profile.status.code)}
-            code={profile.status.code}
-          />
-        }
-        actions={
-          <IconTextLink
-            href="/users"
-            variant="outline"
-            label={TH.common.back}
-            icon={<ArrowLeft className="size-5" />}
-          />
-        }
-      />
+      <div className="mx-auto w-full max-w-6xl">
+        <PageHeader
+          title={profile.displayName}
+          description={profile.email}
+          icon={<UserRound className="size-5" />}
+          status={
+            <StatusBadge
+              label={labelStatus(profile.status.code)}
+              code={profile.status.code}
+            />
+          }
+          actions={
+            <IconTextLink
+              href="/users"
+              variant="outline"
+              label={TH.common.back}
+              icon={<ArrowLeft className="size-5" />}
+            />
+          }
+        />
 
-      <div className="grid gap-4">
+      <div className="grid gap-5">
         {!inOrgContext ? (
-          <section className="card space-y-3">
-            <h3 className="font-semibold">{TH.roles.platformRoles}</h3>
+          <section className="card space-y-4">
+            <SectionHeader
+              title={TH.roles.platformRoles}
+              description="สิทธิ์ระดับแพลตฟอร์มของบัญชีผู้ใช้นี้"
+              badge={<ShieldCheck className="size-5 text-[var(--primary)]" />}
+            />
             <DetailList
               items={[
                 { label: "อีเมล", value: profile.email },
@@ -294,8 +302,12 @@ export default async function UserProfileAdminPage({
             )}
           </section>
         ) : (
-          <section className="card space-y-3">
-            <h3 className="font-semibold">ข้อมูลผู้ใช้ · {ctx.activeOrganization?.name}</h3>
+          <section className="card space-y-4">
+            <SectionHeader
+              title={`ข้อมูลผู้ใช้ · ${ctx.activeOrganization?.name ?? ""}`}
+              description="ข้อมูลบัญชีภายใต้องค์กรที่กำลังใช้งาน"
+              badge={<UserRound className="size-5 text-[var(--primary)]" />}
+            />
             <DetailList
               items={[
                 { label: "อีเมล", value: profile.email },
@@ -306,14 +318,22 @@ export default async function UserProfileAdminPage({
         )}
 
         {membershipsVisible.map((m) => (
-          <section key={m.id} className="card space-y-3">
-            <h3 className="font-semibold">
-              {m.organization.displayName} ({m.organization.customerCode})
-            </h3>
-            <StatusBadge
-              label={labelStatus(m.status.code)}
-              code={m.status.code}
+          <section key={m.id} className="card space-y-5">
+            <SectionHeader
+              title={m.organization.displayName}
+              description={`รหัสองค์กร ${m.organization.customerCode}`}
+              badge={
+                <StatusBadge
+                  label={labelStatus(m.status.code)}
+                  code={m.status.code}
+                />
+              }
             />
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--foreground)]">
+                <Building2 className="size-4 text-[var(--primary)]" />
+                บทบาทในองค์กร
+              </div>
             <ul className="space-y-2 text-sm">
               {m.roles.map((r) => (
                 <li key={r.id} className="flex items-center justify-between gap-2">
@@ -325,7 +345,8 @@ export default async function UserProfileAdminPage({
                 </li>
               ))}
             </ul>
-            <p className="text-sm text-[var(--text-secondary)]">
+            </div>
+            <p className="rounded-[var(--radius-md)] bg-[var(--primary-soft)] px-3 py-2 text-sm text-[var(--accent-foreground)]">
               ขอบเขตสาขาปัจจุบัน:{" "}
               {m.branchScopes
                 .map(
@@ -355,32 +376,47 @@ export default async function UserProfileAdminPage({
           </section>
         ))}
 
-        <section className="card space-y-2">
-          <h3 className="font-semibold">Effective Permissions</h3>
-          <ul className="max-h-80 space-y-1 overflow-auto text-sm">
+        <section className="card space-y-4">
+          <SectionHeader
+            title="สิทธิ์ที่มีผลใช้งาน"
+            description="สิทธิ์ที่คำนวณจากบทบาทและขอบเขตองค์กรปัจจุบัน"
+            badge={<ShieldCheck className="size-5 text-[var(--success)]" />}
+          />
+          <ul className="grid max-h-96 gap-2 overflow-auto pr-1 text-sm md:grid-cols-2">
             {effective.permissions.length === 0 ? (
               <li>—</li>
             ) : (
               effective.permissions.map((p) => (
-                <li key={`${p.code}-${p.sourceRole}-${p.organizationId}`}>
-                  <strong>{p.nameTh}</strong> ({p.code}) · {p.sourceRole} ·{" "}
-                  {p.organizationScope} · {p.branchScope}
+                <li key={`${p.code}-${p.sourceRole}-${p.organizationId}`} className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong className="text-[var(--foreground)]">{p.nameTh}</strong>
+                    <Badge variant="secondary">{p.code}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                    {p.sourceRole} · {p.organizationScope} · {p.branchScope}
+                  </p>
                 </li>
               ))
             )}
           </ul>
         </section>
 
-        <section className="card space-y-2">
-          <h3 className="font-semibold">บันทึกกิจกรรม</h3>
-          <ul className="space-y-1 text-sm">
+        <section className="card space-y-4">
+          <SectionHeader
+            title="บันทึกกิจกรรม"
+            description="กิจกรรมล่าสุดที่เกี่ยวข้องกับบัญชีผู้ใช้"
+            badge={<History className="size-5 text-[var(--primary)]" />}
+          />
+          <ul className="divide-y divide-[var(--border)] text-sm">
             {audits.map((a) => (
-              <li key={a.id}>
-                {a.actionType.nameTh} · {a.createdAt.toLocaleString("th-TH")}
+              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0 last:pb-0">
+                <span className="font-medium text-[var(--foreground)]">{a.actionType.nameTh}</span>
+                <time className="text-xs text-[var(--muted-foreground)]">{a.createdAt.toLocaleString("th-TH")}</time>
               </li>
             ))}
           </ul>
         </section>
+      </div>
       </div>
     </PlatformShell>
   );

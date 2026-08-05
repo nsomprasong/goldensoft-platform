@@ -45,8 +45,11 @@ export function BranchScopeForm(props: {
   }
 
   return (
-    <div className="space-y-3 rounded border border-[var(--border)] p-3">
-      <h4 className="text-sm font-semibold">ขอบเขตสาขา</h4>
+    <div className="space-y-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] p-4 shadow-[var(--shadow-xs)]">
+      <div>
+        <h4 className="font-semibold text-[var(--foreground)]">ขอบเขตสาขา</h4>
+        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">กำหนดสาขาที่ผู้ใช้นี้สามารถเข้าถึงได้</p>
+      </div>
       {error ? (
         <p className="rounded-md bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">
           {error}
@@ -65,7 +68,7 @@ export function BranchScopeForm(props: {
         </select>
       </FormField>
       {scopeType === "SELECTED" ? (
-        <fieldset className="space-y-1">
+        <fieldset className="space-y-2 rounded-[var(--radius-md)] bg-[var(--surface-muted)] p-3">
           <legend className="text-sm font-medium">เลือกสาขา</legend>
           {props.branches.map((b) => {
             const checked = selected.includes(b.id);

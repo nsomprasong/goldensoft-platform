@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 export type PermissionRegistryItem = {
   code: string;
+  scopeCode: "PLATFORM" | "ORGANIZATION" | "BOTH";
   productCode: string;
   featureCode: string | null;
   menuCode: string;
@@ -48,15 +49,25 @@ export async function loadPermissionRegistry(
       ...(options.platform
         ? {}
         : productCodes.size > 0
-          ? { productCode: { in: ["PLATFORM", ...productCodes] } }
-          : { productCode: "PLATFORM" }),
+          ? {
+              productCode: { in: ["PLATFORM", ...productCodes] },
+            }
+          : {
+              productCode: "PLATFORM",
+            }),
     },
     include: { permissionAction: true },
     orderBy: [{ productCode: "asc" }, { sortOrder: "asc" }, { code: "asc" }],
   });
 
-  return rows.map((row) => ({
+  return rows
+    .filter((row) => {
+      const expected = options.platform ? "PLATFORM" : "ORGANIZATION";
+      return row.scopeCode === expected || row.scopeCode === "BOTH";
+    })
+    .map((row) => ({
     code: row.code,
+    scopeCode: row.scopeCode as PermissionRegistryItem["scopeCode"],
     productCode: row.productCode,
     featureCode: row.featureCode,
     menuCode: row.menuCode ?? row.resource,
@@ -65,5 +76,5 @@ export async function loadPermissionRegistry(
     action: row.action,
     actionNameTh: row.permissionAction?.nameTh ?? ACTION_NAMES[row.action] ?? row.nameTh,
     descriptionTh: row.descriptionTh,
-  }));
+    }));
 }

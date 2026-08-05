@@ -441,6 +441,24 @@ export function AppShell(props: {
           </header>
 
           <main className="page-container flex-1">
+            {props.shellMode === "customer_support" && props.activeOrganization ? (
+              <section
+                className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--info-border)] bg-[var(--info-soft)] px-4 py-3 text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
+                aria-label="บริบทการดูแลองค์กรลูกค้า"
+              >
+                <div>
+                  <p className="font-semibold">
+                    กำลังดูแลองค์กร “{props.activeOrganization.name}” ในนาม GoldenSoft
+                  </p>
+                  <p className="text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+                    ผู้ปฏิบัติงาน {props.displayName} · สาขา {props.activeBranch?.name ?? "ทุกสาขาที่ได้รับมอบหมาย"} · สิทธิ์ถูกจำกัดตามงานที่ได้รับมอบหมายและผลิตภัณฑ์ของลูกค้า
+                  </p>
+                </div>
+                <span className="rounded-full border border-[var(--info-border)] bg-[var(--surface)] px-3 py-1 text-[length:var(--text-caption)] font-semibold text-[var(--info)]">
+                  โหมดดูแลองค์กรลูกค้า
+                </span>
+              </section>
+            ) : null}
             {props.children}
           </main>
         </div>

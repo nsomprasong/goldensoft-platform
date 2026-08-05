@@ -59,6 +59,17 @@ export async function assignMembershipRole(
   }
   await assertCanAssign(input.actor, membership.organizationId);
 
+  const platformRole = await db.platformRole.findUnique({
+    where: { id: input.roleId },
+    select: { id: true },
+  });
+  if (platformRole) {
+    throw new RoleAssignmentError(
+      "ROLE_SCOPE_MISMATCH",
+      "บทบาทระดับแพลตฟอร์มไม่สามารถกำหนดให้สมาชิกหรือพนักงานขององค์กรได้",
+    );
+  }
+
   const role = await db.organizationRole.findFirst({
     where: {
       id: input.roleId,

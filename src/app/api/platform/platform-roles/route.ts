@@ -4,6 +4,8 @@ import { z } from "zod";
 import { loadActorAccess } from "@/lib/auth/actor-access";
 import { requireAuthUser } from "@/lib/auth/request-auth";
 import { TH } from "@/lib/i18n/th";
+import { PLATFORM_PERMISSIONS } from "@/lib/permissions/codes";
+import { resolveActorPermissionCodes } from "@/lib/platform/custom-roles";
 import {
   assignPlatformRole,
   listAssignablePlatformRoles,
@@ -36,14 +38,21 @@ export async function GET(request: NextRequest) {
     );
   }
   const actor = await loadActorAccess(prisma, user.id);
-  if (!actor.platformRoles.includes("SUPER_ADMIN")) {
+  const permissions = await resolveActorPermissionCodes(prisma, {
+    platformRoles: actor.platformRoles,
+    organizationRoles: [],
+  });
+  if (!permissions.includes(PLATFORM_PERMISSIONS.roleRead)) {
     return NextResponse.json(
       { code: "FORBIDDEN", message: TH.access.deniedBody },
       { status: 403 },
     );
   }
   const roles = await listAssignablePlatformRoles(prisma);
-  return NextResponse.json({ roles });
+  return NextResponse.json(
+    { scope: "platform", roles },
+    { headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } },
+  );
 }
 
 export async function POST(request: NextRequest) {

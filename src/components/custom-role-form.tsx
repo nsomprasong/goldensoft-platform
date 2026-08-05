@@ -29,6 +29,9 @@ export function CustomRoleForm(props: {
   /** Platform SUPER_ADMIN role itself — permissions are locked (always all). */
   lockPermissions?: boolean;
   permissionCatalog?: PermissionRegistryItem[];
+  /** Organization-scope permissions granted only while staff supports an assigned customer. */
+  customerSupportPermissionCatalog?: PermissionRegistryItem[];
+  returnPath?: string;
   initial?: {
     code: string;
     nameTh: string;
@@ -36,6 +39,7 @@ export function CustomRoleForm(props: {
     description: string;
     permissionCodes: string[];
     isSystem?: boolean;
+    isActive?: boolean;
   };
 }) {
   const router = useRouter();
@@ -48,6 +52,7 @@ export function CustomRoleForm(props: {
   const [description, setDescription] = useState(
     props.initial?.description ?? "",
   );
+  const [isActive, setIsActive] = useState(props.initial?.isActive ?? true);
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(props.initial?.permissionCodes ?? []),
   );
@@ -56,11 +61,13 @@ export function CustomRoleForm(props: {
   const permissionsReadOnly =
     props.lockPermissions === true ||
     (isSystem && !props.allowSystemPermissionEdit);
-  const metadataReadOnly = isSystem || roleKind === "platform";
+  const metadataReadOnly =
+    isSystem || (roleKind === "platform" && props.mode === "edit");
 
-  const grouped = useMemo(() => {
-    const assignablePerms = props.permissionCatalog?.length
-      ? props.permissionCatalog.map((item) => item.code)
+  const groupedByScope = useMemo(() => {
+    const groupCatalog = (catalog: PermissionRegistryItem[] | undefined) => {
+    const assignablePerms = catalog?.length
+      ? catalog.map((item) => item.code)
       : roleKind === "platform"
         ? Object.values(PLATFORM_PERMISSIONS)
         : ORGANIZATION_ASSIGNABLE_PERMISSIONS;
@@ -68,7 +75,7 @@ export function CustomRoleForm(props: {
     const map = new Map<string, string[]>();
     for (const code of assignablePerms) {
       const legacyCode = code as PlatformPermission;
-      const registry = props.permissionCatalog?.find((item) => item.code === code);
+      const registry = catalog?.find((item) => item.code === code);
       const label = registry?.menuNameTh ?? PLATFORM_PERMISSION_LABELS[legacyCode] ?? code;
       const desc = registry?.descriptionTh ?? PLATFORM_PERMISSION_DESCRIPTIONS[legacyCode] ?? "";
       if (
@@ -85,7 +92,23 @@ export function CustomRoleForm(props: {
       map.set(group, list);
     }
     return [...map.entries()];
-  }, [props.permissionCatalog, query, roleKind]);
+    };
+    return {
+      primary: groupCatalog(props.permissionCatalog),
+      customerSupport:
+        roleKind === "platform"
+          ? groupCatalog(props.customerSupportPermissionCatalog)
+          : [],
+    };
+  }, [props.customerSupportPermissionCatalog, props.permissionCatalog, query, roleKind]);
+
+  const allCatalog = useMemo(
+    () => [
+      ...(props.permissionCatalog ?? []),
+      ...(props.customerSupportPermissionCatalog ?? []),
+    ],
+    [props.customerSupportPermissionCatalog, props.permissionCatalog],
+  );
 
   function toggle(code: string) {
     if (permissionsReadOnly) return;
@@ -93,17 +116,17 @@ export function CustomRoleForm(props: {
       const next = new Set(prev);
       if (next.has(code)) {
         next.delete(code);
-        const item = props.permissionCatalog?.find((row) => row.code === code);
+        const item = allCatalog.find((row) => row.code === code);
         if (item?.action === "read") {
-          for (const sibling of props.permissionCatalog ?? []) {
+          for (const sibling of allCatalog) {
             if (sibling.productCode === item.productCode && sibling.menuCode === item.menuCode) next.delete(sibling.code);
           }
         }
       } else {
         next.add(code);
-        const item = props.permissionCatalog?.find((row) => row.code === code);
+        const item = allCatalog.find((row) => row.code === code);
         if (item && item.action !== "read") {
-          const read = props.permissionCatalog?.find((row) => row.productCode === item.productCode && row.menuCode === item.menuCode && row.action === "read");
+          const read = allCatalog.find((row) => row.productCode === item.productCode && row.menuCode === item.menuCode && row.action === "read");
           if (read) next.add(read.code);
         }
       }
@@ -137,7 +160,7 @@ export function CustomRoleForm(props: {
       };
       const res =
         props.mode === "create"
-          ? await fetch("/api/platform/roles", {
+          ? await fetch(roleKind === "platform" ? "/api/platform/platform-role-definitions" : "/api/platform/roles", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(payload),
@@ -153,6 +176,9 @@ export function CustomRoleForm(props: {
                   roleKind === "platform" || isSystem
                     ? {
                         description: description || null,
+                        ...(roleKind === "platform" && !props.lockPermissions
+                          ? { isActive }
+                          : {}),
                         ...(props.lockPermissions
                           ? {}
                           : { permissionCodes: [...selected] }),
@@ -162,6 +188,7 @@ export function CustomRoleForm(props: {
                         nameEn,
                         description: description || null,
                         permissionCodes: [...selected],
+                        isActive,
                       },
                 ),
               },
@@ -189,7 +216,8 @@ export function CustomRoleForm(props: {
           ? `/roles/platform/${props.roleId}`
           : `/roles/${props.roleId}`;
       router.push(
-        props.mode === "create" ? `/roles/${data.role?.id}` : detailPath,
+        props.returnPath ??
+          (props.mode === "create" ? `/roles/${data.role?.id}` : detailPath),
       );
       router.refresh();
     });
@@ -244,6 +272,19 @@ export function CustomRoleForm(props: {
             บทบาทระบบ — แก้ได้เฉพาะรายการสิทธิ์ (มีผลกับทุกองค์กร)
           </p>
         ) : null}
+        {props.mode === "edit" &&
+        ((!isSystem && roleKind === "organization") ||
+          (roleKind === "platform" && !props.lockPermissions)) ? (
+          <label className="flex items-center gap-2 text-[length:var(--text-label)]">
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(event) => setIsActive(event.target.checked)}
+              disabled={pending}
+            />
+            เปิดใช้งานบทบาท
+          </label>
+        ) : null}
       </section>
 
       <section className="card grid gap-3">
@@ -254,7 +295,7 @@ export function CustomRoleForm(props: {
           </div>
           {!permissionsReadOnly ? (
             <div className="flex gap-2">
-              <button type="button" className="btn btn-sm" onClick={() => setSelected(new Set((props.permissionCatalog ?? []).map((item) => item.code)))}>เลือกทั้งหมด</button>
+              <button type="button" className="btn btn-sm" onClick={() => setSelected(new Set(allCatalog.map((item) => item.code)))}>เลือกทั้งหมด</button>
               <button type="button" className="btn btn-sm" onClick={() => setSelected(new Set())}>ยกเลิกทั้งหมด</button>
             </div>
           ) : null}
@@ -265,8 +306,32 @@ export function CustomRoleForm(props: {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        {grouped.map(([group, codes]) => (
-          <div key={group} className="rounded-[var(--radius-md)] border border-[var(--border)] p-3">
+        {([
+          {
+            key: "platform-or-organization",
+            title: roleKind === "platform" ? "สิทธิ์ระดับแพลตฟอร์ม" : "สิทธิ์ภายในองค์กร",
+            description:
+              roleKind === "platform"
+                ? "ใช้เมื่อพนักงาน GoldenSoft ทำงานในโหมดแพลตฟอร์ม"
+                : "ใช้กับสมาชิกและพนักงานภายในองค์กรที่เลือกเท่านั้น",
+            groups: groupedByScope.primary,
+          },
+          ...(roleKind === "platform" && groupedByScope.customerSupport.length > 0
+            ? [{
+                key: "customer-support",
+                title: "สิทธิ์ดูแลองค์กรลูกค้า",
+                description: "มีผลเฉพาะองค์กรลูกค้าที่พนักงานได้รับมอบหมาย และยังถูกจำกัดด้วยผลิตภัณฑ์กับสาขาขององค์กรนั้น",
+                groups: groupedByScope.customerSupport,
+              }]
+            : []),
+        ]).map((section) => (
+          <div key={section.key} className="grid gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+            <div>
+              <h3 className="font-semibold text-[var(--text-primary)]">{section.title}</h3>
+              <p className="text-[length:var(--text-helper)] text-[var(--text-secondary)]">{section.description}</p>
+            </div>
+            {section.groups.map(([group, codes]) => (
+          <div key={`${section.key}:${group}`} className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="font-medium capitalize">{group}</p>
               {!permissionsReadOnly ? (
@@ -292,16 +357,18 @@ export function CustomRoleForm(props: {
                     />
                     <span>
                       <span className="block font-medium">
-                        {props.permissionCatalog?.find((item) => item.code === perm)?.menuNameTh ?? PLATFORM_PERMISSION_LABELS[perm as PlatformPermission] ?? perm}
+                        {allCatalog.find((item) => item.code === perm)?.menuNameTh ?? PLATFORM_PERMISSION_LABELS[perm as PlatformPermission] ?? perm}
                       </span>
                       <span className="block text-[length:var(--text-caption)] text-[var(--text-secondary)]">
-                        {props.permissionCatalog?.find((item) => item.code === perm)?.actionNameTh ?? PLATFORM_PERMISSION_DESCRIPTIONS[perm as PlatformPermission] ?? "สิทธิ์การใช้งาน"}
+                        {allCatalog.find((item) => item.code === perm)?.actionNameTh ?? PLATFORM_PERMISSION_DESCRIPTIONS[perm as PlatformPermission] ?? "สิทธิ์การใช้งาน"}
                       </span>
                     </span>
                   </label>
                 </li>
               ))}
             </ul>
+          </div>
+            ))}
           </div>
         ))}
       </section>
@@ -312,8 +379,32 @@ export function CustomRoleForm(props: {
         </p>
       ) : null}
 
+      <section className="card grid gap-1">
+        <h3 className="font-semibold">ตัวอย่างสิทธิ์ที่มีผลและผลกระทบก่อนบันทึก</h3>
+        <p className="text-[length:var(--text-helper)] text-[var(--text-secondary)]">
+          การเปลี่ยนแปลงจะมีผลกับผู้ใช้งาน ตำแหน่ง และการมอบหมายที่อ้างอิงบทบาทนี้ในขอบเขตปัจจุบัน เลือกสิทธิ์แล้ว {selected.size} รายการ
+        </p>
+        <div className="mt-2 grid gap-2 md:grid-cols-2">
+          <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+            <p className="font-medium">{roleKind === "platform" ? "ใช้ในแพลตฟอร์ม" : "ใช้ภายในองค์กร"}</p>
+            <p className="text-[length:var(--text-caption)] text-[var(--text-muted)]">
+              {[...(props.permissionCatalog ?? [])].filter((permission) => selected.has(permission.code)).length} สิทธิ์
+            </p>
+          </div>
+          {roleKind === "platform" ? (
+            <div className="rounded-[var(--radius-md)] border border-[var(--info-border)] bg-[var(--info-soft)] p-3">
+              <p className="font-medium">ใช้เมื่อดูแลองค์กรลูกค้า</p>
+              <p className="text-[length:var(--text-caption)] text-[var(--text-muted)]">
+                {(props.customerSupportPermissionCatalog ?? []).filter((permission) => selected.has(permission.code)).length} สิทธิ์ · ต้องมี assignment, branch scope และ entitlement ครบ
+              </p>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
       {!permissionsReadOnly || props.lockPermissions ? (
-        <IconTextButton
+        <div className="flex flex-wrap gap-2">
+          <IconTextButton
           type="button"
           disabled={
             pending ||
@@ -329,7 +420,17 @@ export function CustomRoleForm(props: {
             />
           }
           label={pending ? TH.common.loading : "บันทึก"}
-        />
+          />
+          {props.returnPath ? (
+            <IconTextButton
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => router.push(props.returnPath!)}
+              label="ยกเลิก"
+            />
+          ) : null}
+        </div>
       ) : (
         <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">
           คุณไม่มีสิทธิ์แก้ไขสิทธิ์ของบทบาทนี้

@@ -6,6 +6,7 @@ import { parse as parseEnv } from "dotenv";
 
 /** Env keys Environment Guard resolves; must come from project files, not IDE stubs. */
 const PROJECT_URL_KEYS = [
+  "APP_CODE",
   "NEXT_PUBLIC_SUPABASE_URL",
   "DATABASE_URL",
   "DIRECT_URL",

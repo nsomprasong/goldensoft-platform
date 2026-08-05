@@ -6,9 +6,11 @@ import {
 } from "@/lib/platform/admin-guards";
 import { MASTER } from "@/lib/platform/master-codes";
 import {
+  PLATFORM_PERMISSIONS,
   PLATFORM_PERMISSION_DESCRIPTIONS,
   PLATFORM_PERMISSION_LABELS,
   defaultPermissionsForPlatformRole,
+  permissionsForRoles,
   type PlatformPermission,
 } from "@/lib/permissions/codes";
 
@@ -25,10 +27,14 @@ export class PlatformRoleAssignError extends Error {
 type Actor = { platformRoles: string[]; authUserId?: string };
 
 function assertSuperAdmin(actor: Actor) {
-  if (!actor.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN)) {
+  const permissions = permissionsForRoles({
+    platformRoles: actor.platformRoles,
+    organizationRoles: [],
+  });
+  if (!permissions.includes(PLATFORM_PERMISSIONS.roleManage)) {
     throw new PlatformRoleAssignError(
       "FORBIDDEN",
-      "เฉพาะ Super Admin เท่านั้นที่กำหนดบทบาทแพลตฟอร์มได้",
+      "ไม่มีสิทธิ์จัดการบทบาทระดับแพลตฟอร์ม",
     );
   }
 }
@@ -39,6 +45,7 @@ async function writeAudit(
     actorAuthUserId: string;
     actionCode: string;
     entityId: string;
+    entityType?: "platform_role" | "platform_role_assignment";
     afterJson?: unknown;
     beforeJson?: unknown;
   },
@@ -60,7 +67,7 @@ async function writeAudit(
     data: {
       actorAuthUserId: input.actorAuthUserId,
       actionTypeId: action.id,
-      entityType: "platform_role_assignment",
+      entityType: input.entityType ?? "platform_role_assignment",
       entityId: input.entityId,
       beforeJson: input.beforeJson as Prisma.InputJsonValue | undefined,
       afterJson: input.afterJson as Prisma.InputJsonValue | undefined,
@@ -73,6 +80,71 @@ export async function listAssignablePlatformRoles(db: PrismaClient) {
     where: { isActive: true },
     orderBy: { sortOrder: "asc" },
     select: { id: true, code: true, nameTh: true, nameEn: true },
+  });
+}
+
+export async function createPlatformRole(
+  db: PrismaClient,
+  input: {
+    actor: Actor;
+    actorAuthUserId: string;
+    code: string;
+    nameTh: string;
+    nameEn: string;
+    description?: string | null;
+    permissionCodes: string[];
+  },
+) {
+  assertSuperAdmin(input.actor);
+  const code = input.code.trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9_]{1,47}$/.test(code)) {
+    throw new PlatformRoleError("INVALID_ROLE_CODE", "รหัสบทบาทไม่ถูกต้อง");
+  }
+  const uniquePermissions = [...new Set(input.permissionCodes)];
+  const permissions = await db.permission.findMany({
+    where: {
+      code: { in: uniquePermissions },
+      isActive: true,
+    },
+    select: { id: true, code: true, scopeCode: true },
+  });
+  if (
+    permissions.length !== uniquePermissions.length ||
+    permissions.some((permission) =>
+      !["PLATFORM", "ORGANIZATION", "BOTH"].includes(permission.scopeCode),
+    )
+  ) {
+    throw new PlatformRoleError("PERMISSION_SCOPE_MISMATCH", "มีสิทธิ์ที่ไม่รองรับบทบาทพนักงาน GoldenSoft");
+  }
+  const duplicate = await db.platformRole.findFirst({
+    where: { OR: [{ code }, { nameTh: { equals: input.nameTh.trim(), mode: "insensitive" } }] },
+    select: { id: true },
+  });
+  if (duplicate) throw new PlatformRoleError("ROLE_CODE_EXISTS", "ชื่อหรือรหัสบทบาทนี้มีอยู่แล้ว");
+
+  return db.$transaction(async (tx) => {
+    const role = await tx.platformRole.create({
+      data: {
+        code,
+        nameTh: input.nameTh.trim(),
+        nameEn: input.nameEn.trim(),
+        description: input.description?.trim() || null,
+        isActive: true,
+        isSystem: false,
+        sortOrder: 100,
+      },
+    });
+    await tx.platformRolePermission.createMany({
+      data: permissions.map((permission) => ({ platformRoleId: role.id, permissionId: permission.id })),
+    });
+    await writeAudit(tx, {
+      actorAuthUserId: input.actorAuthUserId,
+      actionCode: "platform_role.create",
+      entityId: role.id,
+      entityType: "platform_role",
+      afterJson: { contextType: "PLATFORM_CONTEXT", code, permissionCodes: uniquePermissions },
+    });
+    return role;
   });
 }
 
@@ -90,7 +162,18 @@ export async function assignPlatformRole(
   const [profile, role, activeStatus] = await Promise.all([
     db.userProfile.findFirst({
       where: { id: input.userProfileId, deletedAt: null },
-      select: { id: true, displayName: true, email: true },
+      select: {
+        id: true,
+        displayName: true,
+        email: true,
+        memberships: {
+          where: {
+            endedAt: null,
+            status: { code: MASTER.membershipStatus.ACTIVE },
+          },
+          select: { organization: { select: { customerCode: true } } },
+        },
+      },
     }),
     db.platformRole.findFirst({
       where: { id: input.roleId, isActive: true },
@@ -102,6 +185,18 @@ export async function assignPlatformRole(
   ]);
   if (!profile) {
     throw new PlatformRoleAssignError("NOT_FOUND", "ไม่พบผู้ใช้งาน");
+  }
+  const organizationCodes = profile.memberships.map((membership) =>
+    membership.organization.customerCode.trim().toUpperCase(),
+  );
+  if (
+    organizationCodes.length > 0 &&
+    !organizationCodes.includes("GOLDENSOFT")
+  ) {
+    throw new PlatformRoleAssignError(
+      "ROLE_SCOPE_MISMATCH",
+      "ไม่สามารถกำหนดบทบาทระดับแพลตฟอร์มให้พนักงานขององค์กรลูกค้าได้",
+    );
   }
   if (!role || !activeStatus) {
     throw new PlatformRoleAssignError("NOT_FOUND", "ไม่พบบทบาทแพลตฟอร์ม");
@@ -282,7 +377,7 @@ export async function loadPlatformRolePermissionOverrides(
     select: {
       code: true,
       permissions: {
-        where: { revokedAt: null, permission: { isActive: true } },
+        where: { revokedAt: null, permission: { is: { isActive: true } } },
         select: { permission: { select: { code: true } } },
       },
     },
@@ -304,6 +399,7 @@ export async function updatePlatformRole(
     roleId: string;
     description?: string | null;
     permissionCodes?: string[];
+    isActive?: boolean;
   },
 ) {
   assertSuperAdmin(input.actor);
@@ -322,6 +418,9 @@ export async function updatePlatformRole(
   }
 
   const isSuperRole = role.code === MASTER.platformRole.SUPER_ADMIN;
+  if (isSuperRole && input.isActive === false) {
+    throw new PlatformRoleError("SUPER_ADMIN_LOCKED", "ไม่สามารถปิดใช้งานบทบาทผู้ดูแลระบบสูงสุดได้");
+  }
   if (isSuperRole && input.permissionCodes) {
     throw new PlatformRoleError(
       "SUPER_ADMIN_LOCKED",
@@ -362,6 +461,7 @@ export async function updatePlatformRole(
     async (tx) => {
       const before = {
         description: role.description,
+        isActive: role.isActive,
         permissionCodes: role.permissions.map((p) => p.permission.code),
       };
 
@@ -372,6 +472,7 @@ export async function updatePlatformRole(
             input.description === undefined
               ? role.description
               : input.description?.trim() || null,
+          isActive: input.isActive ?? role.isActive,
         },
       });
 
@@ -421,11 +522,14 @@ export async function updatePlatformRole(
         actorAuthUserId: input.actorAuthUserId,
         actionCode: MASTER.auditActionType.PLATFORM_ROLE_UPDATE,
         entityId: role.id,
+        entityType: "platform_role",
         beforeJson: before,
         afterJson: {
           description: updated.description,
+          isActive: updated.isActive,
           permissionCodes: nextPermissionCodes,
           code: role.code,
+          contextType: "PLATFORM_CONTEXT",
         },
       });
 

@@ -7,6 +7,9 @@ export function pathAfterOrganizationSwitch(
   pathname: string,
   nextOrganizationId: string,
 ): string | null {
+  if (pathname === "/roles") {
+    return `/roles?context=organization&organizationId=${encodeURIComponent(nextOrganizationId)}`;
+  }
   const match = pathname.match(/^\/organizations\/([^/]+)(\/.*)?$/);
   if (!match) return null;
   const currentOrgId = match[1]!;

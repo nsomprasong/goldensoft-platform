@@ -45,6 +45,14 @@ export function ContextSwitcher(props: {
     (o) => !membershipIds.has(o.id) && !adminOnly.some((a) => a.id === o.id),
   );
   const allOptions = [...props.organizations, ...adminOnly, ...managedOnly];
+  const goldenSoftOptions = allOptions.filter(
+    (org) => (org.customerCode ?? "").trim().toUpperCase() === "GOLDENSOFT",
+  );
+  const responsibleOrganizations = allOptions
+    .filter(
+      (org) => (org.customerCode ?? "").trim().toUpperCase() !== "GOLDENSOFT",
+    )
+    .sort((left, right) => left.name.localeCompare(right.name, "th"));
 
   async function switchContext(
     organizationId: string,
@@ -117,36 +125,15 @@ export function ContextSwitcher(props: {
               start(() => switchContext(orgId, null, mode));
             }}
           >
-            {props.organizations.length > 0 ? (
-              <optgroup label="องค์กรที่คุณเป็นสมาชิก">
-                {props.organizations.map((org) => (
-                  <option key={org.id} value={org.id}>
-                    {org.name}
-                    {(org.customerCode ?? "").trim().toUpperCase() ===
-                    "GOLDENSOFT"
-                      ? " (Platform)"
-                      : ""}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
-            {adminOnly.length > 0 ? (
-              <optgroup label="องค์กรลูกค้า (Super Admin)">
-                {adminOnly.map((org) => (
-                  <option key={`admin-${org.id}`} value={org.id}>
-                    {org.name}
-                    {(org.customerCode ?? "").trim().toUpperCase() ===
-                    "GOLDENSOFT"
-                      ? " (Platform)"
-                      : ""}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
-            {managedOnly.length > 0 ? (
-              <optgroup label={TH.staffPortfolio.managedOrgGroupLabel}>
-                {managedOnly.map((org) => (
-                  <option key={`managed-${org.id}`} value={org.id}>
+            {goldenSoftOptions.map((org) => (
+              <option key={`platform-${org.id}`} value={org.id}>
+                {org.name} (Platform)
+              </option>
+            ))}
+            {responsibleOrganizations.length > 0 ? (
+              <optgroup label={TH.nav.responsibleOrganizations}>
+                {responsibleOrganizations.map((org) => (
+                  <option key={`responsible-${org.id}`} value={org.id}>
                     {org.name}
                   </option>
                 ))}

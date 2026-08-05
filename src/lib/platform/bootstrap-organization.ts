@@ -15,7 +15,7 @@ export const ORG_BOOTSTRAP_SOURCE = "bootstrap-script";
 export const GOLDENSOFT_ORG = {
   customerCode: "GOLDENSOFT",
   slug: "goldensoft",
-  nameTh: "โกลเด้นซอฟต์",
+  nameTh: "GoldenSoft",
   nameEn: "GoldenSoft",
 } as const;
 
@@ -27,9 +27,9 @@ export function isGoldenSoftCustomerCode(
 }
 
 export const GOLDENSOFT_BRANCH = {
-  code: "GOLDENSOFT-01",
-  nameTh: "สาขาที่ 1",
-  nameEn: "Branch 1",
+  code: "HEADQUARTERS",
+  nameTh: "สำนักงานใหญ่",
+  nameEn: "Headquarters",
 } as const;
 
 export type OrgBootstrapErrorCode =
@@ -225,14 +225,14 @@ async function resolveExisting(db: TxClient | DbClient) {
   if (branchByCode && organization && branchByCode.organizationId !== organization.id) {
     throw new OrgBootstrapError(
       "BRANCH_WRONG_ORGANIZATION",
-      "พบสาขารหัส GOLDENSOFT-01 อยู่ภายใต้องค์กรอื่น — หยุดและ rollback",
+      "พบสาขารหัส HEADQUARTERS อยู่ภายใต้องค์กรอื่น — หยุดและ rollback",
     );
   }
 
   if (branchByCode && !organization) {
     throw new OrgBootstrapError(
       "BRANCH_WRONG_ORGANIZATION",
-      "พบสาขารหัส GOLDENSOFT-01 แต่ไม่พบองค์กร GOLDENSOFT — หยุดและ rollback",
+      "พบสาขารหัส HEADQUARTERS แต่ไม่พบองค์กร GOLDENSOFT — หยุดและ rollback",
     );
   }
 
@@ -243,7 +243,7 @@ async function resolveExisting(db: TxClient | DbClient) {
     if (conflict) {
       throw new OrgBootstrapError(
         "BRANCH_CONFLICT",
-        "พบสาขารหัส GOLDENSOFT-01 ที่มีชื่อหรือสถานะไม่ตรงกัน — หยุดและ rollback",
+        "พบสาขารหัส HEADQUARTERS ที่มีชื่อหรือสถานะไม่ตรงกัน — หยุดและ rollback",
       );
     }
   }
@@ -290,6 +290,8 @@ export async function bootstrapGoldensoftOrganization(options: {
           slug: GOLDENSOFT_ORG.slug,
           legalName: GOLDENSOFT_ORG.nameEn,
           displayName: GOLDENSOFT_ORG.nameTh,
+          nameEn: GOLDENSOFT_ORG.nameEn,
+          entityType: "LEGAL_ENTITY",
           statusId: orgActive.id,
         },
       });
@@ -314,6 +316,8 @@ export async function bootstrapGoldensoftOrganization(options: {
           organizationId,
           code: GOLDENSOFT_BRANCH.code,
           name: GOLDENSOFT_BRANCH.nameTh,
+          nameEn: GOLDENSOFT_BRANCH.nameEn,
+          isPrimary: true,
           statusId: branchActive.id,
         },
       });
@@ -446,8 +450,8 @@ export async function verifyGoldensoftOrganization(options: {
     "organization_name_th",
     organization.displayName === GOLDENSOFT_ORG.nameTh,
     organization.displayName === GOLDENSOFT_ORG.nameTh
-      ? "ชื่อไทยองค์กรคือ โกลเด้นซอฟต์"
-      : "ชื่อไทยองค์กรไม่ตรงกับ โกลเด้นซอฟต์",
+      ? "ชื่อองค์กรคือ GoldenSoft"
+      : "ชื่อองค์กรไม่ตรงกับ GoldenSoft",
   );
 
   push(
@@ -467,10 +471,10 @@ export async function verifyGoldensoftOrganization(options: {
     "branch_unique",
     branchesByCode.length === 1,
     branchesByCode.length === 1
-      ? "พบสาขารหัส GOLDENSOFT-01 เพียง 1 รายการ"
+      ? "พบสาขารหัส HEADQUARTERS เพียง 1 รายการ"
       : branchesByCode.length === 0
-        ? "ไม่พบสาขารหัส GOLDENSOFT-01"
-        : "พบสาขารหัส GOLDENSOFT-01 ซ้ำ",
+        ? "ไม่พบสาขารหัส HEADQUARTERS"
+        : "พบสาขารหัส HEADQUARTERS ซ้ำ",
   );
 
   const branch = branchesByCode[0] ?? null;
@@ -490,8 +494,8 @@ export async function verifyGoldensoftOrganization(options: {
     "branch_name_th",
     branch.name === GOLDENSOFT_BRANCH.nameTh,
     branch.name === GOLDENSOFT_BRANCH.nameTh
-      ? "ชื่อไทยสาขาคือ สาขาที่ 1"
-      : "ชื่อไทยสาขาไม่ตรงกับ สาขาที่ 1",
+      ? "ชื่อสาขาคือ สำนักงานใหญ่"
+      : "ชื่อสาขาไม่ตรงกับ สำนักงานใหญ่",
   );
 
   push(

@@ -9,6 +9,7 @@ import {
 } from "@/lib/context/cookie";
 import { TH } from "@/lib/i18n/th";
 import { permissionsForRoles } from "@/lib/permissions/codes";
+import { prisma } from "@/lib/prisma";
 
 const meResponseSchema = z.object({
   user: z.object({
@@ -81,10 +82,18 @@ export async function GET(request: NextRequest) {
       : null;
 
   const organizationRoles = activeMembership?.roles ?? [];
-  const permissions = permissionsForRoles({
-    platformRoles: bundle.platformRoles,
-    organizationRoles,
-  });
+  const permissions = bundle.platformRoles.includes("SUPER_ADMIN")
+    ? (
+        await prisma.permission.findMany({
+          where: { isActive: true },
+          select: { code: true },
+          orderBy: { code: "asc" },
+        })
+      ).map((permission) => permission.code)
+    : permissionsForRoles({
+        platformRoles: bundle.platformRoles,
+        organizationRoles,
+      });
 
   const payload = meResponseSchema.parse({
     user: { id: user.id, email: user.email },

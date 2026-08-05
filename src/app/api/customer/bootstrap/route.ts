@@ -281,6 +281,13 @@ export async function GET(request: NextRequest) {
         take: 200,
       })
     : Promise.resolve([]);
+  const superPermissionCodesPromise = isSuper
+    ? prisma.permission.findMany({
+        where: { isActive: true },
+        select: { code: true },
+        orderBy: { code: "asc" },
+      })
+    : Promise.resolve([]);
 
   if (organizationId && !membership) {
     if (!isStaffSupportClaim(cookie?.mode, organizationId)) {
@@ -347,15 +354,20 @@ export async function GET(request: NextRequest) {
     platformAdminOrganizations,
     resolvedEffectiveCodes,
     entitlements,
+    superPermissionRows,
   ] = await Promise.all([
     platformAdminOrganizationsPromise,
     effectiveCodesPromise,
     entitlementsPromise,
+    superPermissionCodesPromise,
   ]);
-  const effectiveCodes =
-    resolvedEffectiveCodes.length === 0
-      ? roleMapped
-      : Array.from(new Set([...resolvedEffectiveCodes, ...roleMapped]));
+  const effectiveCodes = Array.from(
+    new Set([
+      ...(resolvedEffectiveCodes.length === 0 ? roleMapped : resolvedEffectiveCodes),
+      ...roleMapped,
+      ...superPermissionRows.map((permission) => permission.code),
+    ]),
+  ).sort();
 
   const inactiveSub = new Set(["SUSPENDED", "CANCELLED", "EXPIRED"]);
   const activeEntitlementCodes = entitlements
@@ -453,7 +465,7 @@ export async function GET(request: NextRequest) {
     entitlementsAllowed,
     // Bump when SUPER_ADMIN / managed_org support rules change so stale cache
     // cannot keep products locked after a deploy.
-    contextVersion: 3,
+    contextVersion: 4,
   });
 
   writeCustomerBootstrapCache(bootstrapKey, payload);

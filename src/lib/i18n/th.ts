@@ -76,6 +76,7 @@ export const TH = {
     logoutConfirmAction: "ออกจากระบบ",
     selectOrganization: "เลือกองค์กร",
     switchOrganization: "เปลี่ยนองค์กร",
+    responsibleOrganizations: "องค์กรที่รับผิดชอบ",
     switchBranch: "เปลี่ยนสาขา",
     supportOrgOverview: "ภาพรวมองค์กรลูกค้า",
     openCustomerApp: "เปิดแอปลูกค้า",

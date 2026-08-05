@@ -34,6 +34,8 @@ export const PLATFORM_PERMISSIONS = {
   billingSubscriptionRead: "billing.subscription.read",
   billingSubscriptionManage: "billing.subscription.manage",
   customerPortfolioManage: "platform.customer_portfolio.manage",
+  customerAssignmentManage: "customer_assignment.manage",
+  customerAssignmentTransfer: "customer_assignment.transfer",
 } as const;
 
 export type PlatformPermission =
@@ -61,18 +63,6 @@ export const ORGANIZATION_ASSIGNABLE_PERMISSIONS: readonly PlatformPermission[] 
   PLATFORM_PERMISSIONS.productRead,
   PLATFORM_PERMISSIONS.planRead,
   PLATFORM_PERMISSIONS.subscriptionRead,
-  PLATFORM_PERMISSIONS.billingAccountRead,
-  PLATFORM_PERMISSIONS.billingAccountManage,
-  PLATFORM_PERMISSIONS.billingCreditRead,
-  PLATFORM_PERMISSIONS.billingCreditAdjust,
-  PLATFORM_PERMISSIONS.billingInvoiceRead,
-  PLATFORM_PERMISSIONS.billingInvoiceManage,
-  PLATFORM_PERMISSIONS.billingPaymentRead,
-  PLATFORM_PERMISSIONS.billingPaymentRecord,
-  PLATFORM_PERMISSIONS.billingContactRead,
-  PLATFORM_PERMISSIONS.billingContactManage,
-  PLATFORM_PERMISSIONS.billingSubscriptionRead,
-  PLATFORM_PERMISSIONS.billingSubscriptionManage,
 ] as const;
 
 const ORGANIZATION_ASSIGNABLE_SET = new Set<string>(
@@ -81,6 +71,30 @@ const ORGANIZATION_ASSIGNABLE_SET = new Set<string>(
 
 export function isOrganizationAssignablePermission(code: string): boolean {
   return ORGANIZATION_ASSIGNABLE_SET.has(code);
+}
+
+export type PermissionScopeCode = "PLATFORM" | "ORGANIZATION" | "BOTH";
+
+/** Runtime-compatible scope metadata while the additive scope column is pending apply. */
+export function permissionScopeForCode(code: string): PermissionScopeCode {
+  const knownPlatformPermissions = new Set<string>(
+    Object.values(PLATFORM_PERMISSIONS),
+  );
+  if (ORGANIZATION_ASSIGNABLE_SET.has(code)) return "BOTH";
+  if (knownPlatformPermissions.has(code)) return "PLATFORM";
+  return "ORGANIZATION";
+}
+
+export function permissionSupportsScope(
+  code: string,
+  scope: "platform" | "organization",
+): boolean {
+  const permissionScope = permissionScopeForCode(code);
+  return (
+    permissionScope === "BOTH" ||
+    (scope === "platform" && permissionScope === "PLATFORM") ||
+    (scope === "organization" && permissionScope === "ORGANIZATION")
+  );
 }
 
 /** Thai labels for permission matrix UI — never show raw codes as primary label. */
@@ -120,6 +134,8 @@ export const PLATFORM_PERMISSION_LABELS: Record<PlatformPermission, string> = {
   [PLATFORM_PERMISSIONS.billingSubscriptionRead]: "ดูสรุปแพ็กเกจ/การสมัคร",
   [PLATFORM_PERMISSIONS.billingSubscriptionManage]: "จัดการแพ็กเกจด้านการเงิน",
   [PLATFORM_PERMISSIONS.customerPortfolioManage]: "จัดการพอร์ตโฟลิโอลูกค้า",
+  [PLATFORM_PERMISSIONS.customerAssignmentManage]: "จัดการผู้รับผิดชอบองค์กรลูกค้า",
+  [PLATFORM_PERMISSIONS.customerAssignmentTransfer]: "โอนผู้รับผิดชอบหลัก",
 };
 
 export const PLATFORM_PERMISSION_DESCRIPTIONS: Record<
@@ -168,6 +184,10 @@ export const PLATFORM_PERMISSION_DESCRIPTIONS: Record<
     "จัดการมุมมองแพ็กเกจด้านการเงิน",
   [PLATFORM_PERMISSIONS.customerPortfolioManage]:
     "กำหนดหรือถอดองค์กรลูกค้าให้พนักงานขาย/ผู้ดูแลบัญชีลูกค้า",
+  [PLATFORM_PERMISSIONS.customerAssignmentManage]:
+    "เพิ่มหรือถอนผู้รับผิดชอบองค์กรลูกค้าโดยตรวจสอบขอบเขตทุกครั้ง",
+  [PLATFORM_PERMISSIONS.customerAssignmentTransfer]:
+    "โอนความรับผิดชอบหลักไปยังพนักงาน GoldenSoft คนอื่น",
 };
 
 const ALL_BILLING_PERMISSIONS: PlatformPermission[] = [

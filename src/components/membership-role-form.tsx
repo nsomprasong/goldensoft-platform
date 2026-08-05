@@ -12,12 +12,14 @@ import { TH } from "@/lib/i18n/th";
 
 export function MembershipRoleAssignForm(props: {
   membershipId: string;
-  roles: Array<{ id: string; code: string; nameTh: string; isSystem: boolean }>;
+  roles: Array<{ id: string; code: string; nameTh: string; isSystem: boolean; permissionLabels?: string[] }>;
+  plain?: boolean;
 }) {
   const router = useRouter();
   const [roleId, setRoleId] = useState(props.roles[0]?.id ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const selectedRole = props.roles.find((role) => role.id === roleId) ?? null;
 
   async function assign() {
     if (!roleId) return;
@@ -42,7 +44,11 @@ export function MembershipRoleAssignForm(props: {
   }
 
   return (
-    <div className="space-y-3">
+    <div className={props.plain ? "space-y-4" : "space-y-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] p-4 shadow-[var(--shadow-xs)]"}>
+      <div>
+        <h4 className="font-semibold text-[var(--foreground)]">กำหนดบทบาท</h4>
+        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">เพิ่มบทบาทองค์กรให้บัญชีผู้ใช้นี้</p>
+      </div>
       {error ? (
         <p className="rounded-md bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">
           {error}
@@ -77,6 +83,18 @@ export function MembershipRoleAssignForm(props: {
           label={pending ? TH.common.loading : "กำหนดบทบาท"}
         />
       </div>
+      {selectedRole ? (
+        <div className="rounded-[var(--radius-md)] border border-[var(--success-border)] bg-[var(--success-soft)] p-3">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">
+            สิทธิ์ภายในองค์กร {selectedRole.permissionLabels?.length ?? 0} รายการ
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">
+            {selectedRole.permissionLabels?.length
+              ? selectedRole.permissionLabels.join(" · ")
+              : "บทบาทนี้ยังไม่ได้กำหนดสิทธิ์ภายในองค์กร"}
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

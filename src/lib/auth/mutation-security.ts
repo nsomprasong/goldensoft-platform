@@ -6,12 +6,29 @@ import type { NextRequest } from "next/server";
  * same-origin POSTs / LAN IP hosts), fall back to Sec-Fetch-Site / Referer.
  */
 export function isSameOriginMutation(request: NextRequest): boolean {
-  const requestOrigin = request.nextUrl.origin;
+  const requestOrigins = new Set([request.nextUrl.origin]);
+  const forwardedHost = request.headers
+    .get("x-forwarded-host")
+    ?.split(",")[0]
+    ?.trim();
+  const host = forwardedHost || request.headers.get("host")?.trim();
+  const forwardedProtocol = request.headers
+    .get("x-forwarded-proto")
+    ?.split(",")[0]
+    ?.trim()
+    .toLowerCase();
+  const protocol =
+    forwardedProtocol === "http" || forwardedProtocol === "https"
+      ? forwardedProtocol
+      : request.nextUrl.protocol.replace(":", "");
+  if (host && !/[\s/\\]/.test(host)) {
+    requestOrigins.add(`${protocol}://${host}`);
+  }
 
   const originHeader = request.headers.get("origin");
   if (originHeader) {
     try {
-      return new URL(originHeader).origin === requestOrigin;
+      return requestOrigins.has(new URL(originHeader).origin);
     } catch {
       return false;
     }
@@ -25,7 +42,7 @@ export function isSameOriginMutation(request: NextRequest): boolean {
   const referer = request.headers.get("referer");
   if (referer) {
     try {
-      return new URL(referer).origin === requestOrigin;
+      return requestOrigins.has(new URL(referer).origin);
     } catch {
       return false;
     }

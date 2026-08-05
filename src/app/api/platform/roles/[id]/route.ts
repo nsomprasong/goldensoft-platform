@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 type Params = { params: Promise<{ id: string }> };
 
 const updateSchema = z.object({
+  organizationId: z.string().uuid(),
   nameTh: z.string().min(1).max(120).optional(),
   nameEn: z.string().min(1).max(120).optional(),
   description: z.string().max(500).optional().nullable(),
@@ -30,11 +31,26 @@ export async function GET(_request: NextRequest, { params }: Params) {
     );
   }
   const { id } = await params;
+  const organizationId = _request.nextUrl.searchParams.get("organizationId");
+  if (!organizationId) {
+    return NextResponse.json({ code: "INVALID_QUERY", message: TH.common.failed }, { status: 400 });
+  }
+  const actor = await loadActorAccess(prisma, user.id);
+  const canReadOrganization =
+    actor.platformRoles.includes("SUPER_ADMIN") ||
+    actor.membershipOrganizationIds.includes(organizationId) ||
+    actor.managedOrganizationIds.includes(organizationId);
+  if (!canReadOrganization) {
+    return NextResponse.json({ code: "FORBIDDEN", message: TH.access.deniedBody }, { status: 403 });
+  }
   const role = await prisma.organizationRole.findUnique({
     where: { id },
     include: {
       permissions: {
-        where: { revokedAt: null },
+        where: {
+          revokedAt: null,
+          permission: { is: { isActive: true } },
+        },
         include: {
           permission: {
             select: {
@@ -68,6 +84,9 @@ export async function GET(_request: NextRequest, { params }: Params) {
       { code: "NOT_FOUND", message: TH.common.notFound },
       { status: 404 },
     );
+  }
+  if (role.organizationId !== null && role.organizationId !== organizationId) {
+    return NextResponse.json({ code: "NOT_FOUND", message: TH.common.notFound }, { status: 404 });
   }
   return NextResponse.json({ role });
 }
@@ -139,12 +158,17 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     );
   }
   const { id } = await params;
+  const organizationId = request.nextUrl.searchParams.get("organizationId");
+  if (!organizationId) {
+    return NextResponse.json({ code: "INVALID_QUERY", message: TH.common.failed }, { status: 400 });
+  }
   const actor = await loadActorAccess(prisma, user.id);
   try {
     const role = await deleteCustomRole(prisma, {
       actor,
       actorAuthUserId: user.id,
       roleId: id,
+      organizationId,
     });
     return NextResponse.json({ ok: true, role });
   } catch (error) {

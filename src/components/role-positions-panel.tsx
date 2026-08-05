@@ -6,6 +6,12 @@ import { Input } from "@/components/ui/input";
 type Row = { id: string; name: string; scope: string; branchName: string | null; employeeCount: number; isActive: boolean };
 type Props = { roleId: string; organizationId: string; branches: Array<{ id: string; name: string }> };
 
+async function readJsonResponse<T>(response: Response): Promise<T | null> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) return null;
+  return response.json().catch(() => null) as Promise<T | null>;
+}
+
 export function RolePositionsPanel({ roleId, organizationId, branches }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,11 +26,16 @@ export function RolePositionsPanel({ roleId, organizationId, branches }: Props) 
 
   const load = useCallback(async () => {
     setLoading(true);
-    const response = await fetch(`/api/platform/roles/${roleId}/positions`);
-    const data = (await response.json()) as { positions?: Row[]; message?: string };
-    if (response.ok) { setRows(data.positions ?? []); setError(null); }
-    else setError(data.message ?? "โหลดตำแหน่งไม่สำเร็จ");
-    setLoading(false);
+    try {
+      const response = await fetch(`/api/platform/roles/${roleId}/positions`);
+      const data = await readJsonResponse<{ positions?: Row[]; message?: string }>(response);
+      if (response.ok && data) { setRows(data.positions ?? []); setError(null); }
+      else setError(data?.message ?? "โหลดตำแหน่งไม่สำเร็จ");
+    } catch {
+      setError("ไม่สามารถเชื่อมต่อเพื่อโหลดตำแหน่งได้");
+    } finally {
+      setLoading(false);
+    }
   }, [roleId]);
 
   useEffect(() => { void load(); }, [load]);
@@ -35,8 +46,8 @@ export function RolePositionsPanel({ roleId, organizationId, branches }: Props) 
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ organizationId, nameTh: name, description: description || null, scope, branchId: scope === "BRANCH" ? branchId : null }),
     });
-    const data = (await response.json()) as { message?: string };
-    if (!response.ok) { setError(data.message ?? "เพิ่มตำแหน่งไม่สำเร็จ"); setSaving(false); return; }
+    const data = await readJsonResponse<{ message?: string }>(response);
+    if (!response.ok) { setError(data?.message ?? "เพิ่มตำแหน่งไม่สำเร็จ"); setSaving(false); return; }
     setName(""); setDescription(""); setOpen(false); await load(); setSaving(false);
   }
 
@@ -45,7 +56,7 @@ export function RolePositionsPanel({ roleId, organizationId, branches }: Props) 
     setSaving(true);
     const response = await fetch(`/api/platform/roles/${roleId}/positions?positionId=${row.id}`, { method: "DELETE" });
     if (response.ok) { setConfirmRow(null); await load(); }
-    else setError(((await response.json()) as { message?: string }).message ?? "ยกเลิกการผูกไม่สำเร็จ");
+    else setError((await readJsonResponse<{ message?: string }>(response))?.message ?? "ยกเลิกการผูกไม่สำเร็จ");
     setSaving(false);
   }
 
