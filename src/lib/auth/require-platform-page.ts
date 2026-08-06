@@ -15,6 +15,7 @@ import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
 import { COOKIE_NAME, decodeContextCookie } from "@/lib/context/cookie";
 import { listActiveManagedOrganizationIds, resolveActiveCustomerAssignmentScope } from "@/lib/platform/customer-portfolio";
 import { resolveActorPermissionCodes } from "@/lib/platform/custom-roles";
+import { GOLDENSOFT_CUSTOMER_CODE } from "@/lib/platform/organization-identity";
 import { setServerTimingRoute } from "@/lib/perf/server-timing";
 
 function safeNextPath(raw: string | null | undefined): string {
@@ -70,7 +71,18 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
   // Drop stale context left by a previous browser user (e.g. Super Admin
   // platform_admin cookie still present when a SALES staff signs in).
   const isSuper = bundle.platformRoles.includes("SUPER_ADMIN");
-  if (cookie?.mode === "platform_admin" && !isSuper) {
+  const staffGoldenSoftContext =
+    cookie?.mode === "platform_admin" && !isSuper
+      ? await prisma.organization.count({
+          where: {
+            id: cookie.organizationId,
+            customerCode: GOLDENSOFT_CUSTOMER_CODE,
+            deletedAt: null,
+            status: { code: "ACTIVE" },
+          },
+        }) > 0
+      : false;
+  if (cookie?.mode === "platform_admin" && !isSuper && !staffGoldenSoftContext) {
     redirectClearContext(requestPath);
   }
   if (
@@ -115,11 +127,27 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     // picker — they have no membership header ContextSwitcher).
     const canContinueWithoutOrg =
       bundle.memberships.length === 0 &&
-      (bundle.platformRoles.includes("SUPER_ADMIN") ||
-        (isPlatformStaffWithoutMembershipRequirement(bundle.platformRoles) &&
-          managedOrganizationIds.length === 0));
+      isPlatformStaffWithoutMembershipRequirement(bundle.platformRoles);
     if (!canContinueWithoutOrg) {
       redirect("/select-organization");
+    }
+    if (!cookie) {
+      const goldenSoft = await prisma.organization.findFirst({
+        where: {
+          customerCode: GOLDENSOFT_CUSTOMER_CODE,
+          deletedAt: null,
+          status: { code: "ACTIVE" },
+        },
+        select: { id: true },
+      });
+      if (goldenSoft) {
+        const params = new URLSearchParams({
+          organizationId: goldenSoft.id,
+          mode: "platform_admin",
+          next: requestPath,
+        });
+        redirect(`/api/platform/context/bootstrap?${params.toString()}`);
+      }
     }
   }
   // select_branch is unused for customer login — org/branch switch happens in
@@ -170,7 +198,9 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
 
   if (cookie && !membership) {
     const canUsePlatformAdminContext =
-      isSuper && cookie.mode === "platform_admin" && !!activeOrgId;
+      (isSuper || staffGoldenSoftContext) &&
+      cookie.mode === "platform_admin" &&
+      !!activeOrgId;
 
     if (!canUsePlatformAdminContext && !isManagedOrgMode) {
       // Stale membership cookie (common after inviting staff / switching users
@@ -189,7 +219,12 @@ export const requirePlatformPage = cache(async function requirePlatformPage() {
     }
   }
 
-  if (cookie && !membership && (isManagedOrgMode || (isSuper && cookie.mode === "platform_admin"))) {
+  if (
+    cookie &&
+    !membership &&
+    (isManagedOrgMode ||
+      ((isSuper || staffGoldenSoftContext) && cookie.mode === "platform_admin"))
+  ) {
     const managedScope = isManagedOrgMode
       ? await resolveActiveCustomerAssignmentScope(prisma, bundle.profile!.id, activeOrgId!)
       : null;

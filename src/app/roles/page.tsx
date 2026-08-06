@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { Plus, Shield } from "lucide-react";
+import { redirect } from "next/navigation";
+import { Pencil, Plus, Shield } from "lucide-react";
 
 import { CustomRoleForm } from "@/components/custom-role-form";
-import { CustomerAssignmentPanel } from "@/components/customer-assignment-panel";
 import { PlatformShell } from "@/components/platform-shell";
-import { RoleAssignmentPanel } from "@/components/role-assignment-panel";
+import { RoleManagementSubmenu } from "@/components/role-management-submenu";
 import { RolePositionsPanel } from "@/components/role-positions-panel";
 import { AccessDenied, PageHeader, SectionHeader } from "@/components/ui/admin-ui";
 import { IconTextLink } from "@/components/ui/labeled-icon-button";
@@ -17,7 +17,10 @@ import { displayPermissionCodesForRole, resolveActorPermissionCodes } from "@/li
 import { isGoldenSoftCustomerCode } from "@/lib/platform/bootstrap-organization";
 import { MASTER } from "@/lib/platform/master-codes";
 import { displayPermissionCodesForPlatformRole } from "@/lib/platform/platform-roles";
+import { organizationRoleAssignmentWhere } from "@/lib/platform/role-assignee-scope";
 import { prisma } from "@/lib/prisma";
+
+import styles from "./roles.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +39,30 @@ export default async function RolesPage({ searchParams }: Props) {
   const query = await searchParams;
   const organizationId = ctx.activeOrganization?.id ?? null;
   const requestedOrganizationId = query.organizationId ?? organizationId;
-  const platformContext = query.context === "platform";
+
+  // The Customer App opens this workspace with an explicit organizationId.
+  // Reconcile a stale/shared context cookie before rendering so navigation does
+  // not silently fall back to GoldenSoft or a previously selected customer.
+  if (query.organizationId && query.organizationId !== organizationId) {
+    const mode = ctx.bundle.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN)
+      ? "platform_admin"
+      : ctx.managedOrganizationIds.includes(query.organizationId)
+        ? "managed_org"
+        : "membership";
+    const nextParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value) nextParams.set(key, value);
+    }
+    const bootstrapParams = new URLSearchParams({
+      organizationId: query.organizationId,
+      mode,
+      next: `/roles?${nextParams.toString()}`,
+    });
+    redirect(`/api/platform/context/bootstrap?${bootstrapParams.toString()}`);
+  }
+  const platformContext =
+    ctx.contextMode === "platform_admin" &&
+    isGoldenSoftCustomerCode(ctx.activeOrganization?.customerCode);
   const platformPermissionCodes = await resolveActorPermissionCodes(prisma, {
     platformRoles: ctx.bundle.platformRoles,
     organizationRoles: [],
@@ -65,27 +91,37 @@ export default async function RolesPage({ searchParams }: Props) {
     return <PlatformShell {...shellProps}><AccessDenied title={TH.access.deniedTitle} body={TH.access.deniedBody} /></PlatformShell>;
   }
 
-  const scope = platformContext && query.scope === "platform" ? "platform" : "organization";
-  const [organizationRoles, organizationPermissions, memberships] = await Promise.all([
+  const scope = platformContext ? "platform" : "organization";
+  const organizationAssignmentWhere = organizationRoleAssignmentWhere({
+    organizationId,
+    activeBranchId: ctx.activeBranch?.id,
+  });
+  const [organizationRoles, organizationPermissions, organizationRoleOverrides] = await Promise.all([
     prisma.organizationRole.findMany({
       where: { OR: [{ organizationId: null, isSystem: true }, { organizationId }] },
       orderBy: [{ isSystem: "desc" }, { isActive: "desc" }, { sortOrder: "asc" }],
       include: {
         permissions: { where: { revokedAt: null, permission: { is: { isActive: true } } }, include: { permission: true } },
-        _count: { select: { assignments: { where: { revokedAt: null } } } },
+        _count: {
+          select: { assignments: { where: organizationAssignmentWhere } },
+        },
       },
     }),
     loadPermissionRegistry(prisma, { organizationId }),
-    prisma.organizationMembership.findMany({
-      where: {
-        organizationId,
-        endedAt: null,
-        status: { code: MASTER.membershipStatus.ACTIVE },
+    prisma.organizationRoleOverride.findMany({
+      where: { organizationId },
+      select: {
+        standardRoleId: true,
+        nameTh: true,
+        nameEn: true,
+        description: true,
+        permissionCodes: true,
       },
-      select: { id: true, userProfile: { select: { displayName: true, email: true } } },
-      orderBy: { createdAt: "asc" },
     }),
   ]);
+  const overrideByRoleId = new Map(
+    organizationRoleOverrides.map((override) => [override.standardRoleId, override]),
+  );
   const platformRoles = platformContext
     ? await prisma.platformRole.findMany({
         orderBy: { sortOrder: "asc" },
@@ -142,131 +178,110 @@ export default async function RolesPage({ searchParams }: Props) {
   const creatingOrganizationRole = query.action === "new" && scope === "organization";
   const creatingPlatformRole =
     platformContext && query.action === "new" && scope === "platform";
-  const platformAssignees = platformContext
-    ? await prisma.userProfile.findMany({
-        where: {
-          deletedAt: null,
-          memberships: {
-            some: {
-              organization: { customerCode: "GOLDENSOFT" },
-              endedAt: null,
-              status: { code: MASTER.membershipStatus.ACTIVE },
-            },
-          },
-        },
-        select: { id: true, displayName: true, email: true },
-        orderBy: { displayName: "asc" },
-      })
-    : [];
-  const customerAssignments = platformContext
-    ? await prisma.staffOrganizationAssignment.findMany({
-        where: { organizationId, revokedAt: null },
-        include: { staffUserProfile: { select: { id: true, displayName: true, email: true } } },
-        orderBy: { assignedAt: "asc" },
-      })
-    : [];
-  const canManageCustomerAssignments =
-    platformPermissionCodes.includes(PLATFORM_PERMISSIONS.customerAssignmentManage) ||
-    platformPermissionCodes.includes(PLATFORM_PERMISSIONS.customerPortfolioManage);
-  const canTransferCustomerAssignments = platformPermissionCodes.includes(
-    PLATFORM_PERMISSIONS.customerAssignmentTransfer,
-  );
-
-  const contextQuery = new URLSearchParams({ organizationId });
   return (
     <PlatformShell {...shellProps}>
-      <PageHeader title="จัดการบทบาทและสิทธิ์" description="บทบาทระดับแพลตฟอร์มใช้สำหรับทีม GoldenSoft ส่วนบทบาทภายในองค์กรใช้กำหนดสิทธิ์ของผู้ใช้งานและพนักงานในองค์กรที่เลือก" icon={<Shield size={24} />} />
-      <div className="mb-5 flex flex-wrap gap-2">
-        {isPlatformManager ? <IconTextLink href={`/roles?context=platform&${contextQuery}`} label="มุมมองแพลตฟอร์ม" /> : null}
-        <IconTextLink href={`/roles?context=organization&${contextQuery}`} label="มุมมององค์กร" variant="outline" />
-      </div>
-
-      {platformContext ? (
-        <section className="card mb-5 space-y-4">
-          <SectionHeader title="บทบาทระดับแพลตฟอร์ม" description="Platform Role และ Platform Role Assignment ของทีม GoldenSoft เท่านั้น" />
-          <IconTextLink href={`/roles?context=platform&organizationId=${organizationId}&scope=platform&action=new`} label="เพิ่มบทบาทระดับแพลตฟอร์ม" icon={<Plus className="size-4" />} />
-          <ul className="grid gap-2 md:grid-cols-2">
-            {platformRoles.map((role) => (
-              <li key={role.id} className="rounded-[var(--radius-lg)] border border-[var(--border)] p-3">
-                <Link href={`/roles?context=platform&organizationId=${organizationId}&scope=platform&roleId=${role.id}`} className="font-semibold">{role.nameTh || labelRole(role.code)}</Link>
-                <p className="text-[length:var(--text-caption)] text-[var(--text-muted)]">ผู้ใช้งาน {role._count.assignments} คน · สิทธิ์ {role.permissions.length} รายการ · {role.isActive ? "เปิดใช้งาน" : "ปิดใช้งาน"}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      <section className="card mb-5 space-y-4">
-        <SectionHeader title={`บทบาทภายในองค์กร ${ctx.activeOrganization?.name ?? ""}`} description="บทบาทมาตรฐานและบทบาทที่องค์กรนี้สร้างเองเท่านั้น" />
-        {canManage ? <IconTextLink href={`/roles?context=${platformContext ? "platform" : "organization"}&organizationId=${organizationId}&scope=organization&action=new`} label="เพิ่มบทบาท" icon={<Plus className="size-4" />} /> : null}
-        <ul className="grid gap-2 md:grid-cols-2">
-          {organizationRoles.map((role) => (
-            <li key={role.id} className="rounded-[var(--radius-lg)] border border-[var(--border)] p-3">
-              <Link href={`/roles?context=${platformContext ? "platform" : "organization"}&organizationId=${organizationId}&scope=organization&roleId=${role.id}`} className="font-semibold">{role.nameTh || labelRole(role.code)}</Link>
-              <p className="text-[length:var(--text-caption)] text-[var(--text-muted)]">{role.isSystem ? "บทบาทมาตรฐาน" : "บทบาทที่องค์กรสร้าง"} · ตำแหน่ง {positionCounts.get(role.id) ?? 0} ตำแหน่ง · ผู้ใช้งาน {role._count.assignments} คน · สิทธิ์ {role.permissions.length} รายการ</p>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {platformContext ? (
-        <CustomerAssignmentPanel
-          organizationId={organizationId}
-          organizationName={ctx.activeOrganization?.name ?? "องค์กรที่เลือก"}
-          staffOptions={platformAssignees.map((profile) => ({ id: profile.id, label: `${profile.displayName} · ${profile.email}` }))}
-          assignments={customerAssignments.map((assignment) => ({
-            id: assignment.id,
-            staffUserProfileId: assignment.staffUserProfileId,
-            staffLabel: `${assignment.staffUserProfile.displayName} · ${assignment.staffUserProfile.email}`,
-            note: assignment.note,
-          }))}
-          canManage={canManageCustomerAssignments}
-          canTransfer={canTransferCustomerAssignments}
-        />
-      ) : null}
-
-      {creatingOrganizationRole && canManage ? (
-        <CustomRoleForm key={`${contextKey}:new`} mode="create" organizationId={organizationId} permissionCatalog={organizationPermissions} returnPath={`/roles?context=${platformContext ? "platform" : "organization"}&organizationId=${organizationId}`} />
-      ) : null}
-      {creatingPlatformRole && isPlatformManager ? (
-        <CustomRoleForm key={`${contextKey}:new-platform`} mode="create" roleKind="platform" organizationId={null} permissionCatalog={platformPermissions} customerSupportPermissionCatalog={organizationPermissions} returnPath={`/roles?context=platform&organizationId=${organizationId}`} />
-      ) : null}
-      {selectedOrganizationRole ? (
-        <div className="grid gap-4">
-          <CustomRoleForm
-            key={`${contextKey}:${selectedOrganizationRole.id}`}
-            mode="edit"
-            roleId={selectedOrganizationRole.id}
-            organizationId={organizationId}
-            allowSystemPermissionEdit={false}
-            permissionCatalog={organizationPermissions}
-            returnPath={`/roles?context=${platformContext ? "platform" : "organization"}&organizationId=${organizationId}`}
-            initial={{ code: selectedOrganizationRole.code, nameTh: selectedOrganizationRole.nameTh, nameEn: selectedOrganizationRole.nameEn, description: selectedOrganizationRole.description ?? "", permissionCodes: displayPermissionCodesForRole({ isSystem: selectedOrganizationRole.isSystem, code: selectedOrganizationRole.code, dbPermissionCodes: selectedOrganizationRole.permissions.map((row) => row.permission.code) }).filter((code) => organizationPermissions.some((permission) => permission.code === code)), isSystem: selectedOrganizationRole.isSystem, isActive: selectedOrganizationRole.isActive }}
+      <PageHeader title="จัดการบทบาทและสิทธิ์" description="เลือกบทบาทด้านซ้าย แล้วจัดการข้อมูล สิทธิ์ และผู้ใช้งานในพื้นที่เดียว" icon={<Shield size={24} />} />
+      <div id="role-workspace" className="grid scroll-mt-24 items-start gap-4 pb-24 xl:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]">
+        <aside className="card grid gap-3 xl:sticky xl:top-[calc(var(--header-height)+1rem)]" aria-label="รายการบทบาท">
+          <SectionHeader
+            title={platformContext ? "บทบาทระดับแพลตฟอร์ม" : `บทบาทภายในองค์กร ${ctx.activeOrganization?.name ?? ""}`}
+            description={platformContext ? "บทบาทของทีม GoldenSoft" : "บทบาทมาตรฐานและบทบาทที่องค์กรสร้าง"}
           />
-          {!selectedOrganizationRole.isSystem ? <RolePositionsPanel roleId={selectedOrganizationRole.id} organizationId={organizationId} branches={ctx.branches.map((branch) => ({ id: branch.id, name: branch.name }))} /> : null}
-          <RoleAssignmentPanel key={`${contextKey}:assignment:${selectedOrganizationRole.id}`} scope="organization" roleId={selectedOrganizationRole.id} assignees={memberships.map((membership) => ({ id: membership.id, label: `${membership.userProfile.displayName} · ${membership.userProfile.email}` }))} />
-        </div>
-      ) : null}
-      {selectedPlatformRole ? (
-        <div className="grid gap-4">
-          <CustomRoleForm key={`${contextKey}:${selectedPlatformRole.id}`} mode="edit" roleKind="platform" roleId={selectedPlatformRole.id} organizationId={null} allowSystemPermissionEdit={selectedPlatformRole.code !== MASTER.platformRole.SUPER_ADMIN} lockPermissions={selectedPlatformRole.code === MASTER.platformRole.SUPER_ADMIN} permissionCatalog={platformPermissions} customerSupportPermissionCatalog={organizationPermissions} returnPath={`/roles?context=platform&organizationId=${organizationId}`} initial={{ code: selectedPlatformRole.code, nameTh: selectedPlatformRole.nameTh, nameEn: selectedPlatformRole.nameEn, description: selectedPlatformRole.description ?? "", permissionCodes: displayPermissionCodesForPlatformRole({ code: selectedPlatformRole.code, dbPermissionCodes: selectedPlatformRole.permissions.map((row) => row.permission.code) }).filter((code) => [...platformPermissions, ...organizationPermissions].some((permission) => permission.code === code)), isSystem: selectedPlatformRole.isSystem, isActive: selectedPlatformRole.isActive }} />
-          <RoleAssignmentPanel key={`${contextKey}:assignment:${selectedPlatformRole.id}`} scope="platform" roleId={selectedPlatformRole.id} assignees={platformAssignees.map((profile) => ({ id: profile.id, label: `${profile.displayName} · ${profile.email}` }))} />
-        </div>
-      ) : null}
-      {selectedRoleId ? (
-        <section className="card mt-4 grid gap-3">
-          <SectionHeader title="ประวัติการเปลี่ยนแปลง" description="Audit Log ของบทบาทในขอบเขตปัจจุบัน" />
-          {recentAuditLogs.length > 0 ? (
-            <ul className="grid gap-2 text-[length:var(--text-helper)]">
-              {recentAuditLogs.map((log) => (
-                <li key={log.id} className="rounded-[var(--radius-md)] border border-[var(--border)] p-3">
-                  {log.actionType.nameTh || log.actionType.code} · {new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short" }).format(log.createdAt)}
+          {(platformContext ? isPlatformManager : canManage) ? (
+            <IconTextLink
+              href={platformContext
+                ? `/roles?context=platform&organizationId=${organizationId}&action=new`
+                : `/roles?context=organization&organizationId=${organizationId}&action=new`}
+              label={platformContext ? "เพิ่มบทบาทแพลตฟอร์ม" : "เพิ่มบทบาทองค์กร"}
+              icon={<Plus className="size-4" />}
+            />
+          ) : null}
+          <ul className="grid gap-2">
+            {(platformContext ? platformRoles : organizationRoles).map((role) => {
+              const selected = role.id === selectedRoleId;
+              const roleOverride = "organizationId" in role ? overrideByRoleId.get(role.id) : undefined;
+              const displayName = roleOverride?.nameTh || role.nameTh || labelRole(role.code);
+              const href = `/roles?context=${platformContext ? "platform" : "organization"}&organizationId=${organizationId}&roleId=${role.id}`;
+              return (
+                <li key={role.id}>
+                  <div className={`${styles.roleCard} ${selected ? styles.roleCardSelected : ""}`}>
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">{displayName}</span>
+                      <span className="mt-1 block text-[length:var(--text-caption)] text-[var(--text-muted)]">
+                        {platformContext
+                          ? `ผู้ใช้งาน ${role._count.assignments} คน · สิทธิ์ ${role.permissions.length} รายการ`
+                          : `${role.isSystem ? "มาตรฐาน" : "องค์กรสร้าง"} · ตำแหน่ง ${positionCounts.get(role.id) ?? 0} · ผู้ใช้งาน ${role._count.assignments}`}
+                      </span>
+                      <span className={`mt-1 inline-flex text-[length:var(--text-caption)] font-medium ${role.isActive ? "text-[var(--success)]" : "text-[var(--text-muted)]"}`}>
+                        {role.isActive ? "เปิดใช้งาน" : "ปิดใช้งาน"}
+                      </span>
+                    </span>
+                    <Link
+                      href={`${href}#role-editor`}
+                      aria-label={`แก้ไขบทบาท ${displayName}`}
+                      title="แก้ไขบทบาท"
+                      className="nav-icon-idle-organization inline-flex size-10 shrink-0 items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                    >
+                      <Pencil className="size-4" aria-hidden="true" />
+                    </Link>
+                  </div>
                 </li>
-              ))}
-            </ul>
-          ) : <p className="text-[var(--text-muted)]">ยังไม่มีประวัติการเปลี่ยนแปลงในขอบเขตนี้</p>}
-        </section>
-      ) : null}
+              );
+            })}
+          </ul>
+        </aside>
+
+        <main id="role-editor" className="grid min-w-0 scroll-mt-24 gap-4" aria-label="พื้นที่จัดการบทบาท">
+          {(creatingOrganizationRole && canManage) ? (
+            <CustomRoleForm key={`${contextKey}:new`} mode="create" organizationId={organizationId} permissionCatalog={organizationPermissions} returnPath={`/roles?context=organization&organizationId=${organizationId}`} />
+          ) : null}
+          {(creatingPlatformRole && isPlatformManager) ? (
+            <CustomRoleForm key={`${contextKey}:new-platform`} mode="create" roleKind="platform" organizationId={null} permissionCatalog={platformPermissions} customerSupportPermissionCatalog={organizationPermissions} returnPath={`/roles?context=platform&organizationId=${organizationId}`} />
+          ) : null}
+          {selectedOrganizationRole ? (
+            <>
+              <CustomRoleForm
+                key={`${contextKey}:${selectedOrganizationRole.id}`}
+                mode="edit"
+                roleId={selectedOrganizationRole.id}
+                organizationId={organizationId}
+                allowSystemPermissionEdit={canManage}
+                hasOrganizationOverride={overrideByRoleId.has(selectedOrganizationRole.id)}
+                permissionCatalog={organizationPermissions}
+                returnPath={`/roles?context=organization&organizationId=${organizationId}`}
+                initial={{ code: selectedOrganizationRole.code, nameTh: overrideByRoleId.get(selectedOrganizationRole.id)?.nameTh ?? selectedOrganizationRole.nameTh, nameEn: overrideByRoleId.get(selectedOrganizationRole.id)?.nameEn ?? selectedOrganizationRole.nameEn, description: overrideByRoleId.get(selectedOrganizationRole.id)?.description ?? selectedOrganizationRole.description ?? "", permissionCodes: displayPermissionCodesForRole({ isSystem: selectedOrganizationRole.isSystem, code: selectedOrganizationRole.code, dbPermissionCodes: overrideByRoleId.get(selectedOrganizationRole.id)?.permissionCodes ?? selectedOrganizationRole.permissions.map((row) => row.permission.code) }).filter((code) => organizationPermissions.some((permission) => permission.code === code)), isSystem: selectedOrganizationRole.isSystem, isActive: selectedOrganizationRole.isActive }}
+              />
+              {!selectedOrganizationRole.isSystem ? <RolePositionsPanel roleId={selectedOrganizationRole.id} organizationId={organizationId} branches={ctx.branches.map((branch) => ({ id: branch.id, name: branch.name }))} /> : null}
+            </>
+          ) : null}
+          {selectedPlatformRole ? (
+            <>
+              <CustomRoleForm key={`${contextKey}:${selectedPlatformRole.id}`} mode="edit" roleKind="platform" roleId={selectedPlatformRole.id} organizationId={null} allowSystemPermissionEdit={selectedPlatformRole.code !== MASTER.platformRole.SUPER_ADMIN} lockPermissions={selectedPlatformRole.code === MASTER.platformRole.SUPER_ADMIN} permissionCatalog={platformPermissions} customerSupportPermissionCatalog={organizationPermissions} returnPath={`/roles?context=platform&organizationId=${organizationId}`} initial={{ code: selectedPlatformRole.code, nameTh: selectedPlatformRole.nameTh, nameEn: selectedPlatformRole.nameEn, description: selectedPlatformRole.description ?? "", permissionCodes: displayPermissionCodesForPlatformRole({ code: selectedPlatformRole.code, dbPermissionCodes: selectedPlatformRole.permissions.map((row) => row.permission.code) }).filter((code) => [...platformPermissions, ...organizationPermissions].some((permission) => permission.code === code)), isSystem: selectedPlatformRole.isSystem, isActive: selectedPlatformRole.isActive }} />
+            </>
+          ) : null}
+          {!selectedRoleId && !creatingOrganizationRole && !creatingPlatformRole ? (
+            <section className="card grid min-h-40 place-content-center gap-1 text-center">
+              <h2 className="font-semibold">เลือกบทบาทเพื่อจัดการ</h2>
+              <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">รายละเอียดและเครื่องมือจัดการจะแสดงที่นี่</p>
+            </section>
+          ) : null}
+          {selectedRoleId ? (
+            <section className="card grid gap-3">
+              <SectionHeader title="ประวัติการเปลี่ยนแปลง" description="รายการล่าสุดของบทบาทนี้" />
+              {recentAuditLogs.length > 0 ? (
+                <ul className="grid gap-2 text-[length:var(--text-helper)]">
+                  {recentAuditLogs.map((log) => (
+                    <li key={log.id} className="rounded-[var(--radius-md)] border border-[var(--border)] p-3">
+                      {log.actionType.nameTh || log.actionType.code} · {new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short" }).format(log.createdAt)}
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="text-[var(--text-muted)]">ยังไม่มีประวัติการเปลี่ยนแปลงในขอบเขตนี้</p>}
+            </section>
+          ) : null}
+        </main>
+      </div>
+      <RoleManagementSubmenu active="roles" organizationId={organizationId} platformContext={platformContext} />
     </PlatformShell>
   );
 }

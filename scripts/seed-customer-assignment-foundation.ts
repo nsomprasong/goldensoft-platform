@@ -72,15 +72,65 @@ async function main() {
           update: {},
         });
       }
+
+      // SALES may maintain organization custom roles only inside customer
+      // organizations covered by their active customer assignment. Runtime
+      // authorization still enforces organization and branch scope.
+      const salesRole = await tx.platformRole.findUnique({
+        where: { code: "SALES" },
+        select: { id: true },
+      });
+      const rolePermissions = await tx.permission.findMany({
+        where: {
+          code: {
+            in: [
+              "platform.role.read",
+              "platform.role.manage",
+              "platform.role.assign",
+            ],
+          },
+          isActive: true,
+        },
+        select: { id: true, code: true },
+      });
+      if (!salesRole || rolePermissions.length !== 3) {
+        throw new Error("SALES role or role-management permissions are incomplete");
+      }
+      for (const permission of rolePermissions) {
+        await tx.platformRolePermission.upsert({
+          where: {
+            platformRoleId_permissionId: {
+              platformRoleId: salesRole.id,
+              permissionId: permission.id,
+            },
+          },
+          create: {
+            platformRoleId: salesRole.id,
+            permissionId: permission.id,
+          },
+          update: { revokedAt: null },
+        });
+      }
     });
 
-    const [roles, statuses, scopes, permissions] = await Promise.all([
+    const [roles, statuses, scopes, permissions, salesRolePermissions] = await Promise.all([
       prisma.customerAssignmentRole.count({ where: { code: { in: ["PRIMARY", "CO_OWNER", "SUPPORT"] } } }),
       prisma.customerAssignmentStatus.count({ where: { code: { in: ["ACTIVE", "INACTIVE", "REVOKED"] } } }),
       prisma.customerAssignmentScopeType.count({ where: { code: { in: ["ALL_CURRENT_AND_FUTURE", "SELECTED_BRANCHES"] } } }),
       prisma.permission.count({ where: { code: { in: ["customer_assignment.manage", "customer_assignment.transfer"] } } }),
+      prisma.platformRolePermission.count({
+        where: {
+          revokedAt: null,
+          platformRole: { code: "SALES" },
+          permission: {
+            code: {
+              in: ["platform.role.read", "platform.role.manage", "platform.role.assign"],
+            },
+          },
+        },
+      }),
     ]);
-    console.log(JSON.stringify({ roles, statuses, scopes, permissions }));
+    console.log(JSON.stringify({ roles, statuses, scopes, permissions, salesRolePermissions }));
   } finally {
     await prisma.$disconnect();
     await pool.end();

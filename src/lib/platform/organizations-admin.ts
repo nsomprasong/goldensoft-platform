@@ -87,6 +87,8 @@ export type ActorAccess = {
   membershipOrganizationIds: string[];
   /** Customer organizations assigned to this actor via the staff portfolio (Phase 1). */
   managedOrganizationIds: string[];
+  /** Internal provider organizations visible in Platform context (read-only unless separately manageable). */
+  internalViewOrganizationIds?: string[];
 };
 
 export function canManageOrganization(
@@ -111,6 +113,7 @@ export function canViewOrganization(
   organizationId: string,
 ): boolean {
   if (canListAllOrganizations(actor)) return true;
+  if (actor.internalViewOrganizationIds?.includes(organizationId)) return true;
   return canManageOrganization(actor, organizationId);
 }
 

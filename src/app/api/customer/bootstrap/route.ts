@@ -18,7 +18,10 @@ import {
   readCustomerBootstrapCache,
   writeCustomerBootstrapCache,
 } from "@/lib/platform/customer-bootstrap-cache";
-import { listActiveManagedOrganizationIds } from "@/lib/platform/customer-portfolio";
+import {
+  listActiveManagedOrganizationIds,
+  resolveActiveCustomerAssignmentScope,
+} from "@/lib/platform/customer-portfolio";
 import { CUSTOMER_PRODUCT_CARDS } from "@/lib/platform/customer-products";
 import {
   canonicalProductCode,
@@ -54,6 +57,13 @@ const responseSchema = z.object({
     }),
   ),
   platformAdminOrganizations: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      customerCode: z.string().nullable().optional(),
+    }),
+  ),
+  managedOrganizations: z.array(
     z.object({
       id: z.string(),
       name: z.string(),
@@ -119,6 +129,7 @@ export async function GET(request: NextRequest) {
   );
   let clearStaleContextCookie = false;
   let persistContextCookie = false;
+  let persistManagedContextCookie = false;
 
   const bundle = await loadPlatformUserBundle(user.id);
   if (!bundle.profile) {
@@ -139,6 +150,19 @@ export async function GET(request: NextRequest) {
     prisma,
     bundle.profile.id,
   );
+  if (
+    !cookie &&
+    bundle.memberships.length === 0 &&
+    managedOrganizationIds.length === 1
+  ) {
+    cookie = {
+      organizationId: managedOrganizationIds[0]!,
+      branchId: null,
+      branchSelected: false,
+      mode: "managed_org",
+    };
+    persistManagedContextCookie = true;
+  }
   const isStaffSupportClaim = (mode: string | undefined, orgId: string | undefined) =>
     Boolean(
       orgId &&
@@ -281,6 +305,18 @@ export async function GET(request: NextRequest) {
         take: 200,
       })
     : Promise.resolve([]);
+  const managedOrganizationsPromise = managedOrganizationIds.length > 0
+    ? prisma.organization.findMany({
+        where: {
+          id: { in: managedOrganizationIds },
+          deletedAt: null,
+          status: { code: MASTER.organizationStatus.ACTIVE },
+        },
+        select: { id: true, displayName: true, customerCode: true },
+        orderBy: { displayName: "asc" },
+        take: 200,
+      })
+    : Promise.resolve([]);
   const superPermissionCodesPromise = isSuper
     ? prisma.permission.findMany({
         where: { isActive: true },
@@ -291,6 +327,20 @@ export async function GET(request: NextRequest) {
 
   if (organizationId && !membership) {
     if (!isStaffSupportClaim(cookie?.mode, organizationId)) {
+      return NextResponse.json(
+        { code: "ORG_FORBIDDEN", message: "ไม่มีสิทธิ์เข้าถึงองค์กรนี้" },
+        { status: 403 },
+      );
+    }
+    const managedScope =
+      cookie?.mode === "managed_org" && bundle.profile
+        ? await resolveActiveCustomerAssignmentScope(
+            prisma,
+            bundle.profile.id,
+            organizationId,
+          )
+        : null;
+    if (cookie?.mode === "managed_org" && !managedScope) {
       return NextResponse.json(
         { code: "ORG_FORBIDDEN", message: "ไม่มีสิทธิ์เข้าถึงองค์กรนี้" },
         { status: 403 },
@@ -308,6 +358,9 @@ export async function GET(request: NextRequest) {
           where: {
             deletedAt: null,
             status: { code: MASTER.branchStatus.ACTIVE },
+            ...(managedScope && !managedScope.allBranches
+              ? { id: { in: managedScope.branchIds } }
+              : {}),
           },
           select: { id: true, name: true, code: true },
           orderBy: { code: "asc" },
@@ -352,11 +405,13 @@ export async function GET(request: NextRequest) {
     : Promise.resolve([]);
   const [
     platformAdminOrganizations,
+    managedOrganizations,
     resolvedEffectiveCodes,
     entitlements,
     superPermissionRows,
   ] = await Promise.all([
     platformAdminOrganizationsPromise,
+    managedOrganizationsPromise,
     effectiveCodesPromise,
     entitlementsPromise,
     superPermissionCodesPromise,
@@ -435,6 +490,11 @@ export async function GET(request: NextRequest) {
       name: row.displayName,
       customerCode: row.customerCode,
     })),
+    managedOrganizations: managedOrganizations.map((row) => ({
+      id: row.id,
+      name: row.displayName,
+      customerCode: row.customerCode,
+    })),
     memberships: bundle.memberships.map((m) => ({
       organizationId: m.organizationId,
       organizationName: m.organizationName,
@@ -465,13 +525,24 @@ export async function GET(request: NextRequest) {
     entitlementsAllowed,
     // Bump when SUPER_ADMIN / managed_org support rules change so stale cache
     // cannot keep products locked after a deploy.
-    contextVersion: 4,
+    contextVersion: 6,
   });
 
   writeCustomerBootstrapCache(bootstrapKey, payload);
   const response = NextResponse.json(payload);
   if (clearStaleContextCookie) {
     response.cookies.set(COOKIE_NAME, "", contextCookieOptions(0));
+  } else if (persistManagedContextCookie && organizationId) {
+    response.cookies.set(
+      COOKIE_NAME,
+      encodeContextCookie({
+        organizationId,
+        branchId,
+        branchSelected: branchId != null || activeBranches.length <= 1,
+        mode: "managed_org",
+      }),
+      contextCookieOptions(),
+    );
   } else if (
     persistContextCookie &&
     organizationId &&

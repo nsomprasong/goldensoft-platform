@@ -17,6 +17,7 @@ import {
   canCreateOrganization,
   canListAllOrganizations,
   canManageOrganization,
+  canViewOrganization,
   createOrganizationSchema,
   updateOrganizationSchema,
   type ActorAccess,
@@ -40,8 +41,13 @@ import {
   isOrganizationAssignablePermission,
   permissionsForRoles,
 } from "../src/lib/permissions/codes";
+import { ORGANIZATION_STANDARD_ROLE_CATALOG } from "../src/lib/permissions/organization-role-catalog";
 import { TH } from "../src/lib/i18n/th";
 import { checkAdditiveMigrationSql } from "../src/lib/db/migration-safety";
+import {
+  organizationRoleAssignmentWhere,
+  organizationRoleMembershipWhere,
+} from "../src/lib/platform/role-assignee-scope";
 
 const ORG_A = randomUUID();
 const ORG_B = randomUUID();
@@ -107,6 +113,18 @@ describe("Phase 5 organization admin rules", () => {
     );
   });
 
+  it("allows SALES to view GoldenSoft internally without granting manage access", () => {
+    const sales = actor({
+      platformRoles: ["SALES"],
+      membershipOrganizationIds: [],
+      managedOrganizationIds: [],
+      internalViewOrganizationIds: [ORG_A],
+    });
+    assert.equal(canViewOrganization(sales, ORG_A), true);
+    assert.equal(canManageOrganization(sales, ORG_A), false);
+    assert.equal(canViewOrganization(sales, ORG_B), false);
+  });
+
   it("rejects duplicate-looking empty codes via schema", () => {
     assert.throws(() => createOrganizationSchema.parse({ customerCode: "" }));
   });
@@ -143,15 +161,68 @@ describe("Phase 5 organization admin rules", () => {
 });
 
 describe("Phase 5 branch admin rules", () => {
-  it("requires branch code and name", () => {
-    assert.throws(() => createBranchSchema.parse({ code: "", name: "" }));
-    const ok = createBranchSchema.parse({ code: "B1", name: "สาขา 1" });
-    assert.equal(ok.code, "B1");
+  it("requires branch name and allows the server to allocate the code", () => {
+    assert.throws(() => createBranchSchema.parse({ name: "" }));
+    const ok = createBranchSchema.parse({ name: "สาขา 1" });
+    assert.equal("code" in ok, false);
   });
 
   it("allows omitting code on update payload (immutability enforced in service)", () => {
     const parsed = updateBranchSchema.parse({ name: "ชื่อใหม่" });
     assert.equal(parsed.name, "ชื่อใหม่");
+  });
+});
+
+describe("Organization role assignee tenant scope", () => {
+  it("filters assignments by organization and the selected branch", () => {
+    const branchId = randomUUID();
+    const membershipWhere = organizationRoleMembershipWhere({
+      organizationId: ORG_A,
+      activeBranchId: branchId,
+    });
+    const assignmentWhere = organizationRoleAssignmentWhere({
+      organizationId: ORG_A,
+      activeBranchId: branchId,
+    });
+
+    assert.equal(membershipWhere.organizationId, ORG_A);
+    assert.equal(membershipWhere.endedAt, null);
+    assert.deepEqual(assignmentWhere.membership, membershipWhere);
+    assert.equal(assignmentWhere.revokedAt, null);
+    assert.match(JSON.stringify(membershipWhere), new RegExp(branchId));
+    assert.match(JSON.stringify(membershipWhere), /ALL_BRANCHES/);
+  });
+
+  it("does not apply a branch filter in the all-branches view", () => {
+    const membershipWhere = organizationRoleMembershipWhere({
+      organizationId: ORG_B,
+      activeBranchId: null,
+    });
+    assert.equal(membershipWhere.organizationId, ORG_B);
+    assert.equal("branchScopes" in membershipWhere, false);
+  });
+});
+
+describe("Organization standard role catalog", () => {
+  it("uses explicit Thai responsibility names and covers core customer work", () => {
+    const roles = new Map(
+      ORGANIZATION_STANDARD_ROLE_CATALOG.map((role) => [role.code, role]),
+    );
+    assert.equal(roles.get("OWNER")?.nameTh, "เจ้าขององค์กร");
+    assert.equal(roles.get("ADMIN")?.nameTh, "ผู้ดูแลระบบองค์กร");
+    assert.equal(roles.get("BRANCH_MANAGER")?.nameTh, "ผู้จัดการสาขา");
+    assert.equal(roles.get("OWNER")?.permissionCodes.length, 16);
+    assert.equal(roles.get("ADMIN")?.permissionCodes.length, 12);
+    assert.equal(roles.get("BRANCH_MANAGER")?.permissionCodes.length, 3);
+    assert.equal(roles.get("BILLING_CONTACT")?.permissionCodes.length, 11);
+    for (const code of [
+      "HR_MANAGER",
+      "PAYROLL_OFFICER",
+      "ORGANIZATION_APPROVER",
+      "EMPLOYEE",
+    ] as const) {
+      assert.ok(roles.has(code), `missing standard role ${code}`);
+    }
   });
 });
 

@@ -2,6 +2,11 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { MASTER } from "@/lib/platform/master-codes";
 import { getMasterByCode } from "@/lib/platform/master-data";
+import {
+  GOLDENSOFT_CUSTOMER_CODE,
+} from "@/lib/platform/organization-identity";
+
+export { isGoldenSoftCustomerCode } from "@/lib/platform/organization-identity";
 
 export const ORG_BOOTSTRAP_CONFIRM_VALUE = "CREATE_GOLDENSOFT_ORGANIZATION";
 export const ORG_BOOTSTRAP_AUDIT_ACTION = "bootstrap.goldensoft_organization";
@@ -13,18 +18,11 @@ export const ORG_BOOTSTRAP_SOURCE = "bootstrap-script";
  * single branch `name`, so the Thai label is authoritative for display.
  */
 export const GOLDENSOFT_ORG = {
-  customerCode: "GOLDENSOFT",
+  customerCode: GOLDENSOFT_CUSTOMER_CODE,
   slug: "goldensoft",
   nameTh: "GoldenSoft",
   nameEn: "GoldenSoft",
 } as const;
-
-/** True when this organization is GoldenSoft itself (Platform Admin home). */
-export function isGoldenSoftCustomerCode(
-  customerCode: string | null | undefined,
-): boolean {
-  return (customerCode ?? "").trim().toUpperCase() === GOLDENSOFT_ORG.customerCode;
-}
 
 export const GOLDENSOFT_BRANCH = {
   code: "HEADQUARTERS",

@@ -6,9 +6,30 @@
 export function pathAfterOrganizationSwitch(
   pathname: string,
   nextOrganizationId: string,
+  options?: {
+    context?: "platform" | "organization";
+    branchId?: string | null;
+  },
 ): string | null {
-  if (pathname === "/roles") {
-    return `/roles?context=organization&organizationId=${encodeURIComponent(nextOrganizationId)}`;
+  const roleRoute = pathname.match(/^\/roles(?:\/(assignees|customer-assignments|customer-organizations|standard-templates))?$/);
+  if (roleRoute) {
+    const params = new URLSearchParams({
+      context: options?.context ?? "organization",
+      organizationId: nextOrganizationId,
+    });
+    if (options?.branchId) params.set("branchId", options.branchId);
+    const platformOnlyRoleRoute = [
+      "customer-assignments",
+      "customer-organizations",
+      "standard-templates",
+    ].includes(roleRoute[1] ?? "");
+    const childRoute =
+      platformOnlyRoleRoute && options?.context !== "platform"
+        ? ""
+        : roleRoute[1]
+          ? `/${roleRoute[1]}`
+          : "";
+    return `/roles${childRoute}?${params.toString()}`;
   }
   const match = pathname.match(/^\/organizations\/([^/]+)(\/.*)?$/);
   if (!match) return null;

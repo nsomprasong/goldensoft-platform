@@ -27,6 +27,9 @@ async function main() {
   const { HR_PERMISSION_CATALOG, HR_PRODUCT_CODE } = await import(
     "../src/lib/permissions/hr-codes"
   );
+  const { ORGANIZATION_STANDARD_ROLE_CATALOG } = await import(
+    "../src/lib/permissions/organization-role-catalog"
+  );
   const {
     buildDatabasePoolConfig,
     buildTrustedPgSsl,
@@ -106,6 +109,78 @@ async function main() {
     console.log(
       `HR permissions upserted: ${codes.length} (created ${created}, updated ${codes.length - created})`,
     );
+
+    let roleCount = 0;
+    let grantCount = 0;
+    for (const template of ORGANIZATION_STANDARD_ROLE_CATALOG) {
+      const existingRole = await prisma.organizationRole.findFirst({
+        where: { organizationId: null, code: template.code },
+        select: { id: true },
+      });
+      const role = existingRole
+        ? await prisma.organizationRole.update({
+            where: { id: existingRole.id },
+            data: {
+              nameTh: template.nameTh,
+              nameEn: template.nameEn,
+              description: template.description,
+              sortOrder: template.sortOrder,
+              isActive: true,
+              isSystem: true,
+            },
+          })
+        : await prisma.organizationRole.create({
+            data: {
+              organizationId: null,
+              code: template.code,
+              nameTh: template.nameTh,
+              nameEn: template.nameEn,
+              description: template.description,
+              sortOrder: template.sortOrder,
+              isActive: true,
+              isSystem: true,
+            },
+          });
+      roleCount += 1;
+
+      if (!("permissionCodes" in template)) continue;
+      const permissionCodes = [...template.permissionCodes];
+      const permissions = await prisma.permission.findMany({
+        where: { code: { in: permissionCodes }, isActive: true },
+        select: { id: true, code: true },
+      });
+      if (permissions.length !== new Set(permissionCodes).size) {
+        throw new Error(`Permission catalog incomplete for role ${template.code}`);
+      }
+      for (const permission of permissions) {
+        await prisma.organizationRolePermission.upsert({
+          where: {
+            organizationRoleId_permissionId: {
+              organizationRoleId: role.id,
+              permissionId: permission.id,
+            },
+          },
+          create: {
+            organizationRoleId: role.id,
+            permissionId: permission.id,
+          },
+          update: { revokedAt: null },
+        });
+        grantCount += 1;
+      }
+      await prisma.organizationRolePermission.updateMany({
+        where: {
+          organizationRoleId: role.id,
+          revokedAt: null,
+          permission: {
+            productCode: HR_PRODUCT_CODE,
+            code: { notIn: permissionCodes },
+          },
+        },
+        data: { revokedAt: new Date() },
+      });
+    }
+    console.log(`Organization role templates upserted: ${roleCount}; permission grants: ${grantCount}`);
 
     const product = await prisma.product.findUnique({
       where: { code: HR_PRODUCT_CODE },

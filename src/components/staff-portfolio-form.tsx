@@ -6,6 +6,14 @@ import { useState } from "react";
 import { UserPlus, UserX } from "lucide-react";
 
 import { FormField } from "@/components/ui/admin-ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { IconTextButton } from "@/components/ui/labeled-icon-button";
 import { pushToast } from "@/components/ui/toast";
@@ -16,10 +24,11 @@ type Option = { id: string; label: string };
 export function StaffPortfolioAssignForm(props: {
   staffOptions: Option[];
   organizationOptions: Option[];
+  fixedStaffUserProfileId?: string;
 }) {
   const router = useRouter();
   const [staffUserProfileId, setStaffUserProfileId] = useState(
-    props.staffOptions[0]?.id ?? "",
+    props.fixedStaffUserProfileId ?? props.staffOptions[0]?.id ?? "",
   );
   const [organizationId, setOrganizationId] = useState(
     props.organizationOptions[0]?.id ?? "",
@@ -56,7 +65,7 @@ export function StaffPortfolioAssignForm(props: {
     pending ||
     !staffUserProfileId ||
     !organizationId ||
-    props.staffOptions.length === 0 ||
+    (!props.fixedStaffUserProfileId && props.staffOptions.length === 0) ||
     props.organizationOptions.length === 0;
 
   return (
@@ -66,8 +75,15 @@ export function StaffPortfolioAssignForm(props: {
           {error}
         </p>
       ) : null}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <FormField label={TH.staffPortfolio.staffLabel} htmlFor="staffUserProfileId">
+      <div
+        className={
+          props.fixedStaffUserProfileId
+            ? "grid gap-3 sm:grid-cols-2"
+            : "grid gap-3 sm:grid-cols-3"
+        }
+      >
+        {!props.fixedStaffUserProfileId ? (
+          <FormField label={TH.staffPortfolio.staffLabel} htmlFor="staffUserProfileId">
           <select
             id="staffUserProfileId"
             className="input"
@@ -84,7 +100,8 @@ export function StaffPortfolioAssignForm(props: {
               </option>
             ))}
           </select>
-        </FormField>
+          </FormField>
+        ) : null}
         <FormField label={TH.staffPortfolio.organizationLabel} htmlFor="organizationId">
           <select
             id="organizationId"
@@ -131,9 +148,9 @@ export function StaffPortfolioAssignForm(props: {
 export function StaffPortfolioRevokeButton(props: { assignmentId: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function revoke() {
-    if (!window.confirm(TH.staffPortfolio.revokeConfirm)) return;
     setPending(true);
     const res = await fetch("/api/platform/staff-organization-assignments", {
       method: "DELETE",
@@ -147,22 +164,43 @@ export function StaffPortfolioRevokeButton(props: { assignmentId: string }) {
       return;
     }
     pushToast(data.message ?? TH.staffPortfolio.revokeSuccess);
+    setConfirmOpen(false);
     router.refresh();
   }
 
   return (
-    <IconTextButton
-      type="button"
-      variant="outline"
-      disabled={pending}
-      onClick={() => void revoke()}
-      icon={
-        <UserX
-          className={pending ? "animate-pulse" : undefined}
-          aria-hidden="true"
-        />
-      }
-      label={pending ? TH.common.loading : TH.staffPortfolio.revoke}
-    />
+    <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <IconTextButton
+        type="button"
+        variant="outline"
+        disabled={pending}
+        onClick={() => setConfirmOpen(true)}
+        icon={<UserX aria-hidden="true" />}
+        label={TH.staffPortfolio.revoke}
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{TH.staffPortfolio.revoke}</DialogTitle>
+          <DialogDescription>{TH.staffPortfolio.revokeConfirm}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <IconTextButton
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => setConfirmOpen(false)}
+            label={TH.common.cancel}
+          />
+          <IconTextButton
+            type="button"
+            variant="destructive"
+            disabled={pending}
+            onClick={() => void revoke()}
+            icon={<UserX className={pending ? "animate-pulse" : undefined} aria-hidden="true" />}
+            label={pending ? TH.common.loading : TH.staffPortfolio.revoke}
+          />
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -29,7 +29,7 @@ const ACTION_NAMES: Record<string, string> = {
 /** DB-backed registry. New active Permission rows appear in the role editor automatically. */
 export async function loadPermissionRegistry(
   db: PrismaClient,
-  options: { organizationId?: string | null; platform?: boolean } = {},
+  options: { organizationId?: string | null; platform?: boolean; allOrganizationProducts?: boolean } = {},
 ): Promise<PermissionRegistryItem[]> {
   const entitledProducts = options.organizationId
     ? await db.entitlement.findMany({
@@ -46,7 +46,7 @@ export async function loadPermissionRegistry(
   const rows = await db.permission.findMany({
     where: {
       isActive: true,
-      ...(options.platform
+      ...(options.platform || options.allOrganizationProducts
         ? {}
         : productCodes.size > 0
           ? {

@@ -1,5 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
+import { ORGANIZATION_STANDARD_ROLE_CATALOG } from "../src/lib/permissions/organization-role-catalog";
+
 type MasterSeed = {
   code: string;
   nameTh: string;
@@ -38,22 +40,7 @@ async function upsertMaster(
 export async function seedAllMasters(prisma: PrismaClient) {
   // Organization roles lost the global unique(code) in Phase 7 — upsert by
   // system scope (organizationId null) instead of the generic helper.
-  for (const row of [
-    { code: "OWNER", nameTh: "เจ้าของ", nameEn: "Owner", sortOrder: 1 },
-    { code: "ADMIN", nameTh: "ผู้ดูแล", nameEn: "Admin", sortOrder: 2 },
-    {
-      code: "BILLING_CONTACT",
-      nameTh: "ผู้ติดต่อการเงิน",
-      nameEn: "Billing Contact",
-      sortOrder: 3,
-    },
-    {
-      code: "BRANCH_MANAGER",
-      nameTh: "ผู้ดูแลสาขา",
-      nameEn: "Branch Manager",
-      sortOrder: 4,
-    },
-  ]) {
+  for (const row of ORGANIZATION_STANDARD_ROLE_CATALOG) {
     const existing = await prisma.organizationRole.findFirst({
       where: { code: row.code, organizationId: null },
     });
@@ -63,6 +50,7 @@ export async function seedAllMasters(prisma: PrismaClient) {
         data: {
           nameTh: row.nameTh,
           nameEn: row.nameEn,
+          description: row.description,
           sortOrder: row.sortOrder,
           isActive: true,
           isSystem: true,
@@ -74,6 +62,7 @@ export async function seedAllMasters(prisma: PrismaClient) {
           code: row.code,
           nameTh: row.nameTh,
           nameEn: row.nameEn,
+          description: row.description,
           sortOrder: row.sortOrder,
           isActive: true,
           isSystem: true,

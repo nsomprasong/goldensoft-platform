@@ -6,6 +6,7 @@ import {
   canAccessOrganization,
 } from "@/lib/auth/access";
 import { requireAuthUser } from "@/lib/auth/request-auth";
+import { isGoldenSoftPlatformStaff } from "@/lib/auth/customer-app-redirect";
 import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
 import {
   COOKIE_NAME,
@@ -18,6 +19,7 @@ import { writeAuditLog } from "@/lib/platform/audit";
 import { invalidateCustomerBootstrapCache } from "@/lib/platform/customer-bootstrap-cache";
 import { listActiveManagedOrganizationIds, resolveActiveCustomerAssignmentScope } from "@/lib/platform/customer-portfolio";
 import { MASTER } from "@/lib/platform/master-codes";
+import { GOLDENSOFT_CUSTOMER_CODE } from "@/lib/platform/organization-identity";
 import { invalidateEffectiveCodesCache } from "@/lib/permissions/effective-codes-cache";
 import { permissionsForRoles } from "@/lib/permissions/codes";
 import { prisma } from "@/lib/prisma";
@@ -70,10 +72,26 @@ export async function GET(request: NextRequest) {
     customerCode: string;
   } | null = null;
   if (cookie && !activeMembership) {
+    const isGoldenSoftStaffClaim =
+      cookie.mode === "platform_admin" &&
+      !isSuper &&
+      isGoldenSoftPlatformStaff(bundle.platformRoles) &&
+      (await prisma.organization.count({
+        where: {
+          id: cookie.organizationId,
+          customerCode: GOLDENSOFT_CUSTOMER_CODE,
+          deletedAt: null,
+          status: { code: MASTER.organizationStatus.ACTIVE },
+        },
+      })) > 0;
     const isManagedOrgClaim =
       cookie.mode === "managed_org" &&
       managedOrganizationIds.includes(cookie.organizationId);
-    if (!(isSuper && cookie.mode === "platform_admin") && !isManagedOrgClaim) {
+    if (
+      !(isSuper && cookie.mode === "platform_admin") &&
+      !isGoldenSoftStaffClaim &&
+      !isManagedOrgClaim
+    ) {
       return NextResponse.json(
         {
           code: "ORG_FORBIDDEN",
@@ -122,11 +140,13 @@ export async function GET(request: NextRequest) {
     organizationRoles,
   });
 
-  const adminOrganizations = isSuper
+  const isPlatformStaff = isGoldenSoftPlatformStaff(bundle.platformRoles);
+  const adminOrganizations = isPlatformStaff
     ? await prisma.organization.findMany({
         where: {
           deletedAt: null,
           status: { code: MASTER.organizationStatus.ACTIVE },
+          ...(!isSuper ? { customerCode: GOLDENSOFT_CUSTOMER_CODE } : {}),
         },
         select: { id: true, displayName: true, customerCode: true },
         orderBy: { displayName: "asc" },
@@ -228,7 +248,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { organizationId, branchId = null, employeeId = null } = parsed.data;
+  const { organizationId, employeeId = null } = parsed.data;
+  let branchId = parsed.data.branchId ?? null;
   const previous = decodeContextCookie(
     request.cookies.get(COOKIE_NAME)?.value,
   );
@@ -245,7 +266,19 @@ export async function POST(request: NextRequest) {
   }
   const isSuper = bundle.platformRoles.includes(MASTER.platformRole.SUPER_ADMIN);
   const requestedPlatformAdmin = parsed.data.mode === "platform_admin";
-  if (requestedPlatformAdmin && !isSuper) {
+  const requestedGoldenSoftStaffContext =
+    requestedPlatformAdmin &&
+    !isSuper &&
+    isGoldenSoftPlatformStaff(bundle.platformRoles) &&
+    (await prisma.organization.count({
+      where: {
+        id: organizationId,
+        customerCode: GOLDENSOFT_CUSTOMER_CODE,
+        deletedAt: null,
+        status: { code: MASTER.organizationStatus.ACTIVE },
+      },
+    })) > 0;
+  if (requestedPlatformAdmin && !isSuper && !requestedGoldenSoftStaffContext) {
     return NextResponse.json(
       { code: "FORBIDDEN", message: TH.access.forbidden },
       { status: 403 },
@@ -256,12 +289,13 @@ export async function POST(request: NextRequest) {
   );
   const memberAccess = canAccessOrganization(bundle.memberships, organizationId);
   const platformAdminAccess =
-    isSuper &&
-    (requestedPlatformAdmin || !memberAccess) &&
-    canAccessOrganization(bundle.memberships, organizationId, {
-      platformRoles: bundle.platformRoles,
-      allowPlatformAdmin: true,
-    });
+    requestedGoldenSoftStaffContext ||
+    (isSuper &&
+      (requestedPlatformAdmin || !memberAccess) &&
+      canAccessOrganization(bundle.memberships, organizationId, {
+        platformRoles: bundle.platformRoles,
+        allowPlatformAdmin: true,
+      }));
 
   const managedOrganizationIds = !memberAccess
     ? await listActiveManagedOrganizationIds(prisma, bundle.profile.id)
@@ -334,6 +368,12 @@ export async function POST(request: NextRequest) {
       { code: "BRANCH_FORBIDDEN", message: TH.access.forbidden },
       { status: 403 },
     );
+  }
+
+  if (!branchId && contextBranches.length === 1) {
+    branchId = contextBranches[0]!.id;
+    resolvedBranch = contextBranches[0]!;
+    branchSelected = true;
   }
 
   const mode = platformAdminAccess

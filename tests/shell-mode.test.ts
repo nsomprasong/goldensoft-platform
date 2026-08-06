@@ -45,7 +45,7 @@ describe("buildCustomerSupportNav", () => {
     });
     assert.ok(nav.some((item) => item.href === "/organizations/org-1"));
     assert.ok(
-      nav.some((item) => item.href.includes("http://127.0.0.1:3002/auth/callback")),
+      nav.some((item) => item.href === "http://127.0.0.1:3002/hr"),
     );
     assert.ok(!nav.some((item) => item.href === "/staff"));
   });

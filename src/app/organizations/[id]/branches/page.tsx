@@ -44,6 +44,8 @@ export default async function OrganizationBranchesPage({
     branches: ctx.branches,
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,
+    contextMode: ctx.contextMode,
+    canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
   };
 
   if (!perms.includes(PLATFORM_PERMISSIONS.branchRead)) {
@@ -56,9 +58,7 @@ export default async function OrganizationBranchesPage({
 
   let branches;
   try {
-    branches = await listBranches(prisma, actor, id, {
-      activeBranchId: ctx.activeBranch?.id ?? null,
-    });
+    branches = await listBranches(prisma, actor, id);
   } catch {
     return (
       <PlatformShell {...shellProps}>
@@ -71,22 +71,14 @@ export default async function OrganizationBranchesPage({
     canManageOrganization(actor, id) &&
     perms.includes(PLATFORM_PERMISSIONS.branchManage);
 
-  const branchScopeNote = ctx.activeBranch
-    ? `กำลังแสดงเฉพาะสาขา ${ctx.activeBranch.name} (${ctx.activeBranch.code}) — เลือก「ทุกสาขา」เพื่อดูทั้งหมด`
-    : null;
-
   return (
     <PlatformShell {...shellProps}>
       <PageHeader
         title={TH.pages.branchesTitle}
-        description={
-          branchScopeNote
-            ? `${TH.pages.branchesBody} · ${branchScopeNote}`
-            : TH.pages.branchesBody
-        }
+        description={TH.pages.branchesBody}
         icon={<GitBranch size={24} />}
         actions={
-          canManage && !ctx.activeBranch ? (
+          canManage ? (
             <IconTextLink
               href={`/organizations/${id}/branches/new`}
               label={TH.branch.add}

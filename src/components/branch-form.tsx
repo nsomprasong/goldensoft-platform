@@ -35,7 +35,6 @@ export function BranchForm(props: {
     setPending(true);
     setError(null);
     const payload = {
-      code: String(formData.get("code") ?? ""),
       name: String(formData.get("name") ?? ""),
       nameEn: String(formData.get("nameEn") ?? "") || null,
       address: String(formData.get("address") ?? "") || null,
@@ -51,7 +50,7 @@ export function BranchForm(props: {
     const res = await fetch(url, {
       method: isEdit ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(isEdit ? { ...payload, code: undefined } : payload),
+      body: JSON.stringify(payload),
     });
     const data = (await res.json()) as { message?: string };
     setPending(false);
@@ -67,21 +66,21 @@ export function BranchForm(props: {
   return (
     <form action={onSubmit} className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
-        <FormField
-          label={TH.branch.code}
-          htmlFor="code"
-          required={!isEdit}
-          hint={isEdit ? TH.branch.codeImmutable : undefined}
-        >
-          <Input
-            id="code"
-            name="code"
-            required={!isEdit}
-            disabled={isEdit}
-            defaultValue={props.initial?.code ?? ""}
-            className="disabled:bg-[var(--surface-muted)]"
-          />
-        </FormField>
+        {isEdit ? (
+          <FormField
+            label={TH.branch.code}
+            htmlFor="code"
+            hint={TH.branch.codeImmutable}
+          >
+            <Input
+              id="code"
+              name="code"
+              disabled
+              defaultValue={props.initial?.code ?? ""}
+              className="disabled:bg-[var(--surface-muted)]"
+            />
+          </FormField>
+        ) : null}
         <FormField label={TH.branch.nameTh} htmlFor="name" required>
           <Input
             id="name"

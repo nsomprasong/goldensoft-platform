@@ -91,7 +91,7 @@ async function PlatformShellInner(props: {
     platformRoles: props.platformRoles,
     organizationRoles: props.organizationRoles,
     permissions: props.permissions,
-    items: navSource,
+    items: navSource.filter((item) => item.href !== "/branches"),
   }).map((item) => {
     if (item.href === "/branches" && props.activeOrganization) {
       return {
@@ -119,7 +119,7 @@ async function PlatformShellInner(props: {
       shellMode={shellMode}
       customerAppHref={customerAppItem?.href ?? null}
       pageTitle={props.pageTitle}
-      canUsePlatformAdminMode={props.platformRoles.includes("SUPER_ADMIN")}
+      canUsePlatformAdminMode={props.platformRoles.length > 0}
       canUseManagedOrgMode={props.canUseManagedOrgMode}
     >
       {props.children}

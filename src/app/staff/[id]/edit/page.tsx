@@ -13,6 +13,10 @@ import { StaffEditForm } from "@/components/staff-edit-form";
 import { StaffInviteButton } from "@/components/staff-invite-button";
 import { StaffPasswordResetButton } from "@/components/staff-password-reset-button";
 import {
+  StaffPortfolioAssignForm,
+  StaffPortfolioRevokeButton,
+} from "@/components/staff-portfolio-form";
+import {
   AccessDenied,
   PageHeader,
   SectionHeader,
@@ -29,6 +33,11 @@ import {
   type PlatformPermission,
 } from "@/lib/permissions/codes";
 import { listOrganizationRoles } from "@/lib/platform/custom-roles";
+import {
+  canManagePortfolioAssignments,
+  listStaffOrganizationAssignments,
+} from "@/lib/platform/customer-portfolio";
+import { resolveEffectivePermissionCodes } from "@/lib/permissions/effective";
 import {
   canManageStaff,
   canResetUserPassword,
@@ -68,7 +77,15 @@ export default async function EditStaffPage({
     );
   }
 
-  const [staff, platformRoles, invitationsSendEnabled, memberships] = await Promise.all([
+  const [
+    staff,
+    platformRoles,
+    invitationsSendEnabled,
+    memberships,
+    customerAssignments,
+    customerOrganizations,
+    actorPermissionCodes,
+  ] = await Promise.all([
     getStaffMember(prisma, id),
     prisma.platformRole.findMany({
       where: { isActive: true },
@@ -118,6 +135,18 @@ export default async function EditStaffPage({
       },
       orderBy: { organization: { displayName: "asc" } },
     }),
+    listStaffOrganizationAssignments(prisma, { staffUserProfileId: id }),
+    prisma.organization.findMany({
+      where: {
+        deletedAt: null,
+        status: { code: MASTER.organizationStatus.ACTIVE },
+        NOT: { customerCode: "GOLDENSOFT" },
+      },
+      select: { id: true, displayName: true, customerCode: true },
+      orderBy: { displayName: "asc" },
+      take: 500,
+    }),
+    resolveEffectivePermissionCodes(prisma, ctx.user.id, null),
   ]);
 
   if (!staff) {
@@ -155,6 +184,27 @@ export default async function EditStaffPage({
       permissionLabels: permissions.map((permission) => permission.label),
     };
   });
+  const activeCustomerAssignments = customerAssignments.filter(
+    (assignment) => !assignment.revokedAt,
+  );
+  const assignedCustomerOrganizationIds = new Set(
+    activeCustomerAssignments.map((assignment) => assignment.organizationId),
+  );
+  const customerOrganizationOptions = customerOrganizations
+    .filter((organization) => !assignedCustomerOrganizationIds.has(organization.id))
+    .map((organization) => ({
+      id: organization.id,
+      label: `${organization.displayName} (${organization.customerCode})`,
+    }));
+  const canManageCustomerAssignments = canManagePortfolioAssignments({
+    platformRoles: ctx.bundle.platformRoles,
+    permissionCodes: actorPermissionCodes,
+  });
+  const isCustomerPortfolioStaff = staff.roles.some(
+    (role) =>
+      role.code === MASTER.platformRole.SALES ||
+      role.code === MASTER.platformRole.ACCOUNT_MANAGER,
+  );
 
   return (
     <PlatformShell {...shellProps}>
@@ -196,15 +246,14 @@ export default async function EditStaffPage({
 
         <section className="card">
           <SectionHeader
-            title="จัดการสิทธิ์พนักงาน Platform"
-            description="แยกสิทธิ์ระดับแพลตฟอร์มออกจากสิทธิ์ภายในแต่ละองค์กรอย่างชัดเจน"
+            title="บทบาทและการเข้าถึง"
+            description="กำหนดบทบาท Platform และองค์กรลูกค้าที่พนักงานรับผิดชอบ"
           />
           <div className="grid gap-4 xl:grid-cols-2">
             <section className="rounded-[var(--radius-lg)] border border-[var(--info-border)] bg-[var(--info-soft)] p-4">
               <div className="mb-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--info)]">Platform scope</p>
-                <h3 className="mt-1 font-semibold text-[var(--text-primary)]">สิทธิ์ระดับแพลตฟอร์ม</h3>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">ใช้จัดการระบบกลาง องค์กร ผลิตภัณฑ์ การเรียกเก็บเงิน และพนักงาน GoldenSoft</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--info)]">Platform</p>
+                <h3 className="mt-1 font-semibold text-[var(--text-primary)]">บทบาทแพลตฟอร์ม</h3>
               </div>
               <ul className="mb-4 grid gap-2">
                 {staff.roles.map((role) => {
@@ -215,7 +264,7 @@ export default async function EditStaffPage({
                         <span className="inline-flex items-center gap-1.5 text-sm font-semibold"><BadgeCheck size={14} aria-hidden="true" />{labelRole(role.code)}</span>
                         {role.code !== MASTER.platformRole.SUPER_ADMIN ? <PlatformRoleRevokeButton assignmentId={role.assignmentId} /> : null}
                       </div>
-                      <p className="mt-2 text-xs leading-relaxed text-[var(--text-secondary)]">{option?.permissionLabels.length ? option.permissionLabels.join(" · ") : "ยังไม่มีสิทธิ์ระดับแพลตฟอร์ม"}</p>
+                      <p className="mt-1 text-xs text-[var(--text-secondary)]">{option?.permissionLabels.length ?? 0} สิทธิ์</p>
                     </li>
                   );
                 })}
@@ -223,11 +272,43 @@ export default async function EditStaffPage({
               <PlatformRoleAssignForm userProfileId={staff.id} roles={platformRoleOptions} assignedRoleIds={staff.roles.map((role) => role.roleId)} />
             </section>
 
-            <section className="rounded-[var(--radius-lg)] border border-[var(--success-border)] bg-[var(--success-soft)] p-4">
+            <section className="rounded-[var(--radius-lg)] border border-[var(--warning-border)] bg-[var(--warning-soft)] p-4 xl:col-span-2 xl:row-start-2">
+              <div className="mb-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--warning)]">Customer access</p>
+                <h3 className="mt-1 font-semibold text-[var(--text-primary)]">องค์กรลูกค้าที่รับผิดชอบ</h3>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">ใช้สำหรับ SALES หรือ ACCOUNT_MANAGER เพื่อเปิดดูองค์กรลูกค้าที่ได้รับมอบหมาย</p>
+              </div>
+              {activeCustomerAssignments.length ? (
+                <ul className="mb-3 grid gap-2 sm:grid-cols-2">
+                  {activeCustomerAssignments.map((assignment) => (
+                    <li key={assignment.id} className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] p-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-[var(--text-primary)]">{assignment.organization.displayName}</p>
+                        <p className="text-xs text-[var(--text-secondary)]">{assignment.assignmentRole?.nameTh ?? "ผู้รับผิดชอบ"} · {assignment.scopeType?.nameTh ?? "ทุกสาขา"}</p>
+                      </div>
+                      {canManageCustomerAssignments ? <StaffPortfolioRevokeButton assignmentId={assignment.id} /> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mb-3 text-sm text-[var(--text-secondary)]">ยังไม่ได้รับมอบหมายองค์กรลูกค้า</p>
+              )}
+              {!isCustomerPortfolioStaff ? (
+                <p className="text-sm text-[var(--warning)]">กำหนดบทบาท SALES หรือ ACCOUNT_MANAGER ก่อนมอบหมายองค์กรลูกค้า</p>
+              ) : null}
+              {canManageCustomerAssignments && isCustomerPortfolioStaff && customerOrganizationOptions.length ? (
+                <StaffPortfolioAssignForm
+                  fixedStaffUserProfileId={staff.id}
+                  staffOptions={[]}
+                  organizationOptions={customerOrganizationOptions}
+                />
+              ) : null}
+            </section>
+
+            <section className="rounded-[var(--radius-lg)] border border-[var(--success-border)] bg-[var(--success-soft)] p-4 xl:col-start-2 xl:row-start-1">
               <div className="mb-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--success)]">Organization scope</p>
-                <h3 className="mt-1 font-semibold text-[var(--text-primary)]">สิทธิ์ภายในองค์กร</h3>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">มีผลเฉพาะองค์กรที่ระบุ ไม่ให้สิทธิ์จัดการ Platform และไม่ข้ามไปยังองค์กรอื่น</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--success)]">Organization</p>
+                <h3 className="mt-1 font-semibold text-[var(--text-primary)]">บทบาทสมาชิกองค์กร</h3>
               </div>
               {memberships.length === 0 ? (
                 <p className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] p-3 text-sm text-[var(--text-secondary)]">พนักงานคนนี้ยังไม่ได้เป็นสมาชิกขององค์กร</p>
@@ -254,7 +335,7 @@ export default async function EditStaffPage({
                             return (
                               <li key={assignment.id} className="rounded-[var(--radius-md)] border border-[var(--border)] p-3">
                                 <div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex items-center gap-1.5 text-sm font-semibold"><BadgeCheck size={14} aria-hidden="true" />{assignment.role.nameTh}</span><RoleRevokeButton assignmentId={assignment.id} /></div>
-                                <p className="mt-2 text-xs leading-relaxed text-[var(--text-secondary)]">{labels.length ? labels.join(" · ") : "บทบาทนี้ยังไม่ได้กำหนดสิทธิ์ภายในองค์กร"}</p>
+                                <p className="mt-1 text-xs text-[var(--text-secondary)]">{labels.length} สิทธิ์</p>
                               </li>
                             );
                           })}

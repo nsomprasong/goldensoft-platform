@@ -169,6 +169,7 @@ model OrganizationRole {
   assignments  OrganizationMembershipRole[]
   invitations  UserInvitation[]
   permissions  OrganizationRolePermission[]
+  organizationOverrides OrganizationRoleOverride[]
   roleTypeId   String?                      @map("role_type_id") @db.Uuid
   roleStatusId String?                      @map("role_status_id") @db.Uuid
   roleType     RoleType?                    @relation(fields: [roleTypeId], references: [id], onDelete: Restrict)
@@ -178,6 +179,27 @@ model OrganizationRole {
   @@index([roleTypeId])
   @@index([roleStatusId])
   @@map("organization_roles")
+  @@schema("platform")
+}
+
+model OrganizationRoleOverride {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  standardRoleId String   @map("standard_role_id") @db.Uuid
+  nameTh         String   @map("name_th")
+  nameEn         String   @map("name_en")
+  description    String?
+  permissionCodes String[] @map("permission_codes")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  standardRole OrganizationRole @relation(fields: [standardRoleId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, standardRoleId])
+  @@index([organizationId])
+  @@index([standardRoleId])
+  @@map("organization_role_overrides")
   @@schema("platform")
 }
 
@@ -687,6 +709,7 @@ model Organization {
   legacyIdentityMappings    LegacyIdentityMapping[]
   userInvitations           UserInvitation[]
   organizationRoles         OrganizationRole[]
+  roleOverrides             OrganizationRoleOverride[]
   entitlements              Entitlement[]
   onboardings               OrganizationOnboarding[]
   subscriptionHistories     SubscriptionHistory[]

@@ -245,6 +245,15 @@ describe("assertCanAssign / canManageCustomRoles: managed-org path", () => {
     assert.match(source, /canManageCustomerOrganization/);
   });
 
+  it("seeds SALES role-management grants without replacing existing grants", () => {
+    const source = read("scripts/seed-customer-assignment-foundation.ts");
+    assert.match(source, /platform\.role\.read/);
+    assert.match(source, /platform\.role\.manage/);
+    assert.match(source, /platform\.role\.assign/);
+    assert.match(source, /platformRolePermission\.upsert/);
+    assert.doesNotMatch(source, /platformRolePermission\.deleteMany/);
+  });
+
   it("user-invitations.ts allows inviting into a managed customer org", () => {
     const source = read("src/lib/platform/user-invitations.ts");
     assert.match(source, /canManageCustomerOrganization/);
@@ -272,13 +281,32 @@ describe("Staff portfolio UI has no fake buttons", () => {
       pathAfterOrganizationSwitch("/organizations/org-a", "org-a"),
       null,
     );
+    assert.equal(
+      pathAfterOrganizationSwitch("/roles", "org-b", {
+        context: "platform",
+        branchId: "branch-b",
+      }),
+      "/roles?context=platform&organizationId=org-b&branchId=branch-b",
+    );
+    assert.equal(
+      pathAfterOrganizationSwitch("/roles/standard-templates", "org-customer", {
+        context: "organization",
+      }),
+      "/roles?context=organization&organizationId=org-customer",
+    );
+    assert.equal(
+      pathAfterOrganizationSwitch("/roles/customer-organizations", "org-customer", {
+        context: "organization",
+      }),
+      "/roles?context=organization&organizationId=org-customer",
+    );
   });
 
   it("context switcher only offers managed orgs the staff member is actually assigned", () => {
     const src = read("src/components/context-switcher.tsx");
     assert.match(src, /managedOrganizations/);
     assert.match(src, /responsibleOrganizations/);
-    assert.match(src, /GOLDENSOFT/);
+    assert.match(src, /isGoldenSoftCustomerCode/);
   });
 });
 

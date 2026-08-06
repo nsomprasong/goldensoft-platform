@@ -201,6 +201,11 @@ export const resolveEffectivePermissions = cache(
             staffUserProfileId: profile.id,
             organizationId: input.organizationId,
             revokedAt: null,
+            startsAt: { lte: new Date() },
+            OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
+            AND: [
+              { OR: [{ statusId: null }, { status: { code: "ACTIVE" } }] },
+            ],
           },
         })) > 0
       : false;

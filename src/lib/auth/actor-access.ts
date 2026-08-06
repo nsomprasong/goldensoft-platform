@@ -3,6 +3,8 @@ import { cache } from "react";
 
 import { loadPlatformUserBundle } from "@/lib/auth/platform-user";
 import { listActiveManagedOrganizationIds } from "@/lib/platform/customer-portfolio";
+import { isGoldenSoftPlatformStaff } from "@/lib/auth/customer-app-redirect";
+import { GOLDENSOFT_CUSTOMER_CODE } from "@/lib/platform/organization-identity";
 import type { ActorAccess } from "@/lib/platform/organizations-admin";
 
 export type ResolvedActorAccess = ActorAccess & {
@@ -17,6 +19,7 @@ function emptyAccess(authUserId: string): ResolvedActorAccess {
     platformRoles: [],
     membershipOrganizationIds: [],
     managedOrganizationIds: [],
+    internalViewOrganizationIds: [],
     organizationRoles: [],
     organizationRolesByOrganization: {},
     profileId: null,
@@ -42,6 +45,20 @@ export const loadActorAccess = cache(async function loadActorAccess(
     db,
     bundle.profile.id,
   );
+  const internalViewOrganizationIds = isGoldenSoftPlatformStaff(
+    bundle.platformRoles,
+  )
+    ? (
+        await db.organization.findMany({
+          where: {
+            customerCode: GOLDENSOFT_CUSTOMER_CODE,
+            deletedAt: null,
+            status: { code: "ACTIVE" },
+          },
+          select: { id: true },
+        })
+      ).map((organization) => organization.id)
+    : [];
 
   return {
     authUserId,
@@ -49,6 +66,7 @@ export const loadActorAccess = cache(async function loadActorAccess(
     platformRoles: bundle.platformRoles,
     membershipOrganizationIds: bundle.memberships.map((m) => m.organizationId),
     managedOrganizationIds,
+    internalViewOrganizationIds,
     organizationRoles: bundle.memberships.flatMap((m) => m.roles),
     organizationRolesByOrganization: Object.fromEntries(
       bundle.memberships.map((membership) => [

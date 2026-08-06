@@ -35,7 +35,13 @@ export async function listActiveManagedOrganizationIds(
   staffUserProfileId: string,
 ): Promise<string[]> {
   const rows = await db.staffOrganizationAssignment.findMany({
-    where: { staffUserProfileId, revokedAt: null },
+    where: {
+      staffUserProfileId,
+      revokedAt: null,
+      startsAt: { lte: new Date() },
+      OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
+      AND: [{ OR: [{ statusId: null }, { status: { code: "ACTIVE" } }] }],
+    },
     select: { organizationId: true },
   });
   return [...new Set(rows.map((row) => row.organizationId))];

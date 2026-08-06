@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, FilterX, Plus, Search } from "lucide-react";
+import { Building2, FilterX, GitBranch, Plus, Search } from "lucide-react";
 
 import { PlatformShell } from "@/components/platform-shell";
 import {
@@ -54,6 +54,8 @@ export default async function OrganizationsPage({
     branches: ctx.branches,
     activeOrganization: ctx.activeOrganization,
     activeBranch: ctx.activeBranch,
+    contextMode: ctx.contextMode,
+    canUseManagedOrgMode: ctx.managedOrganizationIds.length > 0,
   };
 
   if (!perms.includes(PLATFORM_PERMISSIONS.organizationRead)) {
@@ -170,12 +172,13 @@ export default async function OrganizationsPage({
                       {org.customerCode} · {org._count.branches} {TH.nav.branches}
                     </p>
                     <div className="mt-3">
-                      <Link
+                      <IconTextLink
                         href={`/organizations/${org.id}/branches`}
-                        className="text-[length:var(--text-helper)] font-medium text-[var(--primary)]"
-                      >
-                        {TH.nav.branches}
-                      </Link>
+                        variant="outline"
+                        size="sm"
+                        label={`จัดการ${TH.nav.branches}`}
+                        icon={<GitBranch className="size-4" />}
+                      />
                     </div>
                   </div>
                 </li>
@@ -215,12 +218,13 @@ export default async function OrganizationsPage({
                   </td>
                   <td className="px-3 py-2.5 tabular-nums">{org._count.branches}</td>
                   <td className="px-3 py-2.5">
-                    <Link
+                    <IconTextLink
                       href={`/organizations/${org.id}/branches`}
-                      className="text-[length:var(--text-helper)] text-[var(--primary)]"
-                    >
-                      {TH.nav.branches}
-                    </Link>
+                      variant="outline"
+                      size="sm"
+                      label={`จัดการ${TH.nav.branches}`}
+                      icon={<GitBranch className="size-4" />}
+                    />
                   </td>
                 </tr>
               ))}

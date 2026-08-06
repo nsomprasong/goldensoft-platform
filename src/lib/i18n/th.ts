@@ -438,9 +438,13 @@ export const TH = {
     SALES: "ฝ่ายขาย",
     ACCOUNT_MANAGER: "ผู้ดูแลบัญชีลูกค้า",
     OWNER: "เจ้าขององค์กร",
-    ADMIN: "ผู้ดูแลองค์กร",
-    BILLING_CONTACT: "ผู้ประสานงานด้านการเงิน",
-    BRANCH_MANAGER: "ผู้ดูแลสาขา",
+    ADMIN: "ผู้ดูแลระบบองค์กร",
+    BILLING_CONTACT: "ผู้ประสานงานการเงินและการเรียกเก็บเงิน",
+    BRANCH_MANAGER: "ผู้จัดการสาขา",
+    HR_MANAGER: "ผู้จัดการฝ่ายบุคคล",
+    PAYROLL_OFFICER: "เจ้าหน้าที่เงินเดือนและค่าตอบแทน",
+    ORGANIZATION_APPROVER: "ผู้อนุมัติรายการองค์กร",
+    EMPLOYEE: "พนักงานทั่วไป",
   } as Record<string, string>,
 
   pages: {

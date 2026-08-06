@@ -107,16 +107,9 @@ export function PlatformRoleAssignForm(props: {
         />
       </div>
       {selectedRole ? (
-        <div className="rounded-[var(--radius-md)] border border-[var(--info-border)] bg-[var(--info-soft)] p-3">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">
-            สิทธิ์ระดับแพลตฟอร์ม {selectedRole.permissionLabels?.length ?? 0} รายการ
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">
-            {selectedRole.permissionLabels?.length
-              ? selectedRole.permissionLabels.join(" · ")
-              : "บทบาทนี้ยังไม่ได้กำหนดสิทธิ์ระดับแพลตฟอร์ม"}
-          </p>
-        </div>
+        <p className="text-sm text-[var(--text-secondary)]">
+          บทบาทนี้มีสิทธิ์ {selectedRole.permissionLabels?.length ?? 0} รายการ
+        </p>
       ) : null}
     </div>
   );

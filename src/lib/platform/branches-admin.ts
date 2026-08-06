@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
+
 import { z } from "zod";
 
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { TH } from "@/lib/i18n/th";
 import {
@@ -50,7 +52,6 @@ export class BranchAdminError extends Error {
 }
 
 export const createBranchSchema = z.object({
-  code: z.string().trim().min(1).max(64),
   name: z.string().trim().min(1).max(200),
   nameEn: z.string().trim().max(200).optional().nullable(),
   address: z.string().trim().max(500).optional().nullable(),
@@ -62,6 +63,24 @@ export const createBranchSchema = z.object({
   attendanceRadiusMeters: z.number().int().positive().optional().nullable(),
   isPrimary: z.boolean().optional(),
 });
+
+async function allocateBranchCode(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = `BR-${randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase()}`;
+    const existing = await tx.branch.findUnique({
+      where: { organizationId_code: { organizationId, code } },
+      select: { id: true },
+    });
+    if (!existing) return code;
+  }
+  throw new BranchAdminError(
+    "VALIDATION",
+    "ไม่สามารถสร้างรหัสสาขาอัตโนมัติได้ กรุณาลองใหม่",
+  );
+}
 
 export const updateBranchSchema = createBranchSchema
   .partial()
@@ -125,12 +144,13 @@ export async function createBranch(
         "branchStatus",
         MASTER.branchStatus.ACTIVE,
       );
+      const code = await allocateBranchCode(tx, organizationId);
 
       // isPrimary / nameEn / email / phone require migration 0002
       const created = await tx.branch.create({
         data: {
           organizationId,
-          code: parsed.code,
+          code,
           name: parsed.name,
           address: parsed.address ?? null,
           timezone: parsed.timezone ?? "Asia/Bangkok",

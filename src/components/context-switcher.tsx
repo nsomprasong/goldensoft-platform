@@ -10,6 +10,9 @@ import {
   signalNavigationDone,
   signalNavigationPending,
 } from "@/lib/navigation-pending";
+import { isGoldenSoftCustomerCode } from "@/lib/platform/organization-identity";
+
+type ContextMode = "membership" | "platform_admin" | "managed_org";
 
 type OrgOption = {
   id: string;
@@ -25,7 +28,7 @@ export function ContextSwitcher(props: {
   branches: BranchOption[];
   activeOrganizationId: string | null;
   activeBranchId: string | null;
-  contextMode?: "membership" | "platform_admin" | "managed_org";
+  contextMode?: ContextMode;
   shellMode?: "platform" | "customer_support";
   customerAppHref?: string | null;
   canUsePlatformAdminMode?: boolean;
@@ -45,42 +48,69 @@ export function ContextSwitcher(props: {
     (o) => !membershipIds.has(o.id) && !adminOnly.some((a) => a.id === o.id),
   );
   const allOptions = [...props.organizations, ...adminOnly, ...managedOnly];
-  const goldenSoftOptions = allOptions.filter(
-    (org) => (org.customerCode ?? "").trim().toUpperCase() === "GOLDENSOFT",
+  const goldenSoftOptions = allOptions.filter((org) =>
+    isGoldenSoftCustomerCode(org.customerCode),
   );
   const responsibleOrganizations = allOptions
     .filter(
-      (org) => (org.customerCode ?? "").trim().toUpperCase() !== "GOLDENSOFT",
+      (org) => !isGoldenSoftCustomerCode(org.customerCode),
     )
     .sort((left, right) => left.name.localeCompare(right.name, "th"));
 
   async function switchContext(
     organizationId: string,
     branchId: string | null,
-    mode?: "managed_org",
+    mode: ContextMode,
   ) {
     setError(null);
     signalNavigationPending();
-    const res = await fetch("/api/platform/context", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        organizationId,
+    try {
+      const res = await fetch("/api/platform/context", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organizationId,
+          branchId,
+          branchSelected: true,
+          mode,
+        }),
+      });
+      if (!res.ok) {
+        setError(TH.access.forbidden);
+        signalNavigationDone();
+        return;
+      }
+      const selectedOrganization = allOptions.find(
+        (option) => option.id === organizationId,
+      );
+      const context =
+        mode === "platform_admin" &&
+        isGoldenSoftCustomerCode(selectedOrganization?.customerCode)
+          ? "platform"
+          : "organization";
+      const rewritten = pathAfterOrganizationSwitch(pathname, organizationId, {
+        context,
         branchId,
-        branchSelected: true,
-        mode,
-      }),
-    });
-    if (!res.ok) {
+      });
+      if (rewritten && rewritten !== pathname) router.push(rewritten);
+      router.refresh();
+    } catch {
       setError(TH.access.forbidden);
       signalNavigationDone();
-      return;
     }
-    const rewritten = pathAfterOrganizationSwitch(pathname, organizationId);
-    if (rewritten && rewritten !== pathname) {
-      router.push(rewritten);
+  }
+
+  function resolvedMode(organizationId: string): ContextMode {
+    const organization = allOptions.find((option) => option.id === organizationId);
+    if (
+      props.canUsePlatformAdminMode &&
+      isGoldenSoftCustomerCode(organization?.customerCode)
+    ) {
+      return "platform_admin";
     }
-    router.refresh();
+    return managedOnly.some((option) => option.id === organizationId)
+      ? "managed_org"
+      : "membership";
   }
 
   const showSupportBadge =
@@ -119,9 +149,7 @@ export function ContextSwitcher(props: {
             suppressHydrationWarning
             onChange={(e) => {
               const orgId = e.target.value;
-              const mode = managedOnly.some((o) => o.id === orgId)
-                ? "managed_org"
-                : undefined;
+              const mode = resolvedMode(orgId);
               start(() => switchContext(orgId, null, mode));
             }}
           >
@@ -162,11 +190,7 @@ export function ContextSwitcher(props: {
             suppressHydrationWarning
             onChange={(e) => {
               if (!props.activeOrganizationId) return;
-              const mode = managedOnly.some(
-                (o) => o.id === props.activeOrganizationId,
-              )
-                ? "managed_org"
-                : undefined;
+              const mode = props.contextMode ?? resolvedMode(props.activeOrganizationId);
               start(() =>
                 switchContext(
                   props.activeOrganizationId!,

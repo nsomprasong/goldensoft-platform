@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCheck, Save } from "lucide-react";
+import { CheckCheck, RotateCcw, Save } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
@@ -13,6 +13,7 @@ import {
   type PlatformPermission,
 } from "@/lib/permissions/codes";
 import { IconTextButton } from "@/components/ui/labeled-icon-button";
+import { ConfirmDialog } from "@/components/ui/admin-ui";
 import { Input } from "@/components/ui/input";
 import { TH } from "@/lib/i18n/th";
 import type { PermissionRegistryItem } from "@/lib/permissions/registry";
@@ -23,7 +24,7 @@ export function CustomRoleForm(props: {
   mode: "create" | "edit";
   roleId?: string;
   /** organization = org roles API; platform = platform staff roles API. */
-  roleKind?: "organization" | "platform";
+  roleKind?: "organization" | "platform" | "organization-template";
   /** Allow editing permission checkboxes on system roles (SUPER_ADMIN actor). */
   allowSystemPermissionEdit?: boolean;
   /** Platform SUPER_ADMIN role itself — permissions are locked (always all). */
@@ -32,6 +33,7 @@ export function CustomRoleForm(props: {
   /** Organization-scope permissions granted only while staff supports an assigned customer. */
   customerSupportPermissionCatalog?: PermissionRegistryItem[];
   returnPath?: string;
+  hasOrganizationOverride?: boolean;
   initial?: {
     code: string;
     nameTh: string;
@@ -45,6 +47,7 @@ export function CustomRoleForm(props: {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [query, setQuery] = useState("");
   const [code, setCode] = useState(props.initial?.code ?? "");
   const [nameTh, setNameTh] = useState(props.initial?.nameTh ?? "");
@@ -62,7 +65,8 @@ export function CustomRoleForm(props: {
     props.lockPermissions === true ||
     (isSystem && !props.allowSystemPermissionEdit);
   const metadataReadOnly =
-    isSystem || (roleKind === "platform" && props.mode === "edit");
+    (isSystem && !props.allowSystemPermissionEdit) ||
+    (roleKind === "platform" && props.mode === "edit");
 
   const groupedByScope = useMemo(() => {
     const groupCatalog = (catalog: PermissionRegistryItem[] | undefined) => {
@@ -168,12 +172,14 @@ export function CustomRoleForm(props: {
           : await fetch(
               roleKind === "platform"
                 ? `/api/platform/platform-roles/${props.roleId}`
+                : roleKind === "organization-template"
+                  ? `/api/platform/organization-role-templates/${props.roleId}`
                 : `/api/platform/roles/${props.roleId}`,
               {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(
-                  roleKind === "platform" || isSystem
+                  roleKind === "platform"
                     ? {
                         description: description || null,
                         ...(roleKind === "platform" && !props.lockPermissions
@@ -183,6 +189,13 @@ export function CustomRoleForm(props: {
                           ? {}
                           : { permissionCodes: [...selected] }),
                       }
+                    : isSystem
+                      ? {
+                          nameTh,
+                          nameEn,
+                          description: description || null,
+                          permissionCodes: [...selected],
+                        }
                     : {
                         nameTh,
                         nameEn,
@@ -223,9 +236,32 @@ export function CustomRoleForm(props: {
     });
   }
 
+  function resetStandardRole() {
+    if (!props.roleId || !props.organizationId) return;
+    setError(null);
+    setConfirmReset(false);
+    start(async () => {
+      const response = await fetch(`/api/platform/roles/${props.roleId}/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId: props.organizationId }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok) {
+        setError(data.message ?? "คืนค่าเริ่มต้นไม่สำเร็จ");
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   return (
-    <div className="grid gap-4">
-      <section className="card grid gap-3">
+    <div className="grid gap-3">
+      <section className="card grid gap-3 md:grid-cols-2">
+        <div className="md:col-span-2">
+          <h2 className="text-[length:var(--text-section)] font-semibold">ข้อมูลบทบาท</h2>
+          <p className="text-[length:var(--text-caption)] text-[var(--text-muted)]">กำหนดชื่อ สถานะ และรายละเอียดที่จำเป็น</p>
+        </div>
         <label className="grid gap-1 text-[length:var(--text-label)]">
           รหัสบทบาท
           <Input
@@ -251,7 +287,7 @@ export function CustomRoleForm(props: {
             onChange={(e) => setNameEn(e.target.value)}
           />
         </label>
-        <label className="grid gap-1 text-[length:var(--text-label)]">
+        <label className="grid gap-1 text-[length:var(--text-label)] md:col-span-2">
           คำอธิบาย
           <textarea
             className="textarea"
@@ -261,21 +297,21 @@ export function CustomRoleForm(props: {
           />
         </label>
         {roleKind === "platform" ? (
-          <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">
-            บทบาทแพลตฟอร์ม — แก้สิทธิ์ของพนักงาน GoldenSoft
+          <p className="text-[length:var(--text-helper)] text-[var(--text-muted)] md:col-span-2">
+            ใช้กับพนักงาน GoldenSoft
             {props.lockPermissions
               ? " (SUPER_ADMIN มีสิทธิ์ทั้งหมดเสมอ)"
               : ""}
           </p>
         ) : isSystem ? (
-          <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">
-            บทบาทระบบ — แก้ได้เฉพาะรายการสิทธิ์ (มีผลกับทุกองค์กร)
+          <p className="text-[length:var(--text-helper)] text-[var(--text-muted)] md:col-span-2">
+            บทบาทมาตรฐานของระบบ ใช้ร่วมกันทุกองค์กร
           </p>
         ) : null}
         {props.mode === "edit" &&
         ((!isSystem && roleKind === "organization") ||
           (roleKind === "platform" && !props.lockPermissions)) ? (
-          <label className="flex items-center gap-2 text-[length:var(--text-label)]">
+          <label className="flex items-center gap-2 text-[length:var(--text-label)] md:col-span-2">
             <input
               type="checkbox"
               checked={isActive}
@@ -312,28 +348,29 @@ export function CustomRoleForm(props: {
             title: roleKind === "platform" ? "สิทธิ์ระดับแพลตฟอร์ม" : "สิทธิ์ภายในองค์กร",
             description:
               roleKind === "platform"
-                ? "ใช้เมื่อพนักงาน GoldenSoft ทำงานในโหมดแพลตฟอร์ม"
-                : "ใช้กับสมาชิกและพนักงานภายในองค์กรที่เลือกเท่านั้น",
+                ? "ใช้จัดการระบบแพลตฟอร์ม"
+                : "ใช้ภายในองค์กรที่เลือก",
             groups: groupedByScope.primary,
           },
           ...(roleKind === "platform" && groupedByScope.customerSupport.length > 0
             ? [{
                 key: "customer-support",
                 title: "สิทธิ์ดูแลองค์กรลูกค้า",
-                description: "มีผลเฉพาะองค์กรลูกค้าที่พนักงานได้รับมอบหมาย และยังถูกจำกัดด้วยผลิตภัณฑ์กับสาขาขององค์กรนั้น",
+                description: "ใช้ได้เฉพาะองค์กร สาขา และผลิตภัณฑ์ที่ได้รับมอบหมาย",
                 groups: groupedByScope.customerSupport,
               }]
             : []),
         ]).map((section) => (
-          <div key={section.key} className="grid gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+          <div key={section.key} className="grid gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
             <div>
               <h3 className="font-semibold text-[var(--text-primary)]">{section.title}</h3>
               <p className="text-[length:var(--text-helper)] text-[var(--text-secondary)]">{section.description}</p>
             </div>
+            <div className="grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-3">
             {section.groups.map(([group, codes]) => (
-          <div key={`${section.key}:${group}`} className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="font-medium capitalize">{group}</p>
+          <div key={`${section.key}:${group}`} className="min-w-0 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3">
+            <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <p className="min-w-0 break-words font-medium capitalize">{group}</p>
               {!permissionsReadOnly ? (
                 <IconTextButton
                   type="button"
@@ -344,10 +381,10 @@ export function CustomRoleForm(props: {
                 />
               ) : null}
             </div>
-            <ul className="grid gap-2">
+            <ul className="grid min-w-0 gap-2">
               {codes.map((perm) => (
                 <li key={perm}>
-                  <label className="flex cursor-pointer items-start gap-2">
+                  <label className="flex min-w-0 cursor-pointer items-start gap-2">
                     <input
                       type="checkbox"
                       className="mt-1"
@@ -355,11 +392,11 @@ export function CustomRoleForm(props: {
                       disabled={permissionsReadOnly || pending}
                       onChange={() => toggle(perm)}
                     />
-                    <span>
-                      <span className="block font-medium">
+                    <span className="min-w-0">
+                      <span className="block break-words font-medium">
                         {allCatalog.find((item) => item.code === perm)?.menuNameTh ?? PLATFORM_PERMISSION_LABELS[perm as PlatformPermission] ?? perm}
                       </span>
-                      <span className="block text-[length:var(--text-caption)] text-[var(--text-secondary)]">
+                      <span className="block break-words text-[length:var(--text-caption)] text-[var(--text-secondary)]">
                         {allCatalog.find((item) => item.code === perm)?.actionNameTh ?? PLATFORM_PERMISSION_DESCRIPTIONS[perm as PlatformPermission] ?? "สิทธิ์การใช้งาน"}
                       </span>
                     </span>
@@ -369,6 +406,7 @@ export function CustomRoleForm(props: {
             </ul>
           </div>
             ))}
+            </div>
           </div>
         ))}
       </section>
@@ -380,9 +418,9 @@ export function CustomRoleForm(props: {
       ) : null}
 
       <section className="card grid gap-1">
-        <h3 className="font-semibold">ตัวอย่างสิทธิ์ที่มีผลและผลกระทบก่อนบันทึก</h3>
+        <h3 className="font-semibold">สรุปก่อนบันทึก</h3>
         <p className="text-[length:var(--text-helper)] text-[var(--text-secondary)]">
-          การเปลี่ยนแปลงจะมีผลกับผู้ใช้งาน ตำแหน่ง และการมอบหมายที่อ้างอิงบทบาทนี้ในขอบเขตปัจจุบัน เลือกสิทธิ์แล้ว {selected.size} รายการ
+          เลือกแล้ว {selected.size} สิทธิ์ การเปลี่ยนแปลงมีผลกับผู้ที่ใช้บทบาทนี้
         </p>
         <div className="mt-2 grid gap-2 md:grid-cols-2">
           <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
@@ -430,12 +468,31 @@ export function CustomRoleForm(props: {
               label="ยกเลิก"
             />
           ) : null}
+          {isSystem && roleKind === "organization" && props.hasOrganizationOverride ? (
+            <IconTextButton
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => setConfirmReset(true)}
+              icon={<RotateCcw aria-hidden="true" />}
+              label="คืนค่าเริ่มต้น"
+            />
+          ) : null}
         </div>
       ) : (
         <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">
           คุณไม่มีสิทธิ์แก้ไขสิทธิ์ของบทบาทนี้
         </p>
       )}
+      <ConfirmDialog
+        open={confirmReset}
+        title="คืนค่าบทบาทมาตรฐาน"
+        body="ชื่อ คำอธิบาย และสิทธิ์จะกลับเป็นค่ามาตรฐาน ผู้ได้รับบทบาทยังคงเดิม แต่สิทธิ์ที่ใช้งานจริงจะเปลี่ยนทันที"
+        confirmLabel="ยืนยันคืนค่า"
+        cancelLabel="ยกเลิก"
+        onConfirm={resetStandardRole}
+        onCancel={() => setConfirmReset(false)}
+      />
     </div>
   );
 }

@@ -1,0 +1,97 @@
+.bottomNav {
+  position: fixed;
+  z-index: 40;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--page-header-background) 0%, transparent) 0%,
+    color-mix(in srgb, var(--page-header-background) 78%, transparent) 34%,
+    color-mix(in srgb, var(--page-header-background) 97%, transparent) 72%,
+    var(--page-header-background) 100%
+  );
+  pointer-events: none;
+}
+
+.bottomNavTrack {
+  display: flex;
+  min-height: 5.75rem;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: 1.15rem var(--space-3) 0.7rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  pointer-events: none;
+}
+
+.bottomNavTrack::-webkit-scrollbar { display: none; }
+
+.bottomNavTrack > a {
+  width: min(7.5rem, 30vw);
+  min-width: 4.5rem;
+  min-height: 4.25rem;
+  justify-content: flex-start;
+  padding-block: var(--space-1);
+  pointer-events: auto;
+}
+
+.item {
+  color: var(--sidebar-foreground);
+  font-size: var(--text-label);
+}
+
+.item :global(.gs-settings-tile-icon) {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+.item:hover,
+.item:focus-visible {
+  color: var(--dashboard-blue);
+}
+
+.item:hover :global(.gs-settings-tile-icon),
+.item:focus-visible :global(.gs-settings-tile-icon) {
+  color: var(--dashboard-blue);
+  background: linear-gradient(
+    145deg,
+    var(--surface) 0%,
+    var(--dashboard-blue-soft) 58%,
+    color-mix(in srgb, var(--dashboard-blue) 16%, var(--dashboard-blue-soft)) 100%
+  );
+  box-shadow:
+    inset 0 2px 4px color-mix(in srgb, var(--primary-foreground) 92%, transparent),
+    inset 0 -6px 10px color-mix(in srgb, var(--dashboard-blue) 20%, transparent),
+    0 3px 5px color-mix(in srgb, var(--dashboard-blue) 18%, transparent),
+    0 12px 18px -8px color-mix(in srgb, var(--dashboard-blue) 48%, transparent);
+  transform: translateY(-0.22rem) scale(1.08);
+}
+
+.active {
+  color: var(--dashboard-blue) !important;
+  font-weight: 700;
+}
+
+.active :global(.gs-settings-tile-icon) {
+  background: linear-gradient(145deg, var(--dashboard-blue), var(--info));
+  color: var(--primary-foreground);
+  box-shadow:
+    inset 0 2px 5px color-mix(in srgb, var(--primary-foreground) 42%, transparent),
+    inset 0 -6px 12px color-mix(in srgb, var(--foreground) 20%, transparent),
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--info-soft),
+    var(--shadow-md);
+  transform: scale(1.08);
+  transform-origin: center;
+}
+
+@media (min-width: 1200px) {
+  .bottomNav { left: var(--sidebar-width); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bottomNavTrack :global(.gs-settings-tile-icon) { transition: none; }
+}
