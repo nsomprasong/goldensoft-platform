@@ -1,8 +1,6 @@
 "use client";
 
 import {
-  ArrowLeft,
-  ArrowRight,
   Building2,
   Check,
   FileText,
@@ -39,27 +37,6 @@ type ContactRole = "OWNER" | "ADMIN";
 type EntityType =
   (typeof MASTER.organizationEntityType)[keyof typeof MASTER.organizationEntityType];
 
-function StepIcon(props: {
-  children: ReactNode;
-  status: "current" | "completed" | "upcoming";
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex size-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors",
-        props.status === "current"
-          ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[var(--shadow-xs)]"
-          : props.status === "completed"
-            ? "border-[var(--success-border)] bg-[var(--success-soft)] text-[var(--success)]"
-            : "border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--text-secondary)]",
-      )}
-      aria-hidden="true"
-    >
-      {props.children}
-    </span>
-  );
-}
-
 function FieldIcon(props: { children: ReactNode }) {
   return (
     <span
@@ -86,17 +63,7 @@ export function OrganizationOnboardingWizard(props: {
   const contactRole: ContactRole = props.contactRole ?? "OWNER";
   const contactLabel =
     contactRole === "ADMIN" ? "ผู้ดูแลองค์กร (ADMIN)" : "เจ้าขององค์กร (OWNER)";
-  const STEPS = [
-    TH.org.stepOrg,
-    TH.org.stepBranch,
-    contactLabel,
-    TH.org.stepProductPlan,
-    TH.org.stepConfirm,
-  ] as const;
-
   const router = useRouter();
-  const [step, setStep] = useState(0);
-  const [furthestStep, setFurthestStep] = useState(0);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [idempotencyKey] = useState(createIdempotencyKey);
@@ -124,6 +91,7 @@ export function OrganizationOnboardingWizard(props: {
   const [owner, setOwner] = useState({
     email: "",
     displayName: "",
+    phone: "",
   });
   const [selectedProductCodes, setSelectedProductCodes] = useState<string[]>(
     () => (props.products[0] ? [props.products[0].code] : []),
@@ -134,6 +102,7 @@ export function OrganizationOnboardingWizard(props: {
   const [subscriptionMode, setSubscriptionMode] = useState<"TRIAL" | "ACTIVE">(
     "TRIAL",
   );
+  const [trialDays, setTrialDays] = useState(30);
 
   const isIndividual =
     entityType === MASTER.organizationEntityType.INDIVIDUAL;
@@ -160,6 +129,12 @@ export function OrganizationOnboardingWizard(props: {
   const selectionsReady =
     productSelections.length > 0 &&
     productSelections.every((row) => row.planCode.length > 0);
+  const trialEndsAtLabel = useMemo(() => {
+    if (!Number.isInteger(trialDays) || trialDays < 1) return "—";
+    const end = new Date();
+    end.setDate(end.getDate() + trialDays);
+    return new Intl.DateTimeFormat("th-TH", { dateStyle: "long" }).format(end);
+  }, [trialDays]);
 
   function toggleProduct(code: string) {
     setSelectedProductCodes((prev) => {
@@ -205,8 +180,12 @@ export function OrganizationOnboardingWizard(props: {
       }
     }
     if (current === 2) {
-      if (!owner.email.trim() || !owner.displayName.trim()) {
-        return "กรุณากรอกอีเมลและชื่อผู้ติดต่อ";
+      if (!owner.email.trim() || !owner.displayName.trim() || !owner.phone.trim()) {
+        return "กรุณากรอกอีเมล ชื่อ และเบอร์มือถือของผู้ติดต่อ";
+      }
+      const phoneDigits = owner.phone.replace(/\D/g, "");
+      if (!/^0[689]\d{8}$/.test(phoneDigits)) {
+        return "กรุณากรอกเบอร์มือถือ 10 หลัก";
       }
     }
     if (current === 3) {
@@ -216,36 +195,24 @@ export function OrganizationOnboardingWizard(props: {
       if (!selectionsReady) {
         return TH.org.needPlanForProduct;
       }
+      if (
+        subscriptionMode === "TRIAL" &&
+        (!Number.isInteger(trialDays) || trialDays < 1 || trialDays > 365)
+      ) {
+        return "จำนวนวันทดลองต้องอยู่ระหว่าง 1–365 วัน";
+      }
     }
     return null;
   }
 
-  function next() {
-    const message = validateStep(step);
-    if (message) {
-      setError(message);
+  function submit() {
+    const validationError = [0, 1, 2, 3]
+      .map(validateStep)
+      .find((message): message is string => Boolean(message));
+    if (validationError) {
+      setError(validationError);
       return;
     }
-    setError(null);
-    setStep((current) => {
-      const nextStep = Math.min(current + 1, STEPS.length - 1);
-      setFurthestStep((furthest) => Math.max(furthest, nextStep));
-      return nextStep;
-    });
-  }
-
-  function back() {
-    setError(null);
-    setStep((s) => Math.max(s - 1, 0));
-  }
-
-  function selectStep(target: number) {
-    if (target > furthestStep) return;
-    setError(null);
-    setStep(target);
-  }
-
-  function submit() {
     setError(null);
     start(async () => {
       const hasPersonInput =
@@ -289,6 +256,7 @@ export function OrganizationOnboardingWizard(props: {
             planCode: row.planCode,
           })),
           subscriptionMode,
+          trialDays: subscriptionMode === "TRIAL" ? trialDays : null,
         }),
       });
       const raw = await res.text();
@@ -319,71 +287,16 @@ export function OrganizationOnboardingWizard(props: {
   }
 
   return (
-    <div className="grid gap-6">
-      <div
-        className="rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--card)] p-2 shadow-[var(--shadow-sm)] sm:p-3"
-        role="tablist"
-        aria-label="ขั้นตอนการสร้างองค์กร"
-      >
-        <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
-          {STEPS.map((label, index) => {
-            const status =
-              index === step
-                ? "current"
-                : index <= furthestStep
-                  ? "completed"
-                  : "upcoming";
-            return (
-              <button
-                type="button"
-                key={label}
-                role="tab"
-                aria-selected={index === step}
-                aria-current={index === step ? "step" : undefined}
-                disabled={index > furthestStep}
-                onClick={() => selectStep(index)}
-                className={cn(
-                  "group relative flex min-h-16 min-w-0 items-center gap-2 rounded-[var(--radius-md)] border px-2.5 py-3 text-left text-sm leading-snug transition-[border-color,background-color,box-shadow,color] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:px-3",
-                  status === "current"
-                    ? "border-[var(--primary)] bg-[var(--primary-soft)] font-semibold text-[var(--primary)] shadow-[var(--shadow-xs)]"
-                    : status === "completed"
-                      ? "border-[var(--success-border)] bg-[var(--success-soft)] font-medium text-[var(--foreground)] hover:border-[var(--success)]"
-                      : "border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-100",
-                )}
-              >
-                <StepIcon status={status}>
-                  {status === "completed" ? (
-                    <Check className="size-4" />
-                  ) : (
-                    index + 1
-                  )}
-                </StepIcon>
-                <span className="min-w-0 break-words">{label}</span>
-                {status === "current" ? (
-                  <span
-                    className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-[var(--primary)]"
-                    aria-hidden="true"
-                  />
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {step === 0 ? (
-        <section className="card space-y-6 border-[var(--page-header-border)] p-5 shadow-[var(--shadow-sm)] sm:p-6">
+    <div className="grid gap-4">
+      <section className="card space-y-4 border-[var(--page-header-border)] p-4 shadow-[var(--shadow-sm)] sm:p-5">
           <div className="flex items-start gap-3">
-            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
+            <div className="inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <Building2 className="size-5" aria-hidden="true" />
             </div>
             <div>
               <h2 className="text-base font-semibold text-[var(--foreground)]">
                 {TH.org.stepOrg}
               </h2>
-              <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-                {TH.org.entityTypeHint}
-              </p>
             </div>
           </div>
 
@@ -678,19 +591,14 @@ export function OrganizationOnboardingWizard(props: {
             </>
           )}
         </section>
-      ) : null}
 
-      {step === 1 ? (
-        <section className="card space-y-4 border-[var(--page-header-border)] p-5 shadow-[var(--shadow-sm)] sm:p-6">
+        <section className="card space-y-4 border-[var(--page-header-border)] p-4 shadow-[var(--shadow-sm)] sm:p-5">
           <div className="flex items-start gap-3">
-            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
+            <div className="inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <Store className="size-5" aria-hidden="true" />
             </div>
             <div>
               <h2 className="text-base font-semibold">{TH.org.stepBranch}</h2>
-              <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-                สาขาแรกขององค์กร — ใช้เป็นสาขาหลักในการเริ่มต้นใช้งาน
-              </p>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -722,6 +630,32 @@ export function OrganizationOnboardingWizard(props: {
                 }
               />
             </FormField>
+            <FormField
+              label={`เบอร์มือถือ${contactRole === "ADMIN" ? "ผู้ดูแล" : "เจ้าของ"}`}
+              htmlFor="ownerPhone"
+              required
+              hint="ใช้สำหรับติดต่อและยืนยันบัญชี"
+            >
+              <div className="relative">
+                <FieldIcon>
+                  <Phone className="size-4" />
+                </FieldIcon>
+                <Input
+                  id="ownerPhone"
+                  className="pl-10"
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="08X-XXX-XXXX"
+                  value={owner.phone}
+                  onChange={(e) =>
+                    setOwner((current) => ({
+                      ...current,
+                      phone: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </FormField>
           </div>
           <FormField
             label="ที่อยู่สาขา"
@@ -738,21 +672,14 @@ export function OrganizationOnboardingWizard(props: {
             />
           </FormField>
         </section>
-      ) : null}
 
-      {step === 2 ? (
-        <section className="card space-y-4 border-[var(--page-header-border)] p-5 shadow-[var(--shadow-sm)] sm:p-6">
+        <section className="card space-y-4 border-[var(--page-header-border)] p-4 shadow-[var(--shadow-sm)] sm:p-5">
           <div className="flex items-start gap-3">
-            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
+            <div className="inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <UserRound className="size-5" aria-hidden="true" />
             </div>
             <div>
               <h2 className="text-base font-semibold">{contactLabel}</h2>
-              <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-                {contactRole === "ADMIN"
-                  ? TH.org.ownerStepHintAdmin
-                  : TH.org.ownerStepHintOwner}
-              </p>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -793,21 +720,16 @@ export function OrganizationOnboardingWizard(props: {
             </FormField>
           </div>
         </section>
-      ) : null}
 
-      {step === 3 ? (
-        <section className="card space-y-5 border-[var(--page-header-border)] p-5 shadow-[var(--shadow-sm)] sm:p-6">
+        <section className="card space-y-4 border-[var(--page-header-border)] p-4 shadow-[var(--shadow-sm)] sm:p-5">
           <div className="flex items-start gap-3">
-            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
+            <div className="inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <Package className="size-5" aria-hidden="true" />
             </div>
             <div>
               <h2 className="text-base font-semibold">
                 {TH.org.stepProductPlan}
               </h2>
-              <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-                {TH.org.stepProductPlanHint}
-              </p>
             </div>
           </div>
 
@@ -898,20 +820,42 @@ export function OrganizationOnboardingWizard(props: {
               <option value="ACTIVE">เปิดใช้งาน (ACTIVE)</option>
             </select>
           </FormField>
+          {subscriptionMode === "TRIAL" ? (
+            <div className="grid gap-3 rounded-[var(--radius-lg)] border border-[var(--warning-border)] bg-[var(--warning-soft)] p-4 sm:grid-cols-[12rem_1fr] sm:items-end">
+              <FormField
+                label="ระยะเวลาทดลองใช้"
+                htmlFor="trialDays"
+                required
+                hint="1–365 วัน"
+              >
+                <Input
+                  id="trialDays"
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={trialDays}
+                  onChange={(event) => setTrialDays(Number(event.target.value))}
+                />
+              </FormField>
+              <div className="text-sm leading-relaxed text-[var(--text-secondary)]">
+                <p className="font-medium text-[var(--foreground)]">
+                  สิ้นสุดช่วงทดลองประมาณวันที่ {trialEndsAtLabel}
+                </p>
+                <p className="mt-1">
+                  หากไม่ยกเลิกก่อนครบกำหนด ระบบจะเปลี่ยนเป็นแพ็กเกจที่เลือกและเข้าสู่รอบเรียกเก็บเงินอัตโนมัติ
+                </p>
+              </div>
+            </div>
+          ) : null}
         </section>
-      ) : null}
 
-      {step === 4 ? (
-        <section className="card space-y-4 border-[var(--page-header-border)] p-5 shadow-[var(--shadow-sm)] sm:p-6">
+        <section className="card space-y-4 border-[var(--page-header-border)] p-4 shadow-[var(--shadow-sm)] sm:p-5">
           <div className="flex items-start gap-3">
-            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
+            <div className="inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <Check className="size-5" aria-hidden="true" />
             </div>
             <div>
               <h2 className="text-base font-semibold">{TH.org.stepConfirm}</h2>
-              <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-                ตรวจสอบสรุปก่อนสร้างองค์กรในระบบ
-              </p>
             </div>
           </div>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -950,13 +894,18 @@ export function OrganizationOnboardingWizard(props: {
                 {contactRole === "ADMIN" ? "ผู้ดูแล" : "เจ้าของ"}
               </dt>
               <dd className="mt-1 font-medium">
-                {owner.displayName} · {owner.email}
+                {owner.displayName} · {owner.email} · {owner.phone}
               </dd>
             </div>
             <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--muted)]/40 p-3 sm:col-span-2">
               <dt className="text-[var(--muted-foreground)]">
                 ผลิตภัณฑ์ / แพ็กเกจ · {subscriptionMode}
               </dt>
+              {subscriptionMode === "TRIAL" ? (
+                <dd className="mt-1 text-[var(--warning)]">
+                  ทดลอง {trialDays} วัน · สิ้นสุดประมาณวันที่ {trialEndsAtLabel}
+                </dd>
+              ) : null}
               <dd className="mt-2 grid gap-1.5">
                 {productSelections.map((row) => (
                   <div key={row.productCode} className="font-medium">
@@ -975,7 +924,6 @@ export function OrganizationOnboardingWizard(props: {
               : "SUPER_ADMIN ไม่ต้องเป็นสมาชิกองค์กรใหม่ — สลับเข้าโหมดผู้ดูแลแพลตฟอร์มได้หลังสร้าง"}
           </p>
         </section>
-      ) : null}
 
       {error ? (
         <p className="text-[var(--danger)]" role="alert">
@@ -983,39 +931,19 @@ export function OrganizationOnboardingWizard(props: {
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {step > 0 ? (
-          <IconTextButton
-            type="button"
-            variant="outline"
-            onClick={back}
-            disabled={pending}
-            icon={<ArrowLeft aria-hidden="true" />}
-            label={TH.org.back}
-          />
-        ) : null}
-        {step < STEPS.length - 1 ? (
-          <IconTextButton
-            type="button"
-            onClick={next}
-            disabled={pending}
-            icon={<ArrowRight aria-hidden="true" />}
-            label={TH.org.next}
-          />
-        ) : (
-          <IconTextButton
-            type="button"
-            onClick={submit}
-            disabled={pending || !selectionsReady}
-            icon={
-              <Check
-                className={pending ? "animate-pulse" : undefined}
-                aria-hidden="true"
-              />
-            }
-            label={pending ? TH.org.creating : TH.org.confirmCreate}
-          />
-        )}
+      <div className="sticky bottom-3 flex items-center justify-end rounded-[var(--radius-lg)] border border-[var(--page-header-border)] bg-[var(--card)]/95 p-3 shadow-[var(--shadow-md)] backdrop-blur-sm">
+        <IconTextButton
+          type="button"
+          onClick={submit}
+          disabled={pending || !selectionsReady}
+          icon={
+            <Check
+              className={pending ? "animate-pulse" : undefined}
+              aria-hidden="true"
+            />
+          }
+          label={pending ? TH.org.creating : TH.org.confirmCreate}
+        />
       </div>
     </div>
   );

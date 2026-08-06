@@ -25,6 +25,7 @@ import {
   type IndividualCustomerIdentity,
 } from "@/lib/platform/staff-identity";
 import { PASSWORD_RESET_TTL_MINUTES } from "@/lib/platform/staff";
+import { toE164ThaiMobile } from "@/lib/platform/system-settings";
 
 export class OnboardingError extends Error {
   constructor(
@@ -66,12 +67,14 @@ export type OnboardingPayload = {
   owner: {
     email: string;
     displayName: string;
+    phone: string;
     /** Existing auth user id when owner already exists. */
     authUserId?: string | null;
   };
   /** One plan per selected product — creates a subscription for each. */
   selections: Array<{ productCode: string; planCode: string }>;
   subscriptionMode: "TRIAL" | "ACTIVE";
+  trialDays?: number | null;
 };
 
 function normalizeEmail(email: string): string {
@@ -451,6 +454,13 @@ export async function onboardOrganization(
       let portfolioAssignmentId: string | null = null;
       const ownerEmail = normalizeEmail(input.payload.owner.email);
       const ownerDisplayName = input.payload.owner.displayName.trim();
+      const ownerPhone = toE164ThaiMobile(input.payload.owner.phone);
+      if (!ownerPhone) {
+        throw new OnboardingError(
+          "OWNER_PHONE_INVALID",
+          "กรุณากรอกเบอร์มือถือเจ้าขององค์กรให้ถูกต้อง",
+        );
+      }
 
       const creatorProfile = await tx.userProfile.findUnique({
         where: { authUserId: input.actorAuthUserId },
@@ -490,9 +500,15 @@ export async function onboardOrganization(
           data: {
             authUserId: provisionedOwner.authUserId,
             email: ownerEmail,
+            phone: ownerPhone,
             displayName: ownerDisplayName,
             statusId: profileActiveStatus.id,
           },
+        });
+      } else if (!profile.phone) {
+        profile = await tx.userProfile.update({
+          where: { id: profile.id },
+          data: { phone: ownerPhone },
         });
       }
 
@@ -617,8 +633,9 @@ export async function onboardOrganization(
           featureCodes: snapshotFeatures.map((f) => f.code),
           features: snapshotFeatures,
           demoPricing: true,
+          trialAutoConvertsToPaid: input.payload.subscriptionMode === "TRIAL",
         };
-        const trialDays = planVersion.trialDays ?? 14;
+        const trialDays = input.payload.trialDays ?? planVersion.trialDays ?? 30;
         const trialEndsAt =
           input.payload.subscriptionMode === "TRIAL"
             ? new Date(startsAt.getTime() + trialDays * 24 * 60 * 60 * 1000)

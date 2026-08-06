@@ -84,6 +84,13 @@ const schema = z
     owner: z.object({
       email: z.string().email(),
       displayName: z.string().min(1).max(120),
+      phone: z
+        .string()
+        .trim()
+        .refine(
+          (value) => /^0[689]\d{8}$/.test(value.replace(/\D/g, "")),
+          "กรุณากรอกเบอร์มือถือ 10 หลัก",
+        ),
       authUserId: z.string().uuid().optional().nullable(),
     }),
     selections: z
@@ -95,6 +102,7 @@ const schema = z
       )
       .min(1),
     subscriptionMode: z.enum(["TRIAL", "ACTIVE"]),
+    trialDays: z.number().int().min(1).max(365).optional().nullable(),
   })
   .superRefine((data, ctx) => {
     const seen = new Set<string>();
