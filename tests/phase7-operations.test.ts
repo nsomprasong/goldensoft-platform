@@ -195,9 +195,13 @@ describe("Phase 7 organization selector and onboarding", () => {
     );
     const wizard = read("src/components/organization-onboarding-wizard.tsx");
     assert.doesNotMatch(wizard, /\bslug\b/);
-    assert.match(wizard, /customerCodeHint|TH\.org\.customerCodeHint/);
+    assert.doesNotMatch(wizard, /customerCodeHint|TH\.org\.customerCodeHint/);
     assert.match(wizard, /organizationEntityType|INDIVIDUAL|StaffIdentityFields/);
     assert.match(wizard, /stepProductPlan|selections/);
+    assert.match(
+      read("src/lib/platform/organization-onboarding.ts"),
+      /allocateCustomerCode/,
+    );
     assert.match(
       read("src/lib/platform/organization-onboarding.ts"),
       /allocateUniqueOrganizationSlug|selections/,
