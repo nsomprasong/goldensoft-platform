@@ -61,6 +61,11 @@ export default async function NewOrganizationPage() {
       <PageHeader
         icon={<Building2 aria-hidden="true" />}
         title={TH.org.onboardTitle}
+        meta={
+          <span className="inline-flex items-center rounded-full border border-[var(--page-header-border)] bg-[var(--card)] px-3 py-1 text-xs font-medium text-[var(--text-secondary)] shadow-[var(--shadow-xs)]">
+            ตั้งค่าองค์กรให้พร้อมใช้งานใน 5 ขั้นตอน
+          </span>
+        }
         description={
           isSuper
             ? "สร้างองค์กร สาขาหลัก เจ้าของ ผลิตภัณฑ์ และแพ็กเกจในขั้นตอนเดียว"
