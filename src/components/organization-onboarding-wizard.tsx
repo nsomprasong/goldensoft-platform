@@ -39,14 +39,19 @@ type ContactRole = "OWNER" | "ADMIN";
 type EntityType =
   (typeof MASTER.organizationEntityType)[keyof typeof MASTER.organizationEntityType];
 
-function StepIcon(props: { children: ReactNode; active?: boolean }) {
+function StepIcon(props: {
+  children: ReactNode;
+  status: "current" | "completed" | "upcoming";
+}) {
   return (
     <span
       className={cn(
-        "inline-flex size-7 items-center justify-center rounded-full border",
-        props.active
-          ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]"
-          : "border-[var(--border)] text-[var(--text-muted)]",
+        "inline-flex size-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors",
+        props.status === "current"
+          ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[var(--shadow-xs)]"
+          : props.status === "completed"
+            ? "border-[var(--success-border)] bg-[var(--success-soft)] text-[var(--success)]"
+            : "border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--text-secondary)]",
       )}
       aria-hidden="true"
     >
@@ -64,6 +69,12 @@ function FieldIcon(props: { children: ReactNode }) {
       {props.children}
     </span>
   );
+}
+
+function createIdempotencyKey(): string {
+  const randomId = globalThis.crypto?.randomUUID?.();
+  if (randomId) return `onboard-${randomId}`;
+  return `onboard-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function OrganizationOnboardingWizard(props: {
@@ -85,9 +96,10 @@ export function OrganizationOnboardingWizard(props: {
 
   const router = useRouter();
   const [step, setStep] = useState(0);
+  const [furthestStep, setFurthestStep] = useState(0);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [idempotencyKey] = useState(() => `onboard-${crypto.randomUUID()}`);
+  const [idempotencyKey] = useState(createIdempotencyKey);
 
   const [entityType, setEntityType] = useState<EntityType>(
     MASTER.organizationEntityType.LEGAL_ENTITY,
@@ -215,12 +227,22 @@ export function OrganizationOnboardingWizard(props: {
       return;
     }
     setError(null);
-    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    setStep((current) => {
+      const nextStep = Math.min(current + 1, STEPS.length - 1);
+      setFurthestStep((furthest) => Math.max(furthest, nextStep));
+      return nextStep;
+    });
   }
 
   function back() {
     setError(null);
     setStep((s) => Math.max(s - 1, 0));
+  }
+
+  function selectStep(target: number) {
+    if (target > furthestStep) return;
+    setError(null);
+    setStep(target);
   }
 
   function submit() {
@@ -297,34 +319,60 @@ export function OrganizationOnboardingWizard(props: {
   }
 
   return (
-    <div className="grid gap-5">
-      <ol className="flex flex-wrap gap-2 text-[length:var(--text-caption)]">
-        {STEPS.map((label, index) => (
-          <li
-            key={label}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5",
+    <div className="grid gap-6">
+      <div
+        className="rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--card)] p-2 shadow-[var(--shadow-sm)] sm:p-3"
+        role="tablist"
+        aria-label="ขั้นตอนการสร้างองค์กร"
+      >
+        <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
+          {STEPS.map((label, index) => {
+            const status =
               index === step
-                ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]"
-                : index < step
-                  ? "border-[var(--border)] text-[var(--foreground)]"
-                  : "border-[var(--border)] text-[var(--text-muted)]",
-            )}
-          >
-            <StepIcon active={index === step}>
-              {index < step ? (
-                <Check className="size-3.5" />
-              ) : (
-                <span className="text-[10px] font-semibold">{index + 1}</span>
-              )}
-            </StepIcon>
-            {label}
-          </li>
-        ))}
-      </ol>
+                ? "current"
+                : index <= furthestStep
+                  ? "completed"
+                  : "upcoming";
+            return (
+              <button
+                type="button"
+                key={label}
+                role="tab"
+                aria-selected={index === step}
+                aria-current={index === step ? "step" : undefined}
+                disabled={index > furthestStep}
+                onClick={() => selectStep(index)}
+                className={cn(
+                  "group relative flex min-h-16 min-w-0 items-center gap-2 rounded-[var(--radius-md)] border px-2.5 py-3 text-left text-sm leading-snug transition-[border-color,background-color,box-shadow,color] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:px-3",
+                  status === "current"
+                    ? "border-[var(--primary)] bg-[var(--primary-soft)] font-semibold text-[var(--primary)] shadow-[var(--shadow-xs)]"
+                    : status === "completed"
+                      ? "border-[var(--success-border)] bg-[var(--success-soft)] font-medium text-[var(--foreground)] hover:border-[var(--success)]"
+                      : "border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-100",
+                )}
+              >
+                <StepIcon status={status}>
+                  {status === "completed" ? (
+                    <Check className="size-4" />
+                  ) : (
+                    index + 1
+                  )}
+                </StepIcon>
+                <span className="min-w-0 break-words">{label}</span>
+                {status === "current" ? (
+                  <span
+                    className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-[var(--primary)]"
+                    aria-hidden="true"
+                  />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {step === 0 ? (
-        <section className="card space-y-6 p-5 sm:p-6">
+        <section className="card space-y-6 border-[var(--page-header-border)] p-5 shadow-[var(--shadow-sm)] sm:p-6">
           <div className="flex items-start gap-3">
             <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <Building2 className="size-5" aria-hidden="true" />
@@ -344,20 +392,20 @@ export function OrganizationOnboardingWizard(props: {
             <div className="grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
+                aria-pressed={!isIndividual}
                 onClick={() =>
                   setEntityType(MASTER.organizationEntityType.LEGAL_ENTITY)
                 }
                 className={cn(
-                  "flex items-start gap-3 rounded-[var(--radius-lg)] border p-4 text-left transition-colors",
+                  "flex items-start gap-3 rounded-[var(--radius-lg)] border p-4 text-left transition-[border-color,background-color,box-shadow] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]",
                   !isIndividual
-                    ? "border-[var(--primary)] bg-[var(--primary-soft)]"
-                    : "border-[var(--border)] hover:border-[var(--primary)]/50",
+                    ? "border-[var(--primary)] bg-[var(--primary-soft)] shadow-[var(--shadow-xs)]"
+                    : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]/50 hover:bg-[var(--surface-muted)]",
                 )}
               >
-                <Building2
-                  className="mt-0.5 size-5 shrink-0 text-[var(--primary)]"
-                  aria-hidden="true"
-                />
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
+                  <Building2 className="size-5" aria-hidden="true" />
+                </span>
                 <span>
                   <span className="block font-medium text-[var(--foreground)]">
                     {TH.org.entityLegal}
@@ -369,20 +417,20 @@ export function OrganizationOnboardingWizard(props: {
               </button>
               <button
                 type="button"
+                aria-pressed={isIndividual}
                 onClick={() =>
                   setEntityType(MASTER.organizationEntityType.INDIVIDUAL)
                 }
                 className={cn(
-                  "flex items-start gap-3 rounded-[var(--radius-lg)] border p-4 text-left transition-colors",
+                  "flex items-start gap-3 rounded-[var(--radius-lg)] border p-4 text-left transition-[border-color,background-color,box-shadow] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]",
                   isIndividual
-                    ? "border-[var(--primary)] bg-[var(--primary-soft)]"
-                    : "border-[var(--border)] hover:border-[var(--primary)]/50",
+                    ? "border-[var(--primary)] bg-[var(--primary-soft)] shadow-[var(--shadow-xs)]"
+                    : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]/50 hover:bg-[var(--surface-muted)]",
                 )}
               >
-                <UserRound
-                  className="mt-0.5 size-5 shrink-0 text-[var(--primary)]"
-                  aria-hidden="true"
-                />
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--primary-soft)] text-[var(--primary)]">
+                  <UserRound className="size-5" aria-hidden="true" />
+                </span>
                 <span>
                   <span className="block font-medium text-[var(--foreground)]">
                     {TH.org.entityIndividual}
@@ -633,7 +681,7 @@ export function OrganizationOnboardingWizard(props: {
       ) : null}
 
       {step === 1 ? (
-        <section className="card space-y-4 p-5 sm:p-6">
+        <section className="card space-y-4 border-[var(--page-header-border)] p-5 shadow-[var(--shadow-sm)] sm:p-6">
           <div className="flex items-start gap-3">
             <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <Store className="size-5" aria-hidden="true" />
@@ -693,7 +741,7 @@ export function OrganizationOnboardingWizard(props: {
       ) : null}
 
       {step === 2 ? (
-        <section className="card space-y-4 p-5 sm:p-6">
+        <section className="card space-y-4 border-[var(--page-header-border)] p-5 shadow-[var(--shadow-sm)] sm:p-6">
           <div className="flex items-start gap-3">
             <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <UserRound className="size-5" aria-hidden="true" />
@@ -748,7 +796,7 @@ export function OrganizationOnboardingWizard(props: {
       ) : null}
 
       {step === 3 ? (
-        <section className="card space-y-5 p-5 sm:p-6">
+        <section className="card space-y-5 border-[var(--page-header-border)] p-5 shadow-[var(--shadow-sm)] sm:p-6">
           <div className="flex items-start gap-3">
             <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <Package className="size-5" aria-hidden="true" />
@@ -854,7 +902,7 @@ export function OrganizationOnboardingWizard(props: {
       ) : null}
 
       {step === 4 ? (
-        <section className="card space-y-4 p-5 sm:p-6">
+        <section className="card space-y-4 border-[var(--page-header-border)] p-5 shadow-[var(--shadow-sm)] sm:p-6">
           <div className="flex items-start gap-3">
             <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--primary-soft)] text-[var(--primary)]">
               <Check className="size-5" aria-hidden="true" />
