@@ -37,7 +37,7 @@ const schema = z
   .object({
     idempotencyKey: z.string().min(8).max(120),
     organization: z.object({
-      customerCode: z.string().trim().min(2).max(40),
+      customerCode: z.string().trim().min(2).max(40).optional(),
       entityType: z.enum([
         MASTER.organizationEntityType.LEGAL_ENTITY,
         MASTER.organizationEntityType.INDIVIDUAL,
@@ -63,7 +63,15 @@ const schema = z
         .transform((value) => {
           const trimmed = value?.trim();
           return trimmed ? trimmed : null;
-        }),
+        })
+        .refine((value) => {
+          if (!value) return true;
+          const normalized = value.replace(/[\s()-]/g, "");
+          const local = normalized.startsWith("+66")
+            ? `0${normalized.slice(3)}`
+            : normalized;
+          return /^0\d{8,9}$/.test(local);
+        }, "กรุณากรอกโทรศัพท์พื้นฐาน 9 หลัก หรือโทรศัพท์มือถือ 10 หลัก"),
       address: optionalTrimmed,
       person: individualCustomerIdentitySchema.optional().nullable(),
     }),

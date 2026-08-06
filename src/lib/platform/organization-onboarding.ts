@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 
 import {
   createStaffAuthAdapter,
@@ -40,7 +41,7 @@ export type OrganizationEntityType =
 
 export type OnboardingPayload = {
   organization: {
-    customerCode: string;
+    customerCode?: string;
     entityType: OrganizationEntityType;
     /** Optional — server generates from customerCode when omitted. */
     slug?: string | null;
@@ -75,6 +76,23 @@ export type OnboardingPayload = {
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+async function allocateCustomerCode(
+  tx: Prisma.TransactionClient,
+): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = `CUST-${randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase()}`;
+    const existing = await tx.organization.findUnique({
+      where: { customerCode: code },
+      select: { id: true },
+    });
+    if (!existing) return code;
+  }
+  throw new OnboardingError(
+    "CUSTOMER_CODE_ALLOCATION_FAILED",
+    "ไม่สามารถสร้างรหัสลูกค้าอัตโนมัติได้ กรุณาลองใหม่",
+  );
 }
 
 function isStaffPortfolioCreator(actor: ActorAccess): boolean {
@@ -349,7 +367,9 @@ export async function onboardOrganization(
 
     const result = await db.$transaction(
       async (tx) => {
-      const customerCode = input.payload.organization.customerCode.trim();
+      const customerCode =
+        input.payload.organization.customerCode?.trim() ||
+        (await allocateCustomerCode(tx));
       const entityType =
         input.payload.organization.entityType ??
         MASTER.organizationEntityType.LEGAL_ENTITY;

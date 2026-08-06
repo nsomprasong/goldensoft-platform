@@ -6,7 +6,6 @@ import {
   Building2,
   Check,
   FileText,
-  Hash,
   IdCard,
   Mail,
   MapPin,
@@ -94,7 +93,6 @@ export function OrganizationOnboardingWizard(props: {
     MASTER.organizationEntityType.LEGAL_ENTITY,
   );
   const [organization, setOrganization] = useState({
-    customerCode: "",
     displayName: "",
     legalName: "",
     nameEn: "",
@@ -168,9 +166,6 @@ export function OrganizationOnboardingWizard(props: {
 
   function validateStep(current: number): string | null {
     if (current === 0) {
-      if (organization.customerCode.trim().length < 2) {
-        return TH.org.needCustomerCode;
-      }
       if (isIndividual) {
         // TEMP: tax-payer block may be left empty for testing.
         const hasPersonInput =
@@ -240,14 +235,12 @@ export function OrganizationOnboardingWizard(props: {
         person.phone.trim().length > 0;
       const organizationPayload = isIndividual
         ? {
-            customerCode: organization.customerCode.trim(),
             entityType,
             email: organization.email.trim() || null,
             // TEMP: omit empty tax-payer identity for testing.
             person: hasPersonInput ? person : null,
           }
         : {
-            customerCode: organization.customerCode.trim(),
             entityType,
             displayName: organization.displayName.trim(),
             legalName: organization.legalName.trim() || null,
@@ -400,43 +393,6 @@ export function OrganizationOnboardingWizard(props: {
                 </span>
               </button>
             </div>
-          </div>
-
-          <div className="space-y-4 border-t border-[var(--border)] pt-5">
-            <SectionHeader
-              title={TH.org.requiredSection}
-              description={TH.org.requiredSectionHint}
-              badge={
-                <span className="rounded-full bg-[var(--primary-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--primary)]">
-                  จำเป็น
-                </span>
-              }
-            />
-            <FormField
-              label={TH.org.customerCode}
-              htmlFor="customerCode"
-              required
-              hint={TH.org.customerCodeHint}
-            >
-              <div className="relative max-w-md">
-                <FieldIcon>
-                  <Hash className="size-4" />
-                </FieldIcon>
-                <Input
-                  id="customerCode"
-                  className="pl-10"
-                  placeholder="เช่น CUST-001"
-                  autoComplete="off"
-                  value={organization.customerCode}
-                  onChange={(e) =>
-                    setOrganization((prev) => ({
-                      ...prev,
-                      customerCode: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-            </FormField>
           </div>
 
           {isIndividual ? (
@@ -609,7 +565,8 @@ export function OrganizationOnboardingWizard(props: {
                         id="orgPhone"
                         className="pl-10"
                         type="tel"
-                        placeholder="02-000-0000"
+                        inputMode="tel"
+                        placeholder="02-000-0000 หรือ 08X-XXX-XXXX"
                         value={organization.phone}
                         onChange={(e) =>
                           setOrganization((prev) => ({
@@ -657,7 +614,7 @@ export function OrganizationOnboardingWizard(props: {
                     />
                     <textarea
                       id="orgAddress"
-                      className="textarea min-h-24 pl-10"
+                      className="textarea min-h-24 pl-12"
                       placeholder="เลขที่ ถนน แขวง/ตำบล เขต/อำเภอ จังหวัด รหัสไปรษณีย์"
                       value={organization.address}
                       onChange={(e) =>
@@ -918,8 +875,10 @@ export function OrganizationOnboardingWizard(props: {
               <dd className="mt-1 font-medium">
                 {isIndividual
                   ? individualDisplayName || "—"
-                  : organization.displayName}{" "}
-                ({organization.customerCode})
+                  : organization.displayName}
+              </dd>
+              <dd className="mt-1 text-xs text-[var(--muted-foreground)]">
+                ระบบจะสร้างรหัสลูกค้าให้อัตโนมัติเมื่อบันทึก
               </dd>
               {!isIndividual && organization.legalName ? (
                 <dd className="mt-1 text-[var(--muted-foreground)]">
