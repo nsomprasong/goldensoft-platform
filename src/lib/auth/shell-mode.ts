@@ -37,7 +37,7 @@ export function buildCustomerSupportNav(input: {
   const customerOrigin =
     input.customerAppOrigin ?? getPreferredCustomerAppOrigin();
   const customerAppHref = customerOrigin
-    ? `${customerOrigin}/hr`
+    ? `${customerOrigin}/auth/callback?next=${encodeURIComponent("/hr/welcome")}&entry=customer`
     : null;
 
   const items: NavItem[] = [

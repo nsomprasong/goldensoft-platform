@@ -14,7 +14,7 @@ export const CUSTOMER_PRODUCT_CARDS = [
   {
     productCode: "GOLDENSOFT_HR",
     labelTh: "บุคลากร",
-    basePath: "/hr",
+    basePath: "/hr/welcome",
     entitlementCode: "hr.access",
     runtimeStatus: "available" as const,
   },

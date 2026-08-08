@@ -31,12 +31,18 @@ type Props = {
     scope?: string;
     roleId?: string;
     action?: string;
+    embed?: string;
   }>;
 };
 
 export default async function RolesPage({ searchParams }: Props) {
   const ctx = await requirePlatformPage();
   const query = await searchParams;
+  const embeddedCustomer = query.embed === "customer";
+  const roleHref = (href: string) =>
+    embeddedCustomer
+      ? `${href}${href.includes("?") ? "&" : "?"}embed=customer`
+      : href;
   const organizationId = ctx.activeOrganization?.id ?? null;
   const requestedOrganizationId = query.organizationId ?? organizationId;
 
@@ -178,8 +184,8 @@ export default async function RolesPage({ searchParams }: Props) {
   const creatingOrganizationRole = query.action === "new" && scope === "organization";
   const creatingPlatformRole =
     platformContext && query.action === "new" && scope === "platform";
-  return (
-    <PlatformShell {...shellProps}>
+  const content = (
+    <>
       <PageHeader title="จัดการบทบาทและสิทธิ์" description="เลือกบทบาทด้านซ้าย แล้วจัดการข้อมูล สิทธิ์ และผู้ใช้งานในพื้นที่เดียว" icon={<Shield size={24} />} />
       <div id="role-workspace" className="grid scroll-mt-24 items-start gap-4 pb-24 xl:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]">
         <aside className="card grid gap-3 xl:sticky xl:top-[calc(var(--header-height)+1rem)]" aria-label="รายการบทบาท">
@@ -189,9 +195,9 @@ export default async function RolesPage({ searchParams }: Props) {
           />
           {(platformContext ? isPlatformManager : canManage) ? (
             <IconTextLink
-              href={platformContext
+              href={roleHref(platformContext
                 ? `/roles?context=platform&organizationId=${organizationId}&action=new`
-                : `/roles?context=organization&organizationId=${organizationId}&action=new`}
+                : `/roles?context=organization&organizationId=${organizationId}&action=new`)}
               label={platformContext ? "เพิ่มบทบาทแพลตฟอร์ม" : "เพิ่มบทบาทองค์กร"}
               icon={<Plus className="size-4" />}
             />
@@ -201,7 +207,7 @@ export default async function RolesPage({ searchParams }: Props) {
               const selected = role.id === selectedRoleId;
               const roleOverride = "organizationId" in role ? overrideByRoleId.get(role.id) : undefined;
               const displayName = roleOverride?.nameTh || role.nameTh || labelRole(role.code);
-              const href = `/roles?context=${platformContext ? "platform" : "organization"}&organizationId=${organizationId}&roleId=${role.id}`;
+              const href = roleHref(`/roles?context=${platformContext ? "platform" : "organization"}&organizationId=${organizationId}&roleId=${role.id}`);
               return (
                 <li key={role.id}>
                   <div className={`${styles.roleCard} ${selected ? styles.roleCardSelected : ""}`}>
@@ -233,7 +239,7 @@ export default async function RolesPage({ searchParams }: Props) {
 
         <main id="role-editor" className="grid min-w-0 scroll-mt-24 gap-4" aria-label="พื้นที่จัดการบทบาท">
           {(creatingOrganizationRole && canManage) ? (
-            <CustomRoleForm key={`${contextKey}:new`} mode="create" organizationId={organizationId} permissionCatalog={organizationPermissions} returnPath={`/roles?context=organization&organizationId=${organizationId}`} />
+            <CustomRoleForm key={`${contextKey}:new`} mode="create" organizationId={organizationId} permissionCatalog={organizationPermissions} returnPath={roleHref(`/roles?context=organization&organizationId=${organizationId}`)} />
           ) : null}
           {(creatingPlatformRole && isPlatformManager) ? (
             <CustomRoleForm key={`${contextKey}:new-platform`} mode="create" roleKind="platform" organizationId={null} permissionCatalog={platformPermissions} customerSupportPermissionCatalog={organizationPermissions} returnPath={`/roles?context=platform&organizationId=${organizationId}`} />
@@ -248,7 +254,7 @@ export default async function RolesPage({ searchParams }: Props) {
                 allowSystemPermissionEdit={canManage}
                 hasOrganizationOverride={overrideByRoleId.has(selectedOrganizationRole.id)}
                 permissionCatalog={organizationPermissions}
-                returnPath={`/roles?context=organization&organizationId=${organizationId}`}
+                returnPath={roleHref(`/roles?context=organization&organizationId=${organizationId}`)}
                 initial={{ code: selectedOrganizationRole.code, nameTh: overrideByRoleId.get(selectedOrganizationRole.id)?.nameTh ?? selectedOrganizationRole.nameTh, nameEn: overrideByRoleId.get(selectedOrganizationRole.id)?.nameEn ?? selectedOrganizationRole.nameEn, description: overrideByRoleId.get(selectedOrganizationRole.id)?.description ?? selectedOrganizationRole.description ?? "", permissionCodes: displayPermissionCodesForRole({ isSystem: selectedOrganizationRole.isSystem, code: selectedOrganizationRole.code, dbPermissionCodes: overrideByRoleId.get(selectedOrganizationRole.id)?.permissionCodes ?? selectedOrganizationRole.permissions.map((row) => row.permission.code) }).filter((code) => organizationPermissions.some((permission) => permission.code === code)), isSystem: selectedOrganizationRole.isSystem, isActive: selectedOrganizationRole.isActive }}
               />
               {!selectedOrganizationRole.isSystem ? <RolePositionsPanel roleId={selectedOrganizationRole.id} organizationId={organizationId} branches={ctx.branches.map((branch) => ({ id: branch.id, name: branch.name }))} /> : null}
@@ -281,7 +287,12 @@ export default async function RolesPage({ searchParams }: Props) {
           ) : null}
         </main>
       </div>
-      <RoleManagementSubmenu active="roles" organizationId={organizationId} platformContext={platformContext} />
-    </PlatformShell>
+      {embeddedCustomer ? null : <RoleManagementSubmenu active="roles" organizationId={organizationId} platformContext={platformContext} />}
+    </>
+  );
+  return embeddedCustomer ? (
+    <main className="min-h-screen p-4">{content}</main>
+  ) : (
+    <PlatformShell {...shellProps}>{content}</PlatformShell>
   );
 }

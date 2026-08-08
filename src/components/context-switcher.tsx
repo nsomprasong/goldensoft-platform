@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, GitBranch } from "lucide-react";
+import { Building2, GitBranch, Settings2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -11,6 +11,8 @@ import {
   signalNavigationPending,
 } from "@/lib/navigation-pending";
 import { isGoldenSoftCustomerCode } from "@/lib/platform/organization-identity";
+
+import styles from "./context-switcher.module.css";
 
 type ContextMode = "membership" | "platform_admin" | "managed_org";
 
@@ -56,11 +58,18 @@ export function ContextSwitcher(props: {
       (org) => !isGoldenSoftCustomerCode(org.customerCode),
     )
     .sort((left, right) => left.name.localeCompare(right.name, "th"));
+  const activeOrganizationName =
+    allOptions.find((organization) => organization.id === props.activeOrganizationId)?.name ??
+    "เลือกองค์กร";
+  const activeBranchName =
+    props.branches.find((branch) => branch.id === props.activeBranchId)?.name ??
+    TH.common.noBranch;
 
   async function switchContext(
     organizationId: string,
     branchId: string | null,
     mode: ContextMode,
+    destination?: string | null,
   ) {
     setError(null);
     signalNavigationPending();
@@ -78,6 +87,10 @@ export function ContextSwitcher(props: {
       if (!res.ok) {
         setError(TH.access.forbidden);
         signalNavigationDone();
+        return;
+      }
+      if (destination) {
+        window.location.assign(destination);
         return;
       }
       const selectedOrganization = allOptions.find(
@@ -113,29 +126,9 @@ export function ContextSwitcher(props: {
       : "membership";
   }
 
-  const showSupportBadge =
-    props.shellMode === "customer_support" ||
-    props.contextMode === "managed_org" ||
-    (props.contextMode === "platform_admin" &&
-      props.shellMode !== "platform");
-
   return (
-    <div className="context-switcher flex w-full flex-wrap items-stretch gap-2 text-[length:var(--text-helper)]">
-      {showSupportBadge || props.contextMode === "platform_admin" ? (
-        <div className="context-switcher-badges">
-          {showSupportBadge ? (
-            <span className="context-switcher-badge context-switcher-badge--amber">
-              {TH.nav.customerSupportBadge}
-            </span>
-          ) : (
-            <span className="context-switcher-badge context-switcher-badge--blue">
-              {TH.nav.platformHomeBadge}
-            </span>
-          )}
-        </div>
-      ) : null}
-
-      <label className="context-chip context-chip--org">
+    <div className={`context-switcher flex w-full flex-nowrap items-stretch gap-2 text-[length:var(--text-helper)] ${styles.switcher}`}>
+      <label className={`context-chip context-chip--org ${styles.chip}`} title={`องค์กร: ${activeOrganizationName}`}>
         <span className="context-chip-icon" aria-hidden="true">
           <Building2 className="size-4" />
         </span>
@@ -153,12 +146,12 @@ export function ContextSwitcher(props: {
               start(() => switchContext(orgId, null, mode));
             }}
           >
-            {goldenSoftOptions.map((org) => (
+            {(props.shellMode === "customer_support" ? [] : goldenSoftOptions).map((org) => (
               <option key={`platform-${org.id}`} value={org.id}>
                 {org.name} (Platform)
               </option>
             ))}
-            {responsibleOrganizations.length > 0 ? (
+            {props.shellMode === "customer_support" && responsibleOrganizations.length > 0 ? (
               <optgroup label={TH.nav.responsibleOrganizations}>
                 {responsibleOrganizations.map((org) => (
                   <option key={`responsible-${org.id}`} value={org.id}>
@@ -176,7 +169,7 @@ export function ContextSwitcher(props: {
         </span>
       </label>
 
-      <label className="context-chip context-chip--branch">
+      <label className={`context-chip context-chip--branch ${styles.chip}`} title={`สาขา: ${activeBranchName}`}>
         <span className="context-chip-icon" aria-hidden="true">
           <GitBranch className="size-4" />
         </span>
@@ -209,6 +202,45 @@ export function ContextSwitcher(props: {
           </select>
         </span>
       </label>
+
+      {goldenSoftOptions.length > 0 && responsibleOrganizations.length > 0 ? (
+        <label className={`context-chip context-chip--mode ${styles.chip}`} title={`โหมด: ${props.shellMode === "customer_support" ? "ซัพพอร์ตลูกค้า" : "GoldenSoft"}`}>
+          <span className="context-chip-icon" aria-hidden="true">
+            <Settings2 className="size-4" />
+          </span>
+          <span className="context-chip-body">
+            <span className="context-chip-label">โหมด</span>
+            <select
+              className="context-chip-select"
+              aria-label="เลือกโหมดการทำงาน"
+              disabled={pending}
+              value={props.shellMode === "customer_support" ? "customer_support" : "platform"}
+              onChange={(event) => {
+                if (event.target.value === "platform") {
+                  const target = goldenSoftOptions[0];
+                  if (target) start(() => switchContext(target.id, null, "platform_admin"));
+                  return;
+                }
+                const target = responsibleOrganizations.find(
+                  (row) => row.id === props.activeOrganizationId,
+                ) ?? responsibleOrganizations[0];
+                if (!target) return;
+                start(() =>
+                  switchContext(
+                    target.id,
+                    null,
+                    resolvedMode(target.id),
+                    props.customerAppHref,
+                  ),
+                );
+              }}
+            >
+              <option value="platform">GoldenSoft</option>
+              <option value="customer_support">ซัพพอร์ตลูกค้า</option>
+            </select>
+          </span>
+        </label>
+      ) : null}
 
       {error ? (
         <span className="context-switcher-error">

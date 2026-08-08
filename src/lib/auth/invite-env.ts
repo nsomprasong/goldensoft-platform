@@ -173,7 +173,7 @@ export function resolveInviteEnvironment(
   }
 
   const appUrl = normalizeAppUrl(
-    input.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+    input.NEXT_PUBLIC_APP_URL ?? "http://localhost:3002",
     nodeEnv,
   );
 

@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/app-shell";
@@ -7,6 +8,7 @@ import {
   resolvePlatformShellMode,
 } from "@/lib/auth/shell-mode";
 import { TH } from "@/lib/i18n/th";
+import { getPreferredCustomerAppOrigin } from "@/lib/platform/customer-products";
 
 /**
  * Platform Admin shell (“ศูนย์บริหาร GoldenSoft”).
@@ -103,6 +105,14 @@ async function PlatformShellInner(props: {
   });
 
   const navItems = nav.map((item) => ({ href: item.href, label: item.label }));
+  const headerList = await headers();
+  const requestHost =
+    headerList.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    headerList.get("host");
+  const customerOrigin = getPreferredCustomerAppOrigin(process.env, requestHost);
+  const customerModeHref = customerOrigin
+    ? `${customerOrigin}/auth/callback?next=${encodeURIComponent("/hr/welcome")}&entry=customer`
+    : null;
 
   return (
     <AppShell
@@ -117,7 +127,7 @@ async function PlatformShellInner(props: {
       activeBranch={props.activeBranch}
       contextMode={props.contextMode ?? "membership"}
       shellMode={shellMode}
-      customerAppHref={customerAppItem?.href ?? null}
+      customerAppHref={customerAppItem?.href ?? customerModeHref}
       pageTitle={props.pageTitle}
       canUsePlatformAdminMode={props.platformRoles.length > 0}
       canUseManagedOrgMode={props.canUseManagedOrgMode}

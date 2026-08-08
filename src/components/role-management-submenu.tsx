@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { Building2, Landmark, LibraryBig, Shield, UserRoundCheck } from "lucide-react";
+import { Building2, House, Landmark, LibraryBig, Shield, UserRoundCheck } from "lucide-react";
+
+import { getPreferredCustomerAppOrigin } from "@/lib/platform/customer-products";
 
 import styles from "./role-management-submenu.module.css";
 
@@ -12,7 +14,12 @@ export function RoleManagementSubmenu(props: {
 }) {
   const context = props.platformContext ? "platform" : "organization";
   const query = `context=${context}&organizationId=${props.organizationId}`;
+  const customerOrigin = getPreferredCustomerAppOrigin();
+  const homeHref = customerOrigin
+    ? `${customerOrigin}/auth/callback?next=${encodeURIComponent("/hr/welcome")}&entry=customer`
+    : "/";
   const items = [
+    { key: "home" as const, href: homeHref, label: "Home", Icon: House },
     { key: "roles" as const, href: `/roles?${query}`, label: props.platformContext ? "แพลตฟอร์ม" : "บทบาทองค์กร", Icon: Shield },
     ...(props.platformContext
       ? [{ key: "standard-templates" as const, href: `/roles/standard-templates?${query}`, label: "แม่แบบบทบาทมาตรฐาน", Icon: LibraryBig }]

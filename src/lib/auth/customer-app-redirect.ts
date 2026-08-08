@@ -44,6 +44,18 @@ export async function resolveCustomerAppEntryUrl(
     if (!resolved.startsWith("/") && !resolved.startsWith("//")) {
       try {
         const url = new URL(resolved);
+        const configuredCustomerOrigin = getPreferredCustomerAppOrigin(
+          process.env,
+          requestHost,
+        );
+        if (
+          configuredCustomerOrigin &&
+          (url.hostname === "localhost" ||
+            url.hostname === "127.0.0.1" ||
+            url.hostname === "::1")
+        ) {
+          return new URL(url.pathname + url.search, configuredCustomerOrigin).toString();
+        }
         const alignedOrigin = alignCustomerAppOriginToRequestHost(
           url.origin,
           requestHost,

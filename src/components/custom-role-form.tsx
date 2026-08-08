@@ -1,22 +1,39 @@
 "use client";
 
-import { CheckCheck, RotateCcw, Save } from "lucide-react";
+import {
+  CheckCheck,
+  ChevronDown,
+  LayoutDashboard,
+  RotateCcw,
+  Save,
+  Settings,
+  ShieldCheck,
+  Users,
+  WalletCards,
+} from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import {
-  ORGANIZATION_ASSIGNABLE_PERMISSIONS,
-  PLATFORM_PERMISSION_DESCRIPTIONS,
-  PLATFORM_PERMISSION_LABELS,
-  PLATFORM_PERMISSIONS,
-  permissionResourceGroup,
-  type PlatformPermission,
-} from "@/lib/permissions/codes";
 import { IconTextButton } from "@/components/ui/labeled-icon-button";
 import { ConfirmDialog } from "@/components/ui/admin-ui";
 import { Input } from "@/components/ui/input";
 import { TH } from "@/lib/i18n/th";
 import type { PermissionRegistryItem } from "@/lib/permissions/registry";
+import {
+  groupPermissionsByNavigation,
+  type PermissionNavigationGroup,
+} from "@/lib/permissions/permission-navigation";
+
+import styles from "./custom-role-form.module.css";
+
+function GroupIcon({ tone }: { tone: PermissionNavigationGroup["tone"] }) {
+  const props = { "aria-hidden": true, size: 22 } as const;
+  if (tone === "overview") return <LayoutDashboard {...props} />;
+  if (tone === "employees") return <Users {...props} />;
+  if (tone === "finance") return <WalletCards {...props} />;
+  if (tone === "settings") return <Settings {...props} />;
+  return <ShieldCheck {...props} />;
+}
 
 export function CustomRoleForm(props: {
   /** Null for platform-wide system / platform roles. */
@@ -68,44 +85,6 @@ export function CustomRoleForm(props: {
     (isSystem && !props.allowSystemPermissionEdit) ||
     (roleKind === "platform" && props.mode === "edit");
 
-  const groupedByScope = useMemo(() => {
-    const groupCatalog = (catalog: PermissionRegistryItem[] | undefined) => {
-    const assignablePerms = catalog?.length
-      ? catalog.map((item) => item.code)
-      : roleKind === "platform"
-        ? Object.values(PLATFORM_PERMISSIONS)
-        : ORGANIZATION_ASSIGNABLE_PERMISSIONS;
-    const q = query.trim().toLowerCase();
-    const map = new Map<string, string[]>();
-    for (const code of assignablePerms) {
-      const legacyCode = code as PlatformPermission;
-      const registry = catalog?.find((item) => item.code === code);
-      const label = registry?.menuNameTh ?? PLATFORM_PERMISSION_LABELS[legacyCode] ?? code;
-      const desc = registry?.descriptionTh ?? PLATFORM_PERMISSION_DESCRIPTIONS[legacyCode] ?? "";
-      if (
-        q &&
-        !label.toLowerCase().includes(q) &&
-        !desc.toLowerCase().includes(q) &&
-        !code.toLowerCase().includes(q)
-      ) {
-        continue;
-      }
-      const group = registry?.categoryTh ?? permissionResourceGroup(legacyCode);
-      const list = map.get(group) ?? [];
-      list.push(code);
-      map.set(group, list);
-    }
-    return [...map.entries()];
-    };
-    return {
-      primary: groupCatalog(props.permissionCatalog),
-      customerSupport:
-        roleKind === "platform"
-          ? groupCatalog(props.customerSupportPermissionCatalog)
-          : [],
-    };
-  }, [props.customerSupportPermissionCatalog, props.permissionCatalog, query, roleKind]);
-
   const allCatalog = useMemo(
     () => [
       ...(props.permissionCatalog ?? []),
@@ -113,6 +92,38 @@ export function CustomRoleForm(props: {
     ],
     [props.customerSupportPermissionCatalog, props.permissionCatalog],
   );
+
+  const navigationByScope = useMemo(() => {
+    const filterGroups = (catalog: PermissionRegistryItem[] = []) => {
+      const q = query.trim().toLowerCase();
+      return groupPermissionsByNavigation(catalog)
+        .map((group) => {
+          const groupMatches = group.label.toLowerCase().includes(q);
+          const screens = group.screens
+            .map((screen) => {
+              const screenMatches = screen.label.toLowerCase().includes(q);
+              const permissions = !q || groupMatches || screenMatches
+                ? screen.permissions
+                : screen.permissions.filter((permission) =>
+                    [permission.menuNameTh, permission.actionNameTh, permission.descriptionTh, permission.code]
+                      .filter(Boolean)
+                      .some((value) => value!.toLowerCase().includes(q)),
+                  );
+              return { ...screen, permissions };
+            })
+            .filter((screen) => screen.permissions.length > 0);
+          return { ...group, screens };
+        })
+        .filter((group) => group.screens.length > 0);
+    };
+    return {
+      primary: filterGroups(props.permissionCatalog),
+      customerSupport:
+        roleKind === "platform"
+          ? filterGroups(props.customerSupportPermissionCatalog)
+          : [],
+    };
+  }, [props.customerSupportPermissionCatalog, props.permissionCatalog, query, roleKind]);
 
   function toggle(code: string) {
     if (permissionsReadOnly) return;
@@ -191,12 +202,14 @@ export function CustomRoleForm(props: {
                       }
                     : isSystem
                       ? {
+                          organizationId: props.organizationId,
                           nameTh,
                           nameEn,
                           description: description || null,
                           permissionCodes: [...selected],
                         }
                     : {
+                        organizationId: props.organizationId,
                         nameTh,
                         nameEn,
                         description: description || null,
@@ -327,7 +340,7 @@ export function CustomRoleForm(props: {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-[length:var(--text-section)] font-semibold">สิทธิ์การใช้งาน</h2>
-            <p className="text-[length:var(--text-caption)] text-[var(--text-muted)]">เลือกแล้ว {selected.size} สิทธิ์</p>
+            <p className="text-[length:var(--text-caption)] text-[var(--text-muted)]">เลือกแล้ว {selected.size}/{allCatalog.length} สิทธิ์</p>
           </div>
           {!permissionsReadOnly ? (
             <div className="flex gap-2">
@@ -337,7 +350,7 @@ export function CustomRoleForm(props: {
           ) : null}
           <Input
             className="max-w-xs"
-            placeholder="ค้นหาสิทธิ์..."
+            placeholder="ค้นหาสิทธิ์หรือชื่อเมนู..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -350,65 +363,101 @@ export function CustomRoleForm(props: {
               roleKind === "platform"
                 ? "ใช้จัดการระบบแพลตฟอร์ม"
                 : "ใช้ภายในองค์กรที่เลือก",
-            groups: groupedByScope.primary,
+            groups: navigationByScope.primary,
           },
-          ...(roleKind === "platform" && groupedByScope.customerSupport.length > 0
+          ...(roleKind === "platform" && navigationByScope.customerSupport.length > 0
             ? [{
                 key: "customer-support",
                 title: "สิทธิ์ดูแลองค์กรลูกค้า",
                 description: "ใช้ได้เฉพาะองค์กร สาขา และผลิตภัณฑ์ที่ได้รับมอบหมาย",
-                groups: groupedByScope.customerSupport,
+                groups: navigationByScope.customerSupport,
               }]
             : []),
         ]).map((section) => (
-          <div key={section.key} className="grid gap-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+          <div key={section.key} className={styles.scope}>
             <div>
               <h3 className="font-semibold text-[var(--text-primary)]">{section.title}</h3>
               <p className="text-[length:var(--text-helper)] text-[var(--text-secondary)]">{section.description}</p>
             </div>
-            <div className="grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-3">
-            {section.groups.map(([group, codes]) => (
-          <div key={`${section.key}:${group}`} className="min-w-0 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3">
-            <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
-              <p className="min-w-0 break-words font-medium capitalize">{group}</p>
-              {!permissionsReadOnly ? (
-                <IconTextButton
-                  type="button"
-                  variant="ghost"
-                  onClick={() => toggleGroup(codes)}
-                  icon={<CheckCheck aria-hidden="true" />}
-                  label="เลือกทั้งหมดในหมวด"
-                />
-              ) : null}
-            </div>
-            <ul className="grid min-w-0 gap-2">
-              {codes.map((perm) => (
-                <li key={perm}>
-                  <label className="flex min-w-0 cursor-pointer items-start gap-2">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={selected.has(perm)}
-                      disabled={permissionsReadOnly || pending}
-                      onChange={() => toggle(perm)}
-                    />
-                    <span className="min-w-0">
-                      <span className="block break-words font-medium">
-                        {allCatalog.find((item) => item.code === perm)?.menuNameTh ?? PLATFORM_PERMISSION_LABELS[perm as PlatformPermission] ?? perm}
+            <div className={styles.groups}>
+              {section.groups.map((group) => {
+                const groupCodes = group.screens.flatMap((screen) => screen.permissions.map((permission) => permission.code));
+                const groupSelected = groupCodes.filter((permission) => selected.has(permission)).length;
+                return (
+                  <details
+                    key={`${section.key}:${group.id}:${query ? "search" : "normal"}`}
+                    className={`${styles.group} ${styles[group.tone]}`}
+                    {...(query ? { open: true } : { defaultOpen: group.order === 1 })}
+                  >
+                    <summary className={styles.summary}>
+                      <span className={styles.icon}><GroupIcon tone={group.tone} /></span>
+                      <span className={styles.heading}>
+                        <strong>{group.label}</strong>
+                        <small>{group.screens.length} หน้าจอ · เลือก {groupSelected}/{groupCodes.length} สิทธิ์</small>
                       </span>
-                      <span className="block break-words text-[length:var(--text-caption)] text-[var(--text-secondary)]">
-                        {allCatalog.find((item) => item.code === perm)?.actionNameTh ?? PLATFORM_PERMISSION_DESCRIPTIONS[perm as PlatformPermission] ?? "สิทธิ์การใช้งาน"}
-                      </span>
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </div>
-            ))}
+                      {!permissionsReadOnly ? (
+                        <button
+                          type="button"
+                          className={styles.selectAll}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            toggleGroup(groupCodes);
+                          }}
+                        >
+                          <CheckCheck aria-hidden="true" size={17} />
+                          เลือกทั้งหมด
+                        </button>
+                      ) : null}
+                      <ChevronDown className={styles.chevron} aria-hidden="true" size={20} />
+                    </summary>
+                    <div className={styles.screenList}>
+                      {group.screens.map((screen) => {
+                        const screenCodes = screen.permissions.map((permission) => permission.code);
+                        const screenSelected = screenCodes.filter((permission) => selected.has(permission)).length;
+                        return (
+                          <section key={screen.id} className={styles.screen}>
+                            <div className={styles.screenHeader}>
+                              <div>
+                                <h4>{screen.label}</h4>
+                                <span>{screenSelected}/{screenCodes.length} สิทธิ์</span>
+                              </div>
+                              {!permissionsReadOnly ? (
+                                <button type="button" className={styles.screenSelectAll} onClick={() => toggleGroup(screenCodes)}>
+                                  เลือกทั้งหมด
+                                </button>
+                              ) : null}
+                            </div>
+                            <div className={styles.actions}>
+                              {screen.permissions.map((permission) => (
+                                <label
+                                  key={permission.code}
+                                  className={styles.action}
+                                  title={[permission.descriptionTh, permission.code].filter(Boolean).join(" · ")}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selected.has(permission.code)}
+                                    disabled={permissionsReadOnly || pending}
+                                    onChange={() => toggle(permission.code)}
+                                  />
+                                  <span>{permission.actionNameTh}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </section>
+                        );
+                      })}
+                    </div>
+                  </details>
+                );
+              })}
             </div>
           </div>
         ))}
+        {navigationByScope.primary.length === 0 && navigationByScope.customerSupport.length === 0 ? (
+          <p className="text-[length:var(--text-helper)] text-[var(--text-muted)]">ไม่พบสิทธิ์หรือชื่อเมนูที่ค้นหา</p>
+        ) : null}
       </section>
 
       {error ? (

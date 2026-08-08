@@ -1,0 +1,63 @@
+.switcher {
+  display: grid !important;
+  grid-template-columns: none !important;
+  grid-auto-flow: column;
+  grid-auto-columns: 3rem;
+  width: auto !important;
+  flex: 0 0 auto !important;
+  justify-content: end;
+  overflow: visible;
+}
+
+.chip {
+  position: relative;
+  width: 3rem !important;
+  min-width: 3rem !important;
+  max-width: 3rem !important;
+  min-height: 3rem !important;
+  flex: 0 0 3rem !important;
+  justify-content: center;
+  padding: 0.25rem !important;
+  overflow: visible !important;
+  border-radius: var(--radius-lg) !important;
+  background: var(--surface) !important;
+  box-shadow:
+    inset 0 2px 2px color-mix(in srgb, var(--surface) 92%, transparent),
+    inset 0 -5px 9px color-mix(in srgb, currentColor 12%, transparent),
+    0 3px 3px color-mix(in srgb, currentColor 16%, transparent),
+    0 11px 16px -8px color-mix(in srgb, currentColor 52%, transparent) !important;
+  transform: perspective(7rem) rotateX(3deg);
+}
+
+.chip:hover {
+  transform: perspective(7rem) rotateX(0) translateY(-0.2rem) scale(1.06) !important;
+}
+
+.chip :global(.context-chip-icon) {
+  display: inline-flex !important;
+  width: 2.4rem !important;
+  height: 2.4rem !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow:
+    inset 0 2px 3px color-mix(in srgb, var(--surface) 42%, transparent),
+    inset 0 -5px 8px color-mix(in srgb, var(--text-primary) 18%, transparent),
+    0 7px 11px color-mix(in srgb, currentColor 32%, transparent) !important;
+}
+
+.chip :global(.context-chip-body) {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: visible;
+}
+
+.chip :global(.context-chip-label) { display: none; }
+
+.chip :global(.context-chip-select) {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}

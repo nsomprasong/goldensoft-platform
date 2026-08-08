@@ -34,7 +34,7 @@ export default async function SettingsPage() {
   }
 
   const inviteMode = process.env.AUTH_INVITE_MODE ?? "mock";
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3002";
   const redirectPath =
     process.env.SUPABASE_INVITE_REDIRECT_PATH ?? "/auth/accept-invite";
   let authSettings = {
